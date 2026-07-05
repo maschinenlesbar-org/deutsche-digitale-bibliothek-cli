@@ -1,0 +1,23 @@
+{
+  "name": "ddb",
+  "version": "0.1.0",
+  "description": "German cultural-heritage discovery skills powered by the deutsche-digitale-bibliothek-cli (Deutsche Digitale Bibliothek API).",
+  "author": {
+    "name": "Sebastian Schürmann",
+    "email": "sebs@2xs.org"
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": "https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli",
+  "homepage": "https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli#readme",
+  "keywords": [
+    "ddb",
+    "deutsche-digitale-bibliothek",
+    "cultural-heritage",
+    "glam",
+    "archives",
+    "museums",
+    "libraries",
+    "germany",
+    "bund.dev"
+  ]
+}

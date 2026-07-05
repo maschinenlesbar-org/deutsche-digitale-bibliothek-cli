@@ -1,0 +1,86 @@
+name: Release
+
+# Fires when a version tag is pushed, e.g. created by `npm version <patch|minor|major>`
+# (which bumps package.json and creates the matching tag).
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Default to read-only; the release job is granted contents: write below.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Needed for softprops/action-gh-release to create the GitHub release.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22.x
+          # No cache restoration on tag-triggered runs (cache-poisoning hardening).
+          package-manager-cache: false
+
+      - name: Read version from package.json
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package.json version
+        env:
+          PKG_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "$PKG_VERSION" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match package.json version '$PKG_VERSION'."
+            exit 1
+          fi
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # `npm pack` produces the npm-native package tarball (.tgz), ready to upload.
+      - name: Pack npm tarball
+        run: |
+          mkdir -p dist-artifacts
+          npm pack --pack-destination dist-artifacts
+          ls -la dist-artifacts
+
+      # CycloneDX SBOMs with exact, pinned versions and the full transitive
+      # closure, read from the installed tree (npm ci ran above). Two files:
+      #  - *.cdx.json      runtime/production graph — what consumers install
+      #  - *.dev.cdx.json  full graph incl. devDependencies — the build env
+      - name: Generate SBOMs (CycloneDX)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          base="dist-artifacts/deutsche-digitale-bibliothek-cli-${VERSION}"
+          npx --yes @cyclonedx/cyclonedx-npm@4.2.1 \
+            --omit dev \
+            --spec-version 1.6 \
+            --output-format JSON \
+            --output-file "${base}.cdx.json"
+          npx --yes @cyclonedx/cyclonedx-npm@4.2.1 \
+            --spec-version 1.6 \
+            --output-format JSON \
+            --output-file "${base}.dev.cdx.json"
+          ls -la dist-artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: |
+            dist-artifacts/*.tgz
+            dist-artifacts/*.cdx.json
+          generate_release_notes: true
