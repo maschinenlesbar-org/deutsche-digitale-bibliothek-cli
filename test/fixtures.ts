@@ -1,71 +1,60 @@
-// Canned DDB API responses used across the client and CLI tests. Shapes mirror
-// the real API (see the OpenAPI spec) but are trimmed to what the tests assert.
+// Canned DDB **v2** API responses used across the client and CLI tests. Shapes
+// mirror the real API (native Solr for search; JSON or XML per item component)
+// but are trimmed to what the tests assert.
 
-export const search = {
-  numberOfResults: 12345,
-  results: [
-    {
-      numberOfDocs: 2,
-      docs: [
-        { id: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", label: "Goethe, Bildnis", type: "Bild" },
-        { id: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", label: "Faust, Erstdruck", type: "Buch" },
-      ],
-    },
-  ],
-  facets: [
-    {
-      field: "type_fct",
-      numberOfFacets: 2,
-      facetValues: [
-        { value: "Bild", count: 8000 },
-        { value: "Buch", count: 4000 },
-      ],
-    },
-  ],
-  correctedQuery: "",
-  randomSeed: "",
+/** A native Solr search response where more documents match than are returned. */
+export const solr = {
+  responseHeader: {
+    status: 0,
+    QTime: 12,
+    params: { q: "Goethe", rows: "10", wt: "json" },
+  },
+  response: {
+    numFound: 99866,
+    start: 0,
+    maxScore: 18.9,
+    numFoundExact: true,
+    docs: [
+      { id: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", title: ["Goethe, Bildnis"], type: ["mediatype_002"] },
+      { id: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", title: ["Faust, Erstdruck"], type: ["mediatype_003"] },
+    ],
+  },
+  facet_counts: {
+    facet_fields: { type_fct: ["mediatype_002", 8000, "mediatype_003", 4000] },
+  },
 };
 
+/** A Solr response whose whole result set fits in the page (no paging note). */
+export const solrExact = {
+  response: {
+    numFound: 2,
+    start: 0,
+    docs: [
+      { id: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+      { id: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
+    ],
+  },
+};
+
+/** A JSON item component (e.g. `view`). */
 export const itemView = {
-  item: { id: "OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF", title: "Goethe, Bildnis" },
+  edm: { id: "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", title: "Goethe, Bildnis" },
   institution: { name: "Klassik Stiftung Weimar" },
 };
 
-export const facetsList = ["type_fct", "place_fct", "provider_fct", "sector_fct"];
+/** The RDF/XML body the `edm` component serves (Content-Type application/rdf+xml). */
+export const edmXml =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<rdf:RDF><edm:ProvidedCHO rdf:about="#obj"/></rdf:RDF>';
 
-export const facetValues = {
-  facets: [
-    {
-      field: "place_fct",
-      numberOfFacets: 2,
-      facetValues: [
-        { value: "Berlin", count: 500 },
-        { value: "München", count: 300 },
-      ],
-    },
-  ],
-};
-
-export const institutions = [
-  {
-    id: "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
-    name: "Klassik Stiftung Weimar",
-    latitude: 50.98,
-    longitude: 11.32,
-    sector: "sec_06",
-    children: [],
-  },
-];
-
-/** The DDB error envelope returned (as HTTP 403/404) on failures. */
-export const notAuthorized = {
-  name: "NotAuthorizedException",
-  message: "Your security level does not allow access to this method.",
-  stacktrace: "",
-};
-
+/** The DDB error envelope returned (as HTTP 404) for a missing item. */
 export const notFound = {
   name: "ItemNotFoundException",
   message: "Item 'ABCDEFGHIJKLMNOPQRSTUVWXYZ01234' not found.",
   stacktrace: "",
+};
+
+/** A Solr error body (HTTP 400) for a malformed query. */
+export const solrError = {
+  responseHeader: { status: 400, QTime: 1 },
+  error: { msg: "undefined field bogus_fct", code: 400 },
 };

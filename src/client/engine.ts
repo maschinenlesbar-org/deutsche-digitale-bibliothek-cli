@@ -7,7 +7,9 @@ import { nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import { DdbApiError, DdbParseError } from "./errors.js";
 
-export const DEFAULT_BASE_URL = "https://api.deutsche-digitale-bibliothek.de";
+// The v2 API is versioned in the path: every resource lives under `/2`. The
+// read routes this client targets (search, items, version) are public — no key.
+export const DEFAULT_BASE_URL = "https://api.deutsche-digitale-bibliothek.de/2";
 const DEFAULT_USER_AGENT = "deutsche-digitale-bibliothek-cli";
 
 export interface RawResponse {
@@ -135,10 +137,11 @@ export class RequestEngine {
         }
         const prev = new URL(url);
         const next = new URL(location, url);
-        // SECURITY: the header object carries `Authorization: OAuth
-        // oauth_consumer_key="<key>"`. When the redirect crosses origins, drop
-        // every credential header so the API key is never sent to a foreign host
-        // (the classic credential-leak-on-redirect that fetch/curl guard against).
+        // SECURITY: the v2 read routes need no credentials, but a caller may still
+        // inject an Authorization / X-API-Key / Cookie header via defaultHeaders.
+        // When a redirect crosses origins, drop every credential header so it is
+        // never sent to a foreign host (the classic credential-leak-on-redirect
+        // that fetch/curl guard against).
         if (next.origin !== prev.origin) {
           headers = stripCredentialHeaders(headers);
         }
@@ -188,12 +191,26 @@ export class RequestEngine {
     let detail: string | undefined;
     let apiName: string | undefined;
     try {
-      const parsed = JSON.parse(text) as { name?: unknown; message?: unknown; detail?: unknown };
+      const parsed = JSON.parse(text) as {
+        name?: unknown;
+        message?: unknown;
+        detail?: unknown;
+        // Solr reports errors as `{ error: { msg, code } }`.
+        error?: { msg?: unknown } | unknown;
+      };
       if (parsed && typeof parsed.message === "string") detail = parsed.message;
       else if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
+      else if (
+        parsed &&
+        typeof parsed.error === "object" &&
+        parsed.error !== null &&
+        typeof (parsed.error as { msg?: unknown }).msg === "string"
+      ) {
+        detail = (parsed.error as { msg: string }).msg;
+      }
       if (parsed && typeof parsed.name === "string") apiName = parsed.name;
     } catch {
-      // Non-JSON error body; leave detail undefined.
+      // Non-JSON error body (e.g. an item XML component's error page); leave undefined.
     }
     return new DdbApiError({ status, url, method, body: text, detail, apiName });
   }

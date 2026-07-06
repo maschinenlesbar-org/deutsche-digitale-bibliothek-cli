@@ -95,10 +95,10 @@ test("a same-origin redirect is followed and keeps the Authorization header", as
   const e = new RequestEngine({
     baseUrl: "https://api.test",
     transport: mt.transport,
-    defaultHeaders: { Authorization: 'OAuth oauth_consumer_key="SECRET"' },
+    defaultHeaders: { Authorization: "Bearer SECRET" },
   });
   assert.deepEqual(await e.getJson("/x"), { ok: 1 });
-  assert.equal(mt.calls[1]?.headers?.["Authorization"], 'OAuth oauth_consumer_key="SECRET"');
+  assert.equal(mt.calls[1]?.headers?.["Authorization"], "Bearer SECRET");
 });
 
 test("a cross-origin redirect drops credential headers", async () => {
@@ -111,7 +111,7 @@ test("a cross-origin redirect drops credential headers", async () => {
     baseUrl: "https://api.test",
     transport: mt.transport,
     defaultHeaders: {
-      Authorization: 'OAuth oauth_consumer_key="SECRET"',
+      Authorization: "Bearer SECRET",
       "X-API-Key": "SECRET",
       Cookie: "session=abc",
     },

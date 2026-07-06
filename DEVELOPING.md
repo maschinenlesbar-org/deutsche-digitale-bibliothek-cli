@@ -6,17 +6,19 @@ use the command-line tool, start with the **[README](README.md)** and
 **[Usage.md](Usage.md)** instead.
 
 The package ships both a CLI (`ddb`) and a typed API client (`DdbClient`) for the
-[Deutsche Digitale Bibliothek API](https://api.deutsche-digitale-bibliothek.de)
-(`api.deutsche-digitale-bibliothek.de`), central access to digitised
-cultural-heritage objects from German archives, libraries and museums.
+**v2** [Deutsche Digitale Bibliothek API](https://api.deutsche-digitale-bibliothek.de/2)
+(`api.deutsche-digitale-bibliothek.de/2`), central access to digitised
+cultural-heritage objects from German archives, libraries and museums. It targets
+the **public read routes** — search, item, version — which need **no API key**.
 
 **Design goals**
 
 - **Zero runtime HTTP dependencies** — built on Node's built-in `http`/`https`
   (no axios, no fetch polyfill).
 - **One small dependency** for the CLI: [`commander`](https://github.com/tj/commander.js).
-- **Strongly typed** — a typed search envelope; item details and views exposed as
-  faithful `JsonObject`s (the DDB serves those as opaque JSON).
+- **Faithful shapes** — search returns a native **Solr** response typed as
+  `SolrResponse`; item components are returned as parsed JSON or raw text
+  (`ItemResult`) depending on the response Content-Type.
 - **Well tested** — unit tests on Node's built-in test runner (`node --test`),
   every HTTP response mocked.
 
@@ -40,16 +42,19 @@ ddb --help
 ```ts
 import { DdbClient, DdbApiError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-cli";
 
-const client = new DdbClient({ apiKey: process.env.DDB_API_KEY });
+const client = new DdbClient();   // no API key needed for the read routes
 
-const result = await client.search({ query: "Goethe", rows: 10, facet: ["type_fct"] });
-console.log(result.numberOfResults, result.results[0]?.docs.length);
+// Search — a native Solr response
+const result = await client.search({ query: "Goethe", rows: 10, facetFields: ["type_fct"] });
+console.log(result.response.numFound, result.response.docs.length);
+console.log(result.facet_counts?.facet_fields);
 
-const item = await client.item("OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF");        // view component
-const edm = await client.item("OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF", "edm");  // Europeana Data Model
+// Item components — ItemResult carries `json` (JSON parts) or `text` (XML/BIB parts)
+const view = await client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK");           // JSON → view.json
+const edm = await client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm");     // RDF/XML → edm.text
 
 try {
-  await client.search({ query: "*" });
+  await client.search({ query: "*:*" });
 } catch (err) {
   if (err instanceof DdbApiError) console.error(err.status, err.apiName, err.detail);
 }
@@ -59,8 +64,7 @@ try {
 
 ```ts
 new DdbClient({
-  apiKey: process.env.DDB_API_KEY, // Authorization: OAuth oauth_consumer_key="<key>"
-  baseUrl: "https://api.deutsche-digitale-bibliothek.de",
+  baseUrl: "https://api.deutsche-digitale-bibliothek.de/2",
   timeoutMs: 15_000,
   maxRetries: 3,
   maxResponseBytes: 50 << 20,
@@ -69,54 +73,65 @@ new DdbClient({
 });
 ```
 
+`DdbClientOptions` is just the engine options — there is no `apiKey` field, since
+the read routes are unauthenticated. (If you ever need to reach an authenticated
+endpoint, inject an `Authorization` header via the engine's `defaultHeaders`; it
+is stripped on cross-origin redirects, see below.)
+
 ### Methods
 
-- `search(params)` → the search envelope (`GET /search`).
-- `item(id, part?)` → one AIP component (`view` default, else `aip`, `edm`,
-  `binaries`, `children`, `parents`, `indexing-profile`).
-- `facets()` → the available facet fields (`GET /search/facets`).
-- `facetValues(name, { query? })` → values + counts for one facet.
-- `institutions({ hasItems?, sector? })` → the registered institutions.
-- `version()` → the backend version string (**public — no key needed**).
+- `search(params)` → a `SolrResponse` (`GET /2/search/index/{collection}/{requestHandler}`,
+  default `search`/`select`). Params map to Solr: `query`→`q`, `rows`, `start`,
+  `sort`, `fields`→`fl`, `filters`→`fq` (repeatable), `facetFields`→`facet.field`
+  (sets `facet=true`), `facetLimit`→`facet.limit`. `wt=json` is forced.
+- `item(id, part?, opts?)` → an `ItemResult` (`GET /2/items/{id}...`). `part`
+  defaults to `view`; others: `aip`, `edm`, `binaries`, `children`, `parents`,
+  `source`, `source-description`, `source-record`, `iiif`, `citation`. The result
+  has `json` (for JSON components) **or** `text` (for `edm`/`source-record`/
+  `citation`, which the API serves as XML or a file), plus the `contentType`.
+  `opts`: `lang` (localised labels), and `rows`/`offset` for `part: "children"`.
+- `version()` → the backend version string (`GET /2/version`).
 
-## Authentication internals
+## No authentication
 
-Every DDB endpoint **except `/version`** requires an API key. The client sends it
-as `Authorization: OAuth oauth_consumer_key="<key>"` (the DDB's header-based
-OAuth-1.0a scheme; the consumer key alone suffices — no signing). The key is
-**not bundled** — it must be supplied via `apiKey` (library), `--api-key` (CLI),
-or the `DDB_API_KEY` env var, else the header is omitted and the API returns
-`403 NotAuthorizedException`. Precedence is **`--api-key` > `DDB_API_KEY` > none**.
+The read routes (`/2/search/...`, `/2/items/...`, `/2/version`) are **public** —
+this client sends no credentials and has no auth options to configure. A `403` is
+therefore unexpected on these routes and means a custom `--base-url` was pointed at
+an authenticated endpoint (favourites, user, saved-searches), or the specific item
+component is access-restricted.
 
-> **Getting a key.** A key is free but requires a personal account: register for
-> "Mein DDB" at https://www.deutsche-digitale-bibliothek.de, then generate your
-> API key in the account settings. There is **no** publicly-scrapable shared key
-> (unlike some sibling CLIs), so this repo intentionally ships **no**
-> `fetch-api-key.mjs` — supply your own key for any live run.
+> The OpenAPI spec **over-declares** security: it lists an HTTP-bearer
+> `SecurityScheme` on nearly every path, including search and items — yet the live
+> server serves the read routes anonymously. This was confirmed against the live
+> API (below); trust the live behaviour, not the spec's `security` blocks.
 
-The DDB also supports passing the key as an `oauth_consumer_key` **query
-parameter**; this client uses the **header** form instead, because it is a
-credential header and is therefore stripped on cross-origin redirects (below) and
-kept out of URLs/logs.
-
-**Redirect safety.** When the API issues a redirect that crosses an origin
-boundary (a different scheme, host, or port), the client **strips credential
-headers** (`Authorization`, `X-API-Key`, `Cookie`) before following it, so your
-API key is never sent to a host other than the one you targeted. Same-origin
-redirects keep it.
+**Redirect safety.** The engine strips credential headers (`Authorization`,
+`X-API-Key`, `Cookie`) before following a redirect that crosses an origin boundary.
+Nothing carries credentials by default, but this keeps the seam safe if a caller
+injects one via `defaultHeaders`.
 
 ## Notes on the live API (verify-first findings)
 
-The upstream docs are partly stale; these were confirmed against the live service:
+The upstream docs are partly stale; these were confirmed against the live v2
+service:
 
-- **`/version` is public.** The OpenAPI spec marks it as requiring a key
-  (`403` otherwise), but the live endpoint returns the version string
-  anonymously. The CLI exposes it as `ddb version`, a no-key connectivity check.
-- **`/search/suggest` "does not work at the public API"** (per the spec) — so it
-  is deliberately **not** exposed by this CLI.
-- **Errors come back as a JSON envelope** `{ name, message, stacktrace }` with a
-  proper HTTP status (`403` NotAuthorizedException, `404` ItemNotFoundException,
-  …). `DdbApiError` surfaces `name` as `apiName` and `message` as `detail`.
+- **The read routes are keyless.** `GET /2/version`, `GET /2/search/index/...`,
+  `GET /2/items/{id}...` and `GET /2/institutions` all return `200` with no
+  credentials. Authenticated endpoints (`/2/version/test-auth`, user/favourites)
+  correctly return `401`/`403`, so the anonymous access is a real policy, not a
+  disabled check.
+- **Search is a raw Solr passthrough.** The path is
+  `/2/search/index/{collection}/{requestHandler}` and the query string is native
+  Solr (`q`, `rows`, `start`, `fq`, `fl`, `sort`, `facet*`). The response is native
+  Solr JSON (`responseHeader` / `response` / `facet_counts`).
+- **Some item components are XML.** `edm` is `application/rdf+xml` and
+  `source-record` is `application/xml`; the client returns those as `text`. `iiif`
+  and `citation` exist only for some objects (a `404` otherwise). The bare
+  `/2/items/{id}` and `view`/`binaries`/`parents`/`source` are JSON.
+- **Errors** come back either as Solr's `{ error: { msg, code } }` (bad query) or
+  the DDB envelope `{ name, message, stacktrace }` (item endpoints), with a proper
+  HTTP status. `DdbApiError` surfaces the human-readable message as `detail` and
+  any `name` as `apiName`.
 - **Item ids are exactly 32 characters.** The `item` command validates this up
   front so a truncated id fails fast with exit 2 instead of a bare 404.
 
@@ -125,16 +140,16 @@ The upstream docs are partly stale; these were confirmed against the live servic
 ```
 src/
   client/
-    types.ts     # SearchResponse envelope; item details/views as JsonObject
+    types.ts     # SolrResponse/SolrDoc; ItemPart/ItemResult; SearchParams
     query.ts     # dependency-free query-string builder
     http.ts      # the Transport interface + default node:http/https transport
-    engine.ts    # URL building, retry/backoff, redirects, default headers (auth), decoding, errors
+    engine.ts    # URL building (base incl. /2), retry/backoff, redirects, decoding, errors
     errors.ts    # DdbError / DdbApiError / DdbNetworkError / DdbParseError / DdbUsageError
-    client.ts    # DdbClient — search / item / facets / institutions / version (injects Authorization)
+    client.ts    # DdbClient — search (Solr) / item (content-type aware) / version
   cli/
     io.ts        # injectable I/O seam (stdout/stderr/file)
-    shared.ts    # option parsers, global-option resolver (incl. --api-key), JSON renderer
-    commands/    # search, item, catalog (facets/institutions/version)
+    shared.ts    # option parsers, global-option resolver, JSON renderer
+    commands/    # search, item, catalog (version)
     program.ts   # assembles the commander program from injectable deps
     run.ts       # parses argv -> exit code (no process.exit; testable)
     index.ts     # #! bin shim
@@ -142,9 +157,14 @@ src/
 
 **Design notes**
 
-- The engine accepts `defaultHeaders` merged into every request — the seam used
-  to inject `Authorization: OAuth oauth_consumer_key="<key>"`. The CLI surfaces it
-  as `--api-key` (or `DDB_API_KEY`).
+- `search()` builds the Solr passthrough path and forces `wt=json`; the CLI's
+  `--filter`/`--facet`/`--sort`/`--fields` map straight onto `fq`/`facet.field`/
+  `sort`/`fl`.
+- `item()` fetches raw via the engine and **branches on Content-Type**: JSON is
+  parsed into `ItemResult.json`; anything else (RDF/XML, XML, BIB) is returned as
+  `ItemResult.text` and the CLI prints it raw.
+- The engine accepts `defaultHeaders` merged into every request — the read routes
+  need none; it's the injection seam for a caller that reaches an authed endpoint.
 - The HTTP layer is a single `Transport` function; the default uses
   `node:http`/`node:https` and tests inject a mock.
 - The CLI is built around injectable `CliDeps`, so the whole program can be
@@ -155,21 +175,23 @@ src/
 **API client.** [`DdbClient`](src/client/client.ts) — the typed wrapper over the
 API, usable as a library independently of the CLI.
 
-**SearchResponse.** The search envelope returned by `search`: `{ numberOfResults,
-results: [{ docs, numberOfDocs }], facets?, correctedQuery?, randomSeed?,
-highlightedTerms? }` ([`types.ts`](src/client/types.ts)). Result documents carry
-a curated set of known fields (`id`, `label`, `type`, …) plus an index signature.
+**SolrResponse.** The native Solr response returned by `search`: `{ responseHeader?,
+response: { numFound, start, docs[] }, facet_counts? }`
+([`types.ts`](src/client/types.ts)). Each `SolrDoc` has a guaranteed `id` plus an
+open index signature for the Solr fields.
 
-**JsonObject.** An item's `view`/`aip`/`edm`/… component, typed as a faithful raw
-`JsonObject` — the DDB serves those as opaque JSON.
+**ItemResult.** The decoded body of an item component
+([`types.ts`](src/client/types.ts)): `{ part, contentType, json? , text? }` —
+exactly one of `json`/`text` is set, chosen by Content-Type.
 
 **Transport.** A single function `(HttpRequest) => Promise<HttpResponse>`
 ([`http.ts`](src/client/http.ts)). The default uses Node's built-in
 `http`/`https`; tests inject a mock. This is the only HTTP seam.
 
-**Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs,
-serialises queries, applies retry/backoff, follows redirects, decodes JSON/raw
-responses and maps errors.
+**Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs (base URL
+includes the `/2` version prefix), serialises queries, applies retry/backoff,
+follows redirects, decodes JSON/raw responses and maps errors (DDB envelope **and**
+Solr `error.msg`).
 
 **Retry / backoff.** Transient `429` and `503` responses are retried
 automatically with backoff, up to `--max-retries`. `DdbApiError` exposes
@@ -209,10 +231,11 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`engine.test.ts`** — URL building, JSON decoding, error-envelope mapping,
   `429`/`503` retry, redirect following, cross-origin credential stripping,
   `getText`.
-- **`client.test.ts`** — the `Authorization` header, per-method paths, search
-  params, facet-value filters, filter/core-key collision — mocked transport.
-- **`cli.test.ts`** — command parsing, `--api-key`/`DDB_API_KEY`,
-  `--facet`/`--filter`/`--sort`, id validation, and exit codes — mocked client.
+- **`client.test.ts`** — the Solr passthrough path and params, `fq`/`facet.field`
+  forwarding, content-type-aware `item` decoding (JSON vs XML), the item sub-paths,
+  and that no `Authorization` header is sent — mocked transport.
+- **`cli.test.ts`** — command parsing, `--filter`/`--facet`/`--sort`/`--fields`,
+  the paging note, raw-XML item output, id validation, and exit codes — mocked client.
 
 ## Continuous integration
 

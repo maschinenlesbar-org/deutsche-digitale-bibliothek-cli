@@ -5,20 +5,22 @@
 [![npm](https://img.shields.io/npm/v/@maschinenlesbar.org/deutsche-digitale-bibliothek-cli)](https://www.npmjs.com/package/@maschinenlesbar.org/deutsche-digitale-bibliothek-cli)
 
 Search Germany's **digitised cultural heritage** from your terminal. `ddb` is a
-command-line tool over the
-[Deutsche Digitale Bibliothek API](https://api.deutsche-digitale-bibliothek.de):
+command-line tool over the **v2**
+[Deutsche Digitale Bibliothek API](https://api.deutsche-digitale-bibliothek.de/2):
 tens of millions of objects from German archives, libraries, museums and
 research institutions — searchable, faceted, and returned as clean JSON you can
 pipe straight into [`jq`](https://jqlang.github.io/jq/).
 
+- **No API key.** The v2 read routes are public — install and search, nothing to
+  register.
 - **One search over everything** — books, images, archival records, sheet music,
-  film and more, across ~500 institutions.
+  film and more, across ~500 institutions, via the DDB's Apache Solr index.
 - **Facets that actually help** — narrow by type, place, provider, sector, time
-  and language; ask the API to count values for you.
+  and language; ask the index to count values for you.
 - **Item detail on demand** — fetch an object's `view`, `edm` (Europeana Data
-  Model), `binaries` list, hierarchy (`parents`/`children`) and more.
-- **Clean JSON output** — pretty by default, `--compact` for scripting,
-  `-o <file>` to write to disk.
+  Model), `binaries` list, hierarchy (`parents`/`children`), IIIF manifest and more.
+- **Clean output** — pretty JSON by default, `--compact` for scripting,
+  `-o <file>` to write to disk; XML components (`edm`, `source-record`) stream out raw.
 
 > Want to use this as a TypeScript library or understand how it's built?
 > See **[DEVELOPING.md](DEVELOPING.md)**.
@@ -31,97 +33,83 @@ npm i -g @maschinenlesbar.org/deutsche-digitale-bibliothek-cli
 
 This installs the **`ddb`** command. Requires **Node.js 20+**.
 
-Check it works (no key needed for this one):
+Check it works:
 
 ```bash
-ddb version
+ddb version        # prints the backend version, e.g. 7.5
 ```
 
-## API key
+## No API key needed
 
-**Every command except `ddb version` requires an API key** — it is not bundled.
-The key is **free**, but needs a personal account:
+The read routes (`search`, `item`, `version`) are **public** — there is nothing to
+register and no key to pass. Just run the commands.
 
-1. Register for **"Mein DDB"** at
-   [deutsche-digitale-bibliothek.de](https://www.deutsche-digitale-bibliothek.de).
-2. Generate your personal API key in the account settings.
-3. Export it:
-
-```bash
-export DDB_API_KEY=your-personal-key
-```
-
-Or pass it per-invocation (it is a global option, so it works **before or after**
-the command):
-
-```bash
-ddb --api-key your-personal-key search Goethe
-```
-
-Precedence is `--api-key` > `DDB_API_KEY` env var > none. Without a key the API
-returns `403`; the CLI then prints a plain-language hint on how to get one.
+A `403` is therefore unexpected: it means `--base-url` points at an authenticated
+endpoint, or the specific item component is access-restricted — not "you need a key".
 
 ## Quickstart
 
 ```bash
-export DDB_API_KEY=your-personal-key
-
 # Search objects matching a keyword (10 results by default)
 ddb search Goethe
 
 # How many objects match in total?
-ddb search Goethe | jq '.numberOfResults'
+ddb search Goethe | jq '.response.numFound'
 
-# Narrow to images in Berlin, and count value distributions by type
-ddb search Goethe --filter place_fct=Berlin --filter type_fct=Bild --facet type_fct
+# Narrow to images in Berlin, and count the type distribution
+ddb search Goethe --filter 'place_fct:"Berlin"' --filter type_fct:mediatype_002 --facet objecttype_fct
 
 # Grab an object id from a result, then fetch its detail
-ddb search Goethe | jq -r '.results[0].docs[0].id'
-ddb item OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF
+ddb search Goethe --fields id | jq -r '.response.docs[0].id'
+ddb item TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK
 ```
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `search <query>` | Full-text / faceted search over the object index (`GET /search`) |
-| `item <id>` | Fetch one object by its 32-character id (`--part` selects the AIP component) |
-| `facets [name]` | List the facet fields, or the values (with counts) of one facet |
-| `institutions` | List the archives/libraries/museums registered at the DDB |
-| `version` | Print the DDB backend version — **works without a key** |
+| `search <query>` | Full-text / faceted search over the Solr object index (`GET /2/search/index/{collection}/{requestHandler}`) |
+| `item <id>` | Fetch one component of an object by its 32-character id (`--part` selects the component) |
+| `version` | Print the DDB backend version — a quick connectivity check |
 
-New to terms like *facet*, *AIP*, *EDM*, *sector* or the `*_fct` fields? The
-**[Glossary](GLOSSARY.md)** decodes every one.
+New to terms like *facet*, *AIP*, *EDM*, *sector*, Solr `fq` or the `*_fct`
+fields? The **[Glossary](GLOSSARY.md)** decodes every one.
 
 ### `search` options
 
 | Option | Meaning |
 | --- | --- |
-| `--rows <n>` | Number of results (0..1000, default 10) |
-| `--offset <n>` | Offset of the first result (paging) |
-| `--sort <spec>` | `RELEVANCE` \| `ALPHA_ASC` \| `ALPHA_DESC` \| `RANDOM[_<seed>]` |
-| `--facet <name>` | Compute value counts for this facet field — repeatable, e.g. `type_fct` |
+| `--rows <n>` | Number of documents to return (Solr `rows`, default 10) |
+| `--offset <n>` | Offset of the first document (Solr `start`) — for paging |
+| `--sort <spec>` | Solr sort, e.g. `"score desc"` (relevance) or `"id asc"` |
+| `--fields <list>` | Comma-separated fields to return (Solr `fl`), e.g. `id,label` |
+| `--filter <fq>` | Solr filter query — repeatable, e.g. `type_fct:mediatype_002` |
+| `--facet <field>` | Return value counts for this facet field — repeatable, e.g. `type_fct` |
 | `--facet-limit <n>` | Cap the number of values returned per facet |
-| `--filter <facet=value>` | Restrict to a facet value — repeatable, e.g. `place_fct=Berlin` |
+| `--collection <name>` | Solr collection (default `search`) |
+| `--handler <name>` | Solr request handler (default `select`) |
 
-`--filter` maps `facet=value` to the DDB's facet-value query parameter. Repeating
-the same facet (`--filter place_fct=Berlin --filter place_fct=München`) narrows
-by multiple values. Query strings use Solr syntax; pass `'*'` to match everything.
+Query strings and `--filter` use **Solr syntax**; pass `'*:*'` to match
+everything. `--filter` restricts the set (repeat to AND; OR inside one fq like
+`'place_fct:("Berlin" OR "Dessau")'`), while `--facet` only *counts* values.
+When more documents match than were returned, `ddb` prints a short paging hint to
+stderr.
 
 ### Common facet fields
 
 | Facet | Narrows by |
 | --- | --- |
-| `type_fct` | Object type (Bild, Buch, …) |
+| `type_fct` | Media type (`mediatype_*` codes) |
+| `objecttype_fct` | Object type (Druckgraphik, …) |
 | `place_fct` | Place |
 | `provider_fct` | Contributing institution |
-| `sector_fct` | Cultural sector (archive, library, museum, …) |
+| `sector_fct` | Cultural sector (`sec_01`..`sec_07`) |
 | `language_fct` | Language |
 | `keywords_fct` | Subject keywords |
-| `time_fct` | Time period |
+| `state_fct` | German federal state |
 
-Run `ddb facets` to list them all, or `ddb facets place_fct` to see a facet's
-values.
+Facet counts come back under `facet_counts.facet_fields.<field>` as a flat
+`[value, count, …]` array.
 
 ## Common tasks
 
@@ -129,34 +117,32 @@ A few recipes to get going — see **[Usage.md](Usage.md)** for the full,
 use-case-driven set.
 
 ```bash
-# Paging: results 21–40 of a search
+# Paging: documents 21–40 of a search
 ddb search "Weimarer Republik" --rows 20 --offset 20
 
-# Objects held in Bavaria, newest first, as compact JSON
-ddb --compact search '*' --filter state_fct=Bayern --sort ALPHA_ASC
+# Everything from Bavaria, id + label only, as compact JSON
+ddb --compact search '*:*' --filter 'state_fct:"Bayern"' --fields id,label
 
-# The Europeana Data Model record for one object
-ddb item OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF --part edm
+# The Europeana Data Model record for one object (RDF/XML, straight to a file)
+ddb item TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK --part edm -o goethe.edm.xml
 
-# Which places have the most matches for "Bauhaus"?
-ddb facets place_fct --query Bauhaus | jq '.facets[0].facetValues[:10]'
-
-# All museums registered at the DDB, to a file
-ddb --output museums.json institutions --sector sec_06
+# Which places have the most matches for "Bauhaus"? (top of the flat facet array)
+ddb search Bauhaus --rows 0 --facet place_fct --facet-limit 10 \
+  | jq '.facet_counts.facet_fields.place_fct'
 ```
 
 ## Output & scripting
 
-Every command prints **JSON to stdout** (except `version`, which prints the plain
-version string). Errors and diagnostics go to stderr, so piping stdout into `jq`
-stays clean.
+`search` and JSON item components print **JSON to stdout**; `version` and the XML
+components (`edm`, `source-record`) print raw text. Errors and diagnostics
+(including the paging hint) go to stderr, so piping stdout into `jq` stays clean.
 
 ```bash
-# Titles of the current result page
-ddb search Goethe | jq -r '.results[0].docs[] | "\(.id)\t\(.label)"'
+# id + label for the current result page
+ddb search Goethe | jq -r '.response.docs[] | "\(.id)\t\(.label)"'
 
 # Total hits for a query
-ddb search Goethe | jq '.numberOfResults'
+ddb search Goethe | jq '.response.numFound'
 ```
 
 Use `--compact` for single-line JSON and `-o <file>` to write to a file — both
@@ -170,38 +156,37 @@ are **global options** that work before or after the command.
 | `2` | Bad usage / invalid argument (nothing was sent) |
 | `4` | Not found (`404` from the API) |
 | `6` | Network / transport failure (DNS, connection, timeout, size cap) |
-| `1` | Any other runtime error — including `403` (missing/insufficient key) |
+| `1` | Any other runtime error (including an unexpected `403`) |
 
 ## Troubleshooting
 
 - **`command not found: ddb`** — the global npm bin directory isn't on your
   `PATH`. Run `npm bin -g` to find it and add it, or run via
   `npx @maschinenlesbar.org/deutsche-digitale-bibliothek-cli …`.
-- **Exit `1` / "Access denied (403)"** — no key was sent, or the key's security
-  level is insufficient. Export `DDB_API_KEY` or pass `--api-key`. A free key is
-  available from a "Mein DDB" account. (`ddb version` works without a key — use it
-  to check connectivity.)
-- **Exit `4` / "not found"** — the id passed to `item` doesn't exist. Re-fetch it
-  from a fresh `search`. Ids are exactly 32 characters; a wrong-length id is
-  rejected up front (exit `2`).
-- **Empty `docs` array** — the query matched nothing; broaden the keyword, relax
-  a `--filter`, or check `numberOfResults`.
-- **Exit `1` / rate-limited** — the client retries `429`/`503` automatically up
-  to `--max-retries` times; if it persists, slow down or raise `--timeout`.
+- **Exit `4` / "not found"** — the id passed to `item` doesn't exist (or that
+  component isn't available for it — e.g. `iiif`/`citation` only exist for some
+  objects). Re-fetch the id from a fresh `search`. Ids are exactly 32 characters;
+  a wrong-length id is rejected up front (exit `2`).
+- **Empty `docs` array** — the query matched nothing; broaden the keyword or relax
+  a `--filter`, and check `response.numFound`.
+- **Unexpected `403`** — the read routes are public, so this usually means a custom
+  `--base-url` targets an authenticated endpoint, or the item component is
+  access-restricted.
+- **Rate-limited** — the client retries `429`/`503` automatically up to
+  `--max-retries` times; if it persists, slow down or raise `--timeout`.
 
 ## Global options
 
 These may be given **before or after** the command, e.g.
-`ddb --api-key $DDB_API_KEY search Goethe`:
+`ddb --compact search Goethe`:
 
 | Option | Description |
 | --- | --- |
 | `-V, --version` | Print the CLI version number |
 | `-h, --help` | Show help for the program or a command |
-| `--api-key <key>` | DDB API key (env `DDB_API_KEY`) |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
 | `-o, --output <file>` | Write output to this file instead of stdout |
-| `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de`) |
+| `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`) |
 | `--timeout <ms>` | Per-request timeout (default `30000`) |
 | `--user-agent <ua>` | `User-Agent` header value |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses (0..10, default `2`) |

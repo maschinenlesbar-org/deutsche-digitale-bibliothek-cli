@@ -1,88 +1,88 @@
-// The primary `search` command: full-text / faceted search over the DDB object
-// index. Wraps GET /search.
+// The `search` command: full-text / faceted search over the DDB object index.
+// v2 is a raw Apache Solr passthrough, so options map onto Solr query params
+// (q, rows, start, sort, fq, fl, facet.field) and the output is native Solr JSON.
+// Wraps GET /2/search/index/{collection}/{requestHandler}.
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "../io.js";
 import type { SearchParams } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
-import { action, parseBoundedInt, parseIntArg, renderJson } from "../shared.js";
+import { action, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
 
 /** commander accumulator for repeatable string options. */
 function collect(value: string, previous: string[] = []): string[] {
   return previous.concat([value]);
 }
 
-type FilterMap = Record<string, string[]>;
-
 /**
- * commander accumulator for repeatable `facet=value` filters.
- *
- * Repeated occurrences of the same facet are accumulated into a list (the DDB
- * supports repeated facet-value keys to narrow a result set) rather than letting
- * the last value silently clobber the earlier ones.
+ * commander value-parser for a URL path segment (Solr collection / request
+ * handler). These are interpolated into the request path, so restrict them to a
+ * safe character set — a `/` or `?` would otherwise let a value escape the
+ * intended `/search/index/{collection}/{requestHandler}` route.
  */
-function collectFilter(value: string, previous: FilterMap = {}): FilterMap {
-  const eq = value.indexOf("=");
-  // Throw commander's InvalidArgumentError (not a bare DdbError) so the usual
-  // parse-error path runs and showHelpAfterError() displays the command help,
-  // matching how commander reports its own option errors.
-  if (eq <= 0) {
-    throw new InvalidArgumentError(`Invalid --filter "${value}". Expected facet=value, e.g. place_fct=Berlin.`);
+function parsePathSegment(value: string): string {
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    throw new InvalidArgumentError("Expected letters, digits, '.', '_' or '-' only.");
   }
-  const key = value.slice(0, eq);
-  const val = value.slice(eq + 1);
-  return { ...previous, [key]: (previous[key] ?? []).concat([val]) };
-}
-
-const SORTS = new Set(["RELEVANCE", "ALPHA_ASC", "ALPHA_DESC"]);
-
-/**
- * commander value-parser for --sort. Accepts RELEVANCE, ALPHA_ASC, ALPHA_DESC or
- * RANDOM (optionally with a `_<seed>` suffix), case-insensitively, and normalises
- * to the upper-case form the API expects.
- */
-function parseSort(value: string): string {
-  const v = value.toUpperCase();
-  if (SORTS.has(v) || v === "RANDOM" || v.startsWith("RANDOM_")) return v;
-  throw new InvalidArgumentError(
-    "Expected one of RELEVANCE, ALPHA_ASC, ALPHA_DESC, RANDOM (or RANDOM_<seed>).",
-  );
+  return value;
 }
 
 export function registerSearchCommand(program: Command, deps: CliDeps): void {
   program
     .command("search")
-    .description("Search digitised cultural-heritage objects (GET /search)")
-    .argument("<query>", "search term(s), Solr syntax; use '*' to match everything")
-    .option("--rows <n>", "number of results to return (0..1000)", parseBoundedInt(0, 1000), 10)
-    .option("--offset <n>", "offset of the first result (for paging)", parseIntArg)
-    .option("--sort <spec>", "RELEVANCE | ALPHA_ASC | ALPHA_DESC | RANDOM[_<seed>]", parseSort)
-    .option("--facet <name>", "compute counts for this facet field (repeatable), e.g. type_fct", collect)
-    .option("--facet-limit <n>", "cap the number of values returned per facet", parseIntArg)
+    .description("Search cultural-heritage objects via the v2 Solr index (returns native Solr JSON)")
+    .argument("<query>", "Solr query (q); use '*:*' to match everything")
+    .option("--rows <n>", "number of documents to return (Solr rows)", parseIntArg, 10)
+    .option("--offset <n>", "offset of the first document (Solr start), for paging", parseIntArg)
+    .option("--sort <spec>", "Solr sort, e.g. \"score desc\" or \"id asc\"", parseNonEmpty)
+    .option("--fields <list>", "comma-separated fields to return (Solr fl), e.g. id,title", parseNonEmpty)
     .option(
-      "--filter <facet=value>",
-      "restrict to a facet value (repeatable), e.g. place_fct=Berlin",
-      collectFilter,
+      "--filter <fq>",
+      "Solr filter query (fq), repeatable, e.g. type_fct:mediatype_002",
+      collect,
     )
+    .option("--facet <field>", "compute counts for this facet field (repeatable), e.g. type_fct", collect)
+    .option("--facet-limit <n>", "cap the number of values returned per facet", parseIntArg)
+    .option("--collection <name>", "Solr collection to query", parsePathSegment, "search")
+    .option("--handler <name>", "Solr request handler", parsePathSegment, "select")
     .action(
       action(deps, async ({ client, global, opts }, [query]) => {
-        // An empty/whitespace-only query would hit the API with `query=` and
-        // fall back to matching everything (rows default!) — reject it so the
-        // user gets a clear message instead of an accidental match-all dump.
+        // An empty/whitespace-only query would hit Solr with `q=` and 400 (or
+        // silently match nothing); reject it with a clear message up front.
         if (query === undefined || query.trim().length === 0) {
-          throw new DdbUsageError("A query is required, e.g. `search Goethe` (or `search '*'` for all).");
+          throw new DdbUsageError(
+            "A query is required, e.g. `search Goethe` (or `search '*:*'` for all).",
+          );
         }
         const params: SearchParams = { query };
         if (typeof opts["rows"] === "number") params.rows = opts["rows"];
-        if (typeof opts["offset"] === "number") params.offset = opts["offset"];
+        if (typeof opts["offset"] === "number") params.start = opts["offset"];
         if (typeof opts["sort"] === "string") params.sort = opts["sort"];
+        if (typeof opts["fields"] === "string") params.fields = opts["fields"];
         if (typeof opts["facetLimit"] === "number") params.facetLimit = opts["facetLimit"];
+        if (typeof opts["collection"] === "string") params.collection = opts["collection"];
+        if (typeof opts["handler"] === "string") params.requestHandler = opts["handler"];
+        const filters = opts["filter"] as string[] | undefined;
+        if (filters && filters.length > 0) params.filters = filters;
         const facets = opts["facet"] as string[] | undefined;
-        if (facets && facets.length > 0) params.facet = facets;
-        const filters = opts["filter"] as FilterMap | undefined;
-        if (filters && Object.keys(filters).length > 0) params.filters = filters;
-        renderJson(deps, global, await client.search(params));
+        if (facets && facets.length > 0) params.facetFields = facets;
+
+        const result = await client.search(params);
+
+        // Nudge toward paging when more documents match than were returned, so a
+        // capped first page isn't mistaken for the whole result set.
+        const body = result.response;
+        if (body && typeof body.numFound === "number") {
+          const shown = (body.start ?? 0) + (Array.isArray(body.docs) ? body.docs.length : 0);
+          if (body.numFound > shown) {
+            deps.io.err(
+              `Note: ${body.numFound} documents match; ${shown} shown. ` +
+                "Page with --offset (Solr start), or narrow with --filter.",
+            );
+          }
+        }
+        renderJson(deps, global, result);
       }),
     );
 }

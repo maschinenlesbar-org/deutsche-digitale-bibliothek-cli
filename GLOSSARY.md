@@ -3,6 +3,9 @@
 Domain and technical terms you meet when using `ddb`. For the option reference
 see the **[README](README.md)** and the full cookbook in **[Usage.md](Usage.md)**.
 
+`ddb` targets the DDB **v2** API (`https://api.deutsche-digitale-bibliothek.de/2`).
+Its read routes — search, item, version — are **public: no API key**.
+
 ## The DDB and its data
 
 **Deutsche Digitale Bibliothek (DDB).** Germany's national aggregator for
@@ -12,90 +15,112 @@ research bodies) and offers one shared search across them.
 
 **Object / item.** A single catalogued thing — a book, image, archival record,
 piece of sheet music, film, audio recording, etc. Identified by a **32-character
-id** (e.g. `OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF`), the value in a search result's
+id** (e.g. `TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK`), the value in a search result's
 `id` and the argument to `ddb item`.
 
-**Institution / provider.** A data partner that contributes objects. `ddb
-institutions` lists them (as a nested tree, since institutions can contain
-sub-institutions); the `provider_fct` facet lets you filter a search by provider.
+**Institution / provider.** A data partner that contributes objects. There is no
+dedicated `institutions` command in this CLI; filter or aggregate by provider
+through the **`provider_fct`** facet instead (`--facet provider_fct`, or
+`--filter provider_fct:"…"`).
 
-**Sector (Sparte).** The cultural sector an institution belongs to, coded
-`sec_01`..`sec_07`: Archive, Library, Monument protection, Research, Media,
-Museum, Other. Used by `ddb institutions --sector` and the `sector_fct` facet.
+**Sector (Sparte).** The cultural sector an object's provider belongs to, exposed
+as the **`sector_fct`** facet with codes `sec_01`..`sec_07`: Archive, Library,
+Monument protection, Research, Media, Museum, Other.
 
 ## Search
 
-**Solr.** The search engine behind the DDB. `search` queries use **Solr / Lucene
-query syntax**: bare keywords, `"quoted phrases"`, boolean `AND`/`OR`/`NOT`,
-field-scoped terms (`label:Faust`), ranges, and `*` to match everything.
+**v2 = Solr passthrough.** In v2, `ddb search` is a thin wrapper over the DDB's
+Apache **Solr** index (`GET /2/search/index/{collection}/{requestHandler}`, by
+default `search`/`select`). Your options map onto native Solr query parameters and
+the response is **native Solr JSON**, not a DDB-curated envelope.
 
-**Query (`query`).** The search term(s). Required; pass `'*'` to browse all
-objects. Defaults matter: `ddb search` caps results at `--rows 10` (the API's own
-default is 1000).
+**Solr / Lucene query syntax.** `search` queries use bare keywords, `"quoted
+phrases"`, boolean `AND`/`OR`/`NOT`, field-scoped terms (`title:Faust`), ranges,
+and **`*:*`** to match every document.
 
-**Rows / offset.** `--rows` is the page size (0..1000); `--offset` is how many
-leading results to skip. Together they page a result set.
+**`q` (the query).** The search term(s). Required; pass `'*:*'` to browse all
+objects. `ddb search` caps results at `--rows 10` by default.
 
-**numberOfResults.** The total number of hits for a query, independent of how
-many rows were actually returned — the field to read for "how many match?".
+**rows / start.** `--rows` is the page size (Solr `rows`); `--offset` is how many
+leading documents to skip (Solr `start`). Together they page a result set.
 
-**Facet.** A field the search index can group and count by — e.g. object type,
-place, provider, language, time. Facets power "drill-down" browsing: see which
-values exist and how many objects each has, then narrow.
+**Response shape.** A Solr response has three parts you care about:
+
+| Path | What it is |
+|---|---|
+| `response.numFound` | total hits for the query — read this for "how many match?" |
+| `response.start` | offset of the first returned doc (the `--offset` you paged to) |
+| `response.docs[]` | this page of documents (each has an `id`, plus Solr fields) |
+| `facet_counts.facet_fields.<field>` | facet values + counts, when `--facet` was used |
+
+**Document fields.** Each `docs[]` entry carries the item `id` plus many Solr
+fields — commonly `label` / `title` (display text), `type` (media-type codes),
+`objecttype`, `place` / `place_fct`, `provider` / `provider_fct`, `preview`
+(thumbnail URL), `license`. Fields vary by object; project what you need with `jq`.
+
+**Facet.** A field the index can group and count by — object type, place,
+provider, language, sector, time. `--facet <field>` asks Solr to *return value
+counts* for that field, in `facet_counts.facet_fields.<field>` as a **flat array**
+`[value, count, value, count, …]`.
 
 **`*_fct` fields.** The DDB's facet field names end in `_fct`. The common ones:
 
-| Field | Facets by |
-|---|---|
-| `type_fct` | object type (Bild, Buch, …) |
-| `place_fct` | place |
-| `provider_fct` | contributing institution |
-| `sector_fct` | cultural sector |
-| `language_fct` | language |
-| `keywords_fct` | subject keywords |
-| `time_fct` / `time_begin_fct` / `time_end_fct` | time period |
-| `state_fct` | German federal state |
-| `mimetype_fct` | media MIME type |
+| Field | Facets by | Value form |
+|---|---|---|
+| `type_fct` | media type | codes like `mediatype_002` |
+| `objecttype_fct` | object type | words (Druckgraphik, …) |
+| `place_fct` | place | place names |
+| `provider_fct` | contributing institution | provider names |
+| `sector_fct` | cultural sector | `sec_01`..`sec_07` |
+| `language_fct` | language | language codes |
+| `keywords_fct` | subject keywords | words |
+| `time_fct` / `begin_time` / `end_time` | time period | years |
+| `state_fct` | German federal state | state names |
+| `mimetype_fct` | media MIME type | MIME types |
 
-Run `ddb facets` to list every facet, `ddb facets <name>` to list one facet's
-values with counts.
+**`--facet` vs. `--filter`.** `--facet type_fct` asks Solr to *return counts* for
+that field (so you can see what to narrow to). `--filter` takes a raw Solr
+**filter query (`fq`)** that *restricts* the result set, e.g.
+`--filter place_fct:"Berlin"` or `--filter type_fct:mediatype_002`. Repeat
+`--filter` to AND several constraints; express OR inside one fq
+(`--filter 'place_fct:("Berlin" OR "Dessau")'`).
 
-**`--facet` vs. `--filter`.** `--facet type_fct` asks the API to *return counts*
-for that facet alongside the results (so you can see what to narrow to).
-`--filter type_fct=Bild` *restricts* the result set to objects with that facet
-value. Repeating `--filter` for the same facet is an OR within that facet.
+**sort.** Solr sort syntax: `<field> asc|desc`, e.g. `--sort "score desc"`
+(relevance, the default when omitted) or `--sort "id asc"`. Comma-separate for
+tie-breakers (`--sort "score desc, id asc"`).
 
-**sort.** `RELEVANCE` (default when a real query is given), `ALPHA_ASC` /
-`ALPHA_DESC` (alphabetical), or `RANDOM` (optionally `RANDOM_<seed>` — reuse the
-`randomSeed` from a previous response for a stable shuffle).
+**fields (`fl`).** `--fields id,label,type` restricts each returned document to
+those fields (Solr `fl`) — the cleanest way to tame verbose docs.
 
-**correctedQuery.** A spelling-corrected version of your query the API returns
-when the original looked mistyped.
+## Item components
 
-## Item components (the AIP)
+**Item components.** `ddb item <id> --part <component>` fetches one component of an
+object. Most are JSON; a few are served as XML or a plain file and are printed
+**raw** (so `> file.xml` and piping keep them intact):
 
-**AIP (Archive Information Package).** The bundle of all information the DDB holds
-for one item. `ddb item <id> --part <component>` fetches a single component:
+| Component (`--part`) | What it is | Format |
+|---|---|---|
+| `view` *(default)* | the data set a DDB frontend object page is built from — the friendliest view | JSON |
+| `aip` | the Archive Information Package (the full record) | JSON |
+| `edm` | the **Europeana Data Model** record — the standardised, interoperable profile the DDB shares with [Europeana](https://www.europeana.eu) | RDF/**XML** |
+| `binaries` | related binary files (thumbnails, media) with their URLs | JSON |
+| `children` / `parents` | items one level down / up in a hierarchy (finding aids, multi-part works) | JSON |
+| `source` | the ingest source metadata | JSON |
+| `source-description` | a description of the source record | JSON |
+| `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML, …) | **XML** |
+| `iiif` | the [IIIF](https://iiif.io) Presentation manifest (only where the object has one) | JSON |
+| `citation` | a citation/quote file for a newspaper issue (only where applicable) | BIB file |
 
-| Component (`--part`) | What it is |
-|---|---|
-| `view` *(default)* | the data set a DDB frontend object page is built from — the friendliest view |
-| `aip` | the complete package (all components) |
-| `edm` | the **Europeana Data Model** record — the standardised, interoperable metadata profile the DDB shares with [Europeana](https://www.europeana.eu) |
-| `binaries` | the list of related binary files (thumbnails, media) with their URLs |
-| `children` / `parents` | items one level down / up in a hierarchy (archival finding aids, multi-part works) |
-| `indexing-profile` | the profile used to index the item |
-
-> The `source` component (raw provider XML like METS/MODS, LIDO, MARCXML) and
-> `binary` file downloads are **not** exposed by this CLI, which is JSON-only.
+> `--part children` also accepts `--rows` / `--offset` for paging a large child
+> set. `--lang <code>` sets the preferred label language for
+> `view`/`aip`/`edm`/`binaries`/`source`/`source-description`.
 
 ## Auth & rights
 
-**API key / `oauth_consumer_key`.** The DDB protects the API with OAuth 1.0a, but
-in practice a single **consumer key** suffices — no request signing. This client
-sends it as the header `Authorization: OAuth oauth_consumer_key="<key>"`. Get a
-free key from a **"Mein DDB"** account. `ddb version` is the one endpoint that
-works without a key.
+**No API key.** The read routes this CLI uses are public — search, item and
+version all work anonymously. A `403` is therefore unusual and means `--base-url`
+was pointed at an authenticated endpoint, or the specific item component is
+access-restricted — **not** "you need a key".
 
 **CC0 1.0.** The Creative Commons "no rights reserved" public-domain dedication.
 The DDB API returns **metadata exclusively under CC0** — freely reusable, no
@@ -111,9 +136,10 @@ object's rights before reusing its media. See [DATA_LICENSE.md](DATA_LICENSE.md)
 ## CLI / technical
 
 **Exit codes.** `0` success · `2` usage error (bad flag, wrong-length id) · `4`
-not found · `6` network failure · `1` other API/runtime error (incl. `403`). See
+not found · `6` network failure · `1` other API/runtime error. See
 [Usage.md](Usage.md#exit-codes).
 
-**Cross-origin credential stripping.** If the API ever redirects to a different
-host, the client removes the `Authorization` (and `Cookie`/`X-API-Key`) header
-before following, so your key is never leaked to another origin.
+**Cross-origin credential stripping.** The read routes send no credentials, but if
+you inject one via a header and the API ever redirects to a different host, the
+client removes any `Authorization` / `Cookie` / `X-API-Key` header before
+following, so it is never leaked to another origin.

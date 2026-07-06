@@ -11,8 +11,8 @@
     {
       "name": "ddb",
       "source": "./",
-      "description": "Search Germany's digitised cultural heritage, fetch an object's full detail, and explore facet distributions and partner institutions — over the Deutsche Digitale Bibliothek API via the deutsche-digitale-bibliothek-cli.",
-      "version": "0.1.0",
+      "description": "Search Germany's digitised cultural heritage, explore facet distributions, and fetch an object's full detail — over the public v2 Deutsche Digitale Bibliothek API via the deutsche-digitale-bibliothek-cli. No API key required.",
+      "version": "0.2.0",
       "author": {
         "name": "Sebastian Schürmann",
         "email": "sebs@2xs.org"

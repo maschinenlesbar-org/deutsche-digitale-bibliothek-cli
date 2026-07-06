@@ -2,22 +2,21 @@
 
 A set of [Claude Code](https://code.claude.com/docs/en/skills) **Agent Skills** for
 **Germany's digitised cultural heritage**, all powered by the **[ddb](README.md)** CLI
-over the [Deutsche Digitale Bibliothek API](https://api.deutsche-digitale-bibliothek.de).
+over the **v2** [Deutsche Digitale Bibliothek API](https://api.deutsche-digitale-bibliothek.de/2).
 
 Each skill teaches Claude how to drive the `ddb` CLI to answer a specific, real-world
 question — "find objects about the Bauhaus", "show me this object's details", "which
-institutions hold the most on this topic?" — and to report the answer with citations
-rather than guesswork. They encode the parts that are easy to get wrong (the nested
-`results[].docs[]` shape, `--facet` vs `--filter`, the CC0-metadata-vs-object-rights
-split, the key-required-except-`version` rule) so Claude doesn't rediscover them each time.
+places hold the most on this topic?" — and to report the answer with citations rather
+than guesswork. They encode the parts that are easy to get wrong (the native-Solr
+`response.docs[]` shape, `--facet` vs `--filter`, the flat facet-count array, the
+CC0-metadata-vs-object-rights split) so Claude doesn't rediscover them each time.
 
 ## Skills
 
 | Skill | What it does | Ask it… |
 |---|---|---|
-| **ddb-search** | Searches the object index with Solr queries, narrows with facet filters, and reads result counts. | "find Bauhaus objects", "how many photos of Goethe are digitised?", "manuscripts from Berlin" |
-| **ddb-item** | Fetches one object by its 32-character id — the friendly `view`, the `edm` record, its `binaries`, or its `parents`/`children` hierarchy. | "show this DDB object's details", "get the Europeana metadata for this item", "what media belong to this record?" |
-| **ddb-facets** | Returns facet distributions (which places / types / providers have the most objects) and lists the DDB's partner institutions. | "top institutions for the Bauhaus", "what object types exist?", "list the museums in the DDB" |
+| **ddb-search** | Searches the Solr object index, narrows with filter queries, and reads facet distributions (which places / types / providers have the most objects). | "find Bauhaus objects", "how many photos of Goethe are digitised?", "manuscripts from Berlin", "top places for medieval manuscripts" |
+| **ddb-item** | Fetches one object by its 32-character id — the friendly `view`, the `edm` record, its `binaries`, IIIF manifest, or `parents`/`children` hierarchy. | "show this DDB object's details", "get the Europeana metadata for this item", "what media belong to this record?" |
 
 ## Requirements
 
@@ -27,17 +26,8 @@ split, the key-required-except-`version` rule) so Claude doesn't rediscover them
   ```bash
   npm i -g @maschinenlesbar.org/deutsche-digitale-bibliothek-cli   # installs the `ddb` bin
   ```
-- **A DDB API key.** Every command except `ddb version` **requires a key** — there is no
-  bundled or publicly-scrapable one (unlike some sibling CLIs). The key is **free** but
-  needs a personal **"Mein DDB"** account: register at
-  [deutsche-digitale-bibliothek.de](https://www.deutsche-digitale-bibliothek.de) and
-  generate your key in the account settings. Supply it via the `DDB_API_KEY` environment
-  variable (preferred) or the global `--api-key <key>` flag. Without a key, requests
-  return `403`.
-
-  ```bash
-  export DDB_API_KEY=your-personal-key
-  ```
+- **No API key.** The read routes (`search`, `item`, `version`) are public — there is
+  nothing to register and nothing to pass.
 
 ## Installation
 
@@ -52,7 +42,7 @@ Claude Code:
 ```
 
 The first command registers the marketplace; the second installs the `ddb` plugin, which
-bundles all three skills. Update later with `/plugin marketplace update`.
+bundles both skills. Update later with `/plugin marketplace update`.
 
 ### Manual (copy the skill folders)
 
@@ -74,13 +64,13 @@ automatically.
 ## Usage
 
 You don't normally invoke these by name — Claude auto-selects the right skill from your
-request. Make sure `DDB_API_KEY` is set, then just ask in natural language:
+request. Just ask in natural language:
 
 > Find digitised Bauhaus posters in the DDB and show me the top ten.
 
-> Which institutions hold the most objects about medieval manuscripts?
+> Which places hold the most objects about medieval manuscripts?
 
-> Get the Europeana metadata for object OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF.
+> Get the Europeana metadata for object TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK.
 
 You can also invoke a skill explicitly with its slash command, e.g. `/ddb-search`.
 
@@ -90,15 +80,16 @@ Every skill is a single `SKILL.md` — a short, model-facing playbook describing
 subcommands to call, in what order, and how to interpret the JSON. The skills encode the
 non-obvious parts of this API, for example:
 
-- **the key is mandatory except for `version`** — a `403` (CLI exit `1`) means "set
-  `DDB_API_KEY`", not "retry"; `ddb version` works anonymously and is the connectivity
-  check;
-- **results are nested** — hits live under `results[0].docs[]`, and the total is
-  `numberOfResults` (read it to count; don't page everything);
-- **`--facet` vs `--filter`** — `--facet type_fct` *returns* value counts; `--filter
-  type_fct=Bild` *restricts* the set. Repeating `--filter place_fct=…` ORs the values;
+- **no key needed** — the v2 read routes are public; a `403` (CLI exit `1`) is unusual and
+  means a custom `--base-url` hit an authenticated endpoint, not "set a key";
+- **native Solr shape** — hits live under `response.docs[]`, and the total is
+  `response.numFound` (read it to count; don't page everything);
+- **`--facet` vs `--filter`** — `--facet type_fct` *returns* value counts (a flat
+  `[value, count, …]` array under `facet_counts.facet_fields`); `--filter` takes a raw Solr
+  `fq` like `type_fct:mediatype_002` that *restricts* the set;
 - **item ids are exactly 32 characters** — a wrong-length id is rejected up front (exit
   `2`); from a DDB object URL, take the last path segment;
+- **some item components are XML** — `edm` and `source-record` print raw XML, not JSON;
 - **metadata is CC0, object media are not** — the API returns only CC0 metadata, but the
   image/audio/video a record points to carry per-object rights from the DDB "Lizenzkorb";
   check each object's rights before reusing its media;

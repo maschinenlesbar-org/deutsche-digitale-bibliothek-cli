@@ -1,6 +1,6 @@
 # Usage
 
-`ddb` — a CLI for the Deutsche Digitale Bibliothek (DDB) API. This is the
+`ddb` — a CLI for the Deutsche Digitale Bibliothek (DDB) **v2** API. This is the
 use-case-driven cookbook; for the option reference see the
 **[README](README.md)**, and for domain terms the **[Glossary](GLOSSARY.md)**.
 
@@ -8,15 +8,13 @@ use-case-driven cookbook; for the option reference see the
 ddb [global options] <command> [command options]
 ```
 
-All commands except `version` need an API key — set `DDB_API_KEY` or pass
-`--api-key` (see [README → API key](README.md#api-key)).
+The v2 read routes are **public — no API key**. Just run the commands.
 
 ## Global options
 
 | Option | Description |
 |---|---|
-| `--api-key <key>` | DDB API key (env: `DDB_API_KEY`) |
-| `--base-url <url>` | API base URL (only `http:`/`https:` accepted) |
+| `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted) |
 | `--timeout <ms>` | per-request timeout in ms (0 = no timeout) |
 | `--user-agent <ua>` | User-Agent header value |
 | `--max-retries <n>` | retries for transient 429/503 responses (0..10) |
@@ -31,49 +29,67 @@ All commands except `version` need an API key — set `DDB_API_KEY` or pass
 ddb search <query> [options]
 ```
 
-The query uses **Solr syntax**. Some starting points:
+v2 search is a **Solr passthrough**: the query and `--filter` use Solr syntax, and
+the response is **native Solr JSON**. Some starting points:
 
 ```bash
 ddb search Goethe                         # simple keyword
 ddb search "Weimarer Republik"            # phrase (quote it in your shell)
 ddb search 'Goethe AND Faust'             # boolean operators
-ddb search '*'                            # match everything (browse mode)
-ddb search 'label:Faust'                  # field-scoped query
+ddb search '*:*'                          # match everything (browse mode)
+ddb search 'title:Faust'                  # field-scoped query
 ```
 
 | Option | Description |
 |---|---|
-| `--rows <n>` | number of results (0..1000, default 10) |
-| `--offset <n>` | offset of the first result (paging) |
-| `--sort <spec>` | `RELEVANCE` / `ALPHA_ASC` / `ALPHA_DESC` / `RANDOM[_<seed>]` |
-| `--facet <name>` | compute counts for this facet field (repeatable) |
+| `--rows <n>` | number of documents (Solr `rows`, default 10) |
+| `--offset <n>` | offset of the first document (Solr `start`, paging) |
+| `--sort <spec>` | Solr sort, e.g. `"score desc"` or `"id asc"` |
+| `--fields <list>` | fields to return (Solr `fl`), e.g. `id,label,type` |
+| `--filter <fq>` | Solr filter query (repeatable), e.g. `type_fct:mediatype_002` |
+| `--facet <field>` | return counts for this facet field (repeatable) |
 | `--facet-limit <n>` | cap the number of values per facet |
-| `--filter <facet=value>` | restrict to a facet value (repeatable) |
+| `--collection <name>` | Solr collection (default `search`) |
+| `--handler <name>` | Solr request handler (default `select`) |
 
-The default result shape is:
+The result shape is native Solr:
 
 ```json
 {
-  "numberOfResults": 12345,
-  "results": [ { "numberOfDocs": 10, "docs": [ { "id": "…", "label": "…", "type": "…" } ] } ],
-  "facets": [ … ]
+  "responseHeader": { "status": 0, "params": { "q": "Goethe", "rows": "10" } },
+  "response": {
+    "numFound": 99866,
+    "start": 0,
+    "docs": [ { "id": "…", "label": "…", "type": ["mediatype_002"] } ]
+  },
+  "facet_counts": { "facet_fields": { "type_fct": ["mediatype_003", 50024] } }
 }
 ```
 
 ### Filtering with facets
 
-`--filter facet=value` narrows the result set to matching objects; `--facet name`
-asks the API to return value counts for a facet (for building the next filter):
+`--filter <fq>` narrows the result set with a Solr filter query; `--facet <field>`
+asks Solr to return value counts for a facet (to build the next filter):
 
 ```bash
-# Images (Bild) from Berlin
-ddb search '*' --filter type_fct=Bild --filter place_fct=Berlin
+# Images (a media-type code) from Berlin
+ddb search '*:*' --filter type_fct:mediatype_002 --filter 'place_fct:"Berlin"'
 
-# Two places at once (OR within the same facet)
-ddb search Bauhaus --filter place_fct=Berlin --filter place_fct=Dessau
+# Two places at once (OR inside one filter query)
+ddb search Bauhaus --filter 'place_fct:("Berlin" OR "Dessau")'
 
-# Ask for the type distribution of a query, top 5 values
-ddb search Goethe --facet type_fct --facet-limit 5 | jq '.facets[0].facetValues'
+# Ask for the object-type distribution of a query, top 5 values
+ddb search Goethe --rows 0 --facet objecttype_fct --facet-limit 5 \
+  | jq '.facet_counts.facet_fields.objecttype_fct'
+```
+
+Facet counts arrive as a **flat array** `[value, count, value, count, …]`. To turn
+one into `{value, count}` objects:
+
+```bash
+ddb search Bauhaus --rows 0 --facet place_fct --facet-limit 10 \
+  | jq '.facet_counts.facet_fields.place_fct
+        | [range(0; length; 2) as $i | {value: .[$i], count: .[$i+1]}]'
 ```
 
 ### Paging
@@ -84,73 +100,67 @@ ddb search Goethe --rows 10
 ddb search Goethe --rows 10 --offset 10
 ```
 
+When more documents match than were returned, `ddb` prints a note like
+`Note: 99866 documents match; 10 shown.` to **stderr** — page with `--offset` or
+narrow with `--filter`. Read `response.numFound` for the true total.
+
 ## `item` — object detail
 
 ```bash
-ddb item <id> [--part <component>]
+ddb item <id> [--part <component>] [--lang <code>]
 ```
 
-`<id>` is the exact **32-character** id from a search result's `id`. The `--part`
-option selects which component of the Archive Information Package (AIP) to fetch:
+`<id>` is the exact **32-character** id from a search result's `id`. `--part`
+selects which component to fetch — most are JSON, a few are XML / a plain file
+and print **raw** (so `> file.xml` and piping keep them intact):
 
-| `--part` | Returns |
-|---|---|
-| `view` *(default)* | the data set a DDB frontend object page is built on |
-| `aip` | the full AIP (all components) |
-| `edm` | the Europeana Data Model record |
-| `binaries` | the list of related binary files (thumbnails, media) |
-| `children` | child items (for hierarchical/archival objects) |
-| `parents` | parent items up the hierarchy |
-| `indexing-profile` | the profile used to index the item |
+| `--part` | Returns | Format |
+|---|---|---|
+| `view` *(default)* | the data set a DDB frontend object page is built on | JSON |
+| `aip` | the full Archive Information Package | JSON |
+| `edm` | the Europeana Data Model record | RDF/**XML** |
+| `binaries` | related binary files (thumbnails, media) and their URLs | JSON |
+| `children` | child items (accepts `--rows`/`--offset`) | JSON |
+| `parents` | parent items up the hierarchy | JSON |
+| `source` | the ingest source metadata | JSON |
+| `source-description` | a description of the source record | JSON |
+| `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML) | **XML** |
+| `iiif` | the IIIF Presentation manifest (only where present → else `404`) | JSON |
+| `citation` | a newspaper-issue citation file (only where applicable) | BIB file |
+
+`--lang <code>` sets the preferred label language for
+`view`/`aip`/`edm`/`binaries`/`source`/`source-description`.
 
 ```bash
-ID=$(ddb search Goethe | jq -r '.results[0].docs[0].id')
+ID=$(ddb search Goethe --fields id | jq -r '.response.docs[0].id')
 ddb item "$ID"
-ddb item "$ID" --part edm
+ddb item "$ID" --part edm -o object.edm.xml     # RDF/XML → file
 ddb item "$ID" --part binaries | jq '.'
+ddb item "$ID" --part children --rows 20         # first 20 children
 ```
-
-## `facets` — explore facets
-
-```bash
-ddb facets                 # list the available facet fields
-ddb facets place_fct       # values (with counts) for one facet
-ddb facets place_fct --query Bauhaus   # scope the counts to a query
-```
-
-## `institutions` — the data partners
-
-```bash
-ddb institutions                        # all registered institutions (nested tree)
-ddb institutions --has-items            # only those with items in the DDB
-ddb institutions --sector sec_06        # only museums
-```
-
-Sector codes: `sec_01` Archive · `sec_02` Library · `sec_03` Monument protection
-· `sec_04` Research · `sec_05` Media · `sec_06` Museum · `sec_07` Other.
 
 ## `version` — connectivity check
 
 ```bash
-ddb version        # e.g. 6.12.5 — works WITHOUT an API key
+ddb version        # e.g. 7.5
 ```
 
-Useful to confirm the API is reachable: if `version` works but `search` returns a
-`403`, the problem is your key, not connectivity.
+Useful to confirm the API is reachable and the CLI is wired up.
 
 ## Scripting recipes
 
 ```bash
 # Object ids + labels of the current page
-ddb search Goethe | jq -r '.results[0].docs[] | "\(.id)\t\(.label)"'
+ddb search Goethe | jq -r '.response.docs[] | "\(.id)\t\(.label)"'
 
 # Total number of matches
-ddb search Goethe | jq '.numberOfResults'
+ddb search Goethe | jq '.response.numFound'
 
-# Top 10 providers for a query
-ddb facets provider_fct --query Goethe | jq '.facets[0].facetValues[:10]'
+# Top 10 providers for a query (flat facet array)
+ddb search Goethe --rows 0 --facet provider_fct --facet-limit 10 \
+  | jq '.facet_counts.facet_fields.provider_fct'
 
-# Save a full result set to disk
+# Save a full result page to disk
 ddb --output goethe.json search Goethe --rows 100
 ```
 
@@ -159,16 +169,19 @@ ddb --output goethe.json search Goethe --rows 100
 | Code | Meaning |
 |---|---|
 | `0` | success (help/version included); an empty result also exits 0 |
-| `1` | API/logical error (e.g. a `403` with no/insufficient key), or a catch-all |
+| `1` | API/logical error, or a catch-all (includes an unexpected `403`) |
 | `2` | usage error (bad flags, unknown command, wrong-length item id, bad `--base-url`) |
 | `4` | HTTP 404 (not found) |
 | `6` | network / transport failure (DNS, connection, timeout, response size-cap) |
 
 ## Notes
 
+- **No API key.** The read routes are public; a `403` means a custom `--base-url`
+  hit an authenticated endpoint or the item component is access-restricted.
 - **Metadata returned by this CLI is CC0** (no attribution required); object
   *media* (not downloaded here) carry per-object rights — see
   [DATA_LICENSE.md](DATA_LICENSE.md).
-- **`search` default fields** are whatever the Solr index returns per document;
-  large objects can be verbose — use `jq` to project the fields you need.
+- **`search` returns native Solr JSON.** Hits live under `response.docs[]`, the
+  total is `response.numFound`, facet counts under `facet_counts.facet_fields`.
+- **Docs can be verbose** — use `--fields`/`fl` or `jq` to project what you need.
 - The API exposes **only CC0 metadata**, a narrower set than the DDB web portal.

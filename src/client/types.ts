@@ -1,83 +1,59 @@
-// Response interfaces for the DDB API. The DDB serves opaque JSON objects for
-// most details (item AIP components, views, EDM), so those are typed as
-// `JsonObject`. The search response has a stable, documented top-level shape,
-// typed here; individual result documents carry a curated set of known fields
-// plus an index signature for everything else the Solr index returns.
+// Response interfaces for the DDB **v2** API.
+//
+// v2 exposes two very different read surfaces:
+//   - Search is a raw Apache Solr passthrough (`/2/search/index/{collection}/
+//     {requestHandler}`). The response is native Solr JSON, so `SolrResponse`
+//     mirrors Solr's `responseHeader` / `response` / `facet_counts` shape rather
+//     than a DDB-curated envelope.
+//   - Item components (`/2/items/{id}...`) return either JSON (view, aip, edm-as-
+//     json, binaries, children, parents, source) or XML/text (edm as RDF/XML,
+//     source record XML, citation BIB file). The client decodes by Content-Type
+//     and hands back an `ItemResult` carrying whichever it found.
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
 export interface JsonObject {
   [key: string]: JsonValue;
 }
 
-/** One value of a facet with the number of matching documents. */
-export interface FacetValue {
-  value: string;
-  count: number;
-  [key: string]: JsonValue;
-}
-
-/** A facet returned alongside search results or by the facets endpoints. */
-export interface Facet {
-  /** The facet field, e.g. `type_fct`, `place_fct`, `provider_fct`. */
-  field: string;
-  /** Number of distinct facet values found (capped by `facet.limit`). */
-  numberOfFacets: number;
-  facetValues: FacetValue[];
-  [key: string]: JsonValue;
-}
-
-/** A single result document from the search index (curated known fields). */
-export interface SearchDoc {
-  /** The 32-character item id, usable with the `item` command / `/items/{id}`. */
+/**
+ * One document in a Solr search response. Only `id` is guaranteed (it is the
+ * 32-character item id usable with the `item` command / `/2/items/{id}`); every
+ * other field is a Solr index field and varies by object, so it is left open.
+ */
+export interface SolrDoc {
   id: string;
-  /** Display title. */
-  label?: string;
-  /** Secondary line (e.g. institution, date). */
-  subtitle?: string;
-  /** Object type (Bild, Buch, ...). */
-  type?: string;
-  /** Broad category / cultural sector. */
-  category?: string;
-  /** Media types present (mime categories). */
-  media?: string[];
-  [key: string]: JsonValue | string[] | undefined;
+  [key: string]: JsonValue | undefined;
 }
 
-/** A group of result documents within a search response. */
-export interface SearchResultGroup {
-  docs: SearchDoc[];
-  numberOfDocs?: number;
-  [key: string]: JsonValue | SearchDoc[] | undefined;
+/** The `response` block of a Solr result: the hit count plus this page of docs. */
+export interface SolrResponseBody {
+  /** Total number of matching documents, independent of `rows`. */
+  numFound: number;
+  /** Offset of the first returned document (the `start` you paged to). */
+  start: number;
+  /** Best relevance score in the page (absent for non-scoring sorts). */
+  maxScore?: number;
+  /** Whether `numFound` is exact or a lower bound (Solr may approximate). */
+  numFoundExact?: boolean;
+  docs: SolrDoc[];
 }
 
-/** The top-level DDB search response. */
-export interface SearchResponse {
-  /** Total number of hits, independent of the `rows` returned. */
-  numberOfResults: number;
-  results: SearchResultGroup[];
-  /** Facets whose `displayType` is SEARCH are always returned. */
-  facets?: Facet[];
-  /** Terms to highlight in the preview / detail view. */
-  highlightedTerms?: string[];
-  /** Seed to reuse for a stable RANDOM sort on subsequent requests. */
-  randomSeed?: string;
-  /** A spelling-corrected query when the original looked mistyped. */
-  correctedQuery?: string;
-  [key: string]: JsonValue | Facet[] | SearchResultGroup[] | string[] | undefined;
+/** A native Apache Solr response, as returned by the v2 search passthrough. */
+export interface SolrResponse {
+  /** Echoes the parsed request params and Solr timing/status. */
+  responseHeader?: JsonObject;
+  response: SolrResponseBody;
+  /** Present when faceting was requested (`--facet`): counts per field/query. */
+  facet_counts?: JsonObject;
+  [key: string]: JsonValue | SolrResponseBody | undefined;
 }
 
-/** An institution registered at the DDB (may nest child institutions). */
-export interface Institution {
-  id: string;
-  name?: string;
-  latitude?: number;
-  longitude?: number;
-  sector?: string;
-  children?: Institution[];
-  [key: string]: JsonValue | Institution[] | undefined;
-}
-
-/** The AIP components of an item that return JSON, selectable via `--part`. */
+/**
+ * The item component to fetch, selecting one of the `/2/items/{id}` sub-paths.
+ * `aip` is the bare item endpoint; the rest map to a suffix. `source-description`
+ * and `source-record` map to `/source/description` and `/source/record`; `citation`
+ * maps to the upstream (misspelled) `/citiation` path.
+ */
 export type ItemPart =
   | "view"
   | "aip"
@@ -85,28 +61,61 @@ export type ItemPart =
   | "binaries"
   | "children"
   | "parents"
-  | "indexing-profile";
+  | "source"
+  | "source-description"
+  | "source-record"
+  | "iiif"
+  | "citation";
 
-/** A cultural-sector code accepted by the institutions endpoint. */
-export type Sector = "sec_01" | "sec_02" | "sec_03" | "sec_04" | "sec_05" | "sec_06" | "sec_07";
+/**
+ * The decoded body of an item component. Exactly one of `json` / `text` is set:
+ * `json` for JSON components (view, aip, binaries, ...), `text` for the ones the
+ * API serves as XML or a plain file (edm RDF/XML, source record XML, citation BIB).
+ */
+export interface ItemResult {
+  part: ItemPart;
+  /** The response Content-Type the decoding was based on. */
+  contentType: string;
+  /** Parsed JSON body, when the component returned JSON. */
+  json?: JsonValue;
+  /** Raw text body, when the component returned XML / a plain file. */
+  text?: string;
+}
 
-/** Options for a search request. */
-export interface SearchParams {
-  /** Query term(s), Solr syntax. Use `*` to match everything. */
-  query: string;
-  /** Rows to return (0..1000). */
+/** Options for an item-component request. */
+export interface ItemOptions {
+  /** Preferred language for localised labels (accepted by view/aip/edm/binaries/source*). */
+  lang?: string;
+  /** For `--part children`: page size. */
   rows?: number;
-  /** Offset of the first returned row (for paging). */
+  /** For `--part children`: offset of the first child. */
   offset?: number;
-  /** Sort order: RELEVANCE, ALPHA_ASC, ALPHA_DESC, or RANDOM[_<seed>]. */
+}
+
+/**
+ * Options for a v2 search request. These map onto native Solr query parameters
+ * (`q`, `rows`, `start`, `sort`, `fq`, `fl`, `facet*`) — the endpoint is a Solr
+ * passthrough, so the values use Solr syntax.
+ */
+export interface SearchParams {
+  /** The Solr query (`q`). Use `*:*` to match everything. */
+  query: string;
+  /** Number of documents to return (`rows`). */
+  rows?: number;
+  /** Offset of the first returned document (`start`), for paging. */
+  start?: number;
+  /** Sort spec in Solr syntax, e.g. `score desc`, `id asc` (`sort`). */
   sort?: string;
-  /** Facet fields to compute counts for (repeatable). */
-  facet?: string[];
-  /** Cap the number of values returned per facet. */
+  /** Field list to return, e.g. `id,title` (`fl`). */
+  fields?: string;
+  /** Filter queries in Solr syntax, e.g. `type_fct:mediatype_002` (`fq`, repeatable). */
+  filters?: string[];
+  /** Facet fields to compute counts for (`facet.field`; enables `facet=true`). */
+  facetFields?: string[];
+  /** Cap the number of values returned per facet (`facet.limit`). */
   facetLimit?: number;
-  /**
-   * Facet-value filters, keyed by facet field, e.g. `{ place_fct: ["Berlin"] }`.
-   * Each becomes a query parameter; repeated values narrow the result set.
-   */
-  filters?: Record<string, string[]>;
+  /** Solr collection to query. Defaults to `search`. */
+  collection?: string;
+  /** Solr request handler. Defaults to `select`. */
+  requestHandler?: string;
 }

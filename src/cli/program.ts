@@ -37,33 +37,19 @@ export const defaultDeps: CliDeps = {
   env: process.env,
 };
 
-/**
- * Read DDB_API_KEY from the given environment, trimmed. A missing, empty, or
- * whitespace-only value is treated as unset (returns undefined) so it never
- * produces a malformed `Authorization: OAuth oauth_consumer_key=""` header.
- */
-export function readEnvApiKey(env: Record<string, string | undefined>): string | undefined {
-  const raw = env["DDB_API_KEY"];
-  if (typeof raw !== "string") return undefined;
-  const trimmed = raw.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
 export function buildProgram(deps: CliDeps = defaultDeps): Command {
   const program = new Command();
 
   program
     .name("ddb")
     .description(
-      "CLI for the Deutsche Digitale Bibliothek API " +
-        "(https://api.deutsche-digitale-bibliothek.de) — search digitised " +
-        "cultural-heritage objects from German archives, libraries and museums. " +
-        "Needs an API key: pass --api-key or set DDB_API_KEY (a free personal key " +
-        "is available from a \"Mein DDB\" account).",
+      "CLI for the Deutsche Digitale Bibliothek v2 API " +
+        "(https://api.deutsche-digitale-bibliothek.de/2) — search digitised " +
+        "cultural-heritage objects from German archives, libraries and museums, " +
+        "and fetch item detail. The v2 read routes are public: no API key needed.",
     )
     .version(VERSION)
     .option("--base-url <url>", "API base URL", parseBaseUrl, DEFAULT_BASE_URL)
-    .option("--api-key <key>", "DDB API key (env: DDB_API_KEY)")
     .option("--timeout <ms>", "per-request timeout in milliseconds", parseIntArg)
     .option("--user-agent <ua>", "User-Agent header value", parseHeaderValue)
     .option("--max-retries <n>", "retries for transient 429/503 responses (0..10)", parseBoundedInt(0, 10))
@@ -75,12 +61,6 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option("--compact", "print JSON on a single line instead of pretty-printed")
     .option("-o, --output <file>", "write output to this file instead of stdout")
     .showHelpAfterError();
-
-  // Seed --api-key from DDB_API_KEY (trimmed; blank treated as unset). commander
-  // treats this as the option's value, which an explicit --api-key on the command
-  // line overrides during parse, giving precedence: --api-key > DDB_API_KEY > none.
-  const envKey = readEnvApiKey(deps.env ?? process.env);
-  if (envKey !== undefined) program.setOptionValue("apiKey", envKey);
 
   registerCommands(program, deps);
 

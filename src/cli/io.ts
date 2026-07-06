@@ -18,8 +18,9 @@ export interface CliDeps {
   /** Build a client from the resolved global options (injectable for tests). */
   createClient(options: DdbClientOptions): DdbClient;
   /**
-   * Environment lookup, injected so the env-driven config (DDB_API_KEY) is
-   * testable without mutating process.env. Defaults to process.env.
+   * Environment lookup, injected so any env-driven config stays testable without
+   * mutating process.env. The v2 read routes need no credentials, so nothing is
+   * read from it today; kept as the standard seam. Defaults to process.env.
    */
   env?: Record<string, string | undefined>;
 }

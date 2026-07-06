@@ -1,7 +1,7 @@
 {
   "name": "ddb",
-  "version": "0.1.0",
-  "description": "German cultural-heritage discovery skills powered by the deutsche-digitale-bibliothek-cli (Deutsche Digitale Bibliothek API).",
+  "version": "0.2.0",
+  "description": "German cultural-heritage discovery skills powered by the deutsche-digitale-bibliothek-cli (public v2 Deutsche Digitale Bibliothek API; no key required).",
   "author": {
     "name": "Sebastian Schürmann",
     "email": "sebs@2xs.org"

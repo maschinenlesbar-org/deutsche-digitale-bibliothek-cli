@@ -1,106 +1,121 @@
-// DdbClient — a typed client over the Deutsche Digitale Bibliothek (DDB) API
-// (https://api.deutsche-digitale-bibliothek.de), central access to digitised
-// cultural-heritage objects from German archives, libraries and museums.
+// DdbClient — a typed client over the Deutsche Digitale Bibliothek (DDB) **v2**
+// API (https://api.deutsche-digitale-bibliothek.de/2), central access to
+// digitised cultural-heritage objects from German archives, libraries and
+// museums.
 //
-// Auth: an API key sent as `Authorization: OAuth oauth_consumer_key="<key>"`.
-// No key is bundled — pass it via `apiKey` (CLI: `--api-key` / `DDB_API_KEY`).
-// When no key is supplied the header is omitted and the API answers 403. A
-// personal key is free with a "Mein DDB" account; see README.md.
+// Scope: the public **read** routes, which need **no API key**:
+//   - search — a raw Apache Solr passthrough over the object index
+//   - items  — one item's components (view, aip, edm, binaries, ...)
+//   - version — the backend version string (a quick connectivity check)
 //
 //   client.search({ query: "Goethe", rows: 10 })
-//   client.item("OAXO2AGT7YH35YYHN3YKBXJMEI77W3FF")
+//   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
+//   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
+import { DdbParseError } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import type {
-  Institution,
+  ItemOptions,
   ItemPart,
-  JsonObject,
+  ItemResult,
   SearchParams,
-  SearchResponse,
-  Sector,
+  SolrResponse,
 } from "./types.js";
 
 const enc = encodeURIComponent;
 
-/** Options for the DDB client (engine options plus the API key). */
-export interface DdbClientOptions extends EngineOptions {
-  /**
-   * The DDB API key, sent as `Authorization: OAuth oauth_consumer_key="<key>"`.
-   * No key is bundled; when omitted (or blank) the header is not sent and the API
-   * answers 403. A free personal key is available from a "Mein DDB" account.
-   */
-  apiKey?: string;
-}
+/** Options for the DDB client. v2 read routes need no auth, so this is just the engine options. */
+export type DdbClientOptions = EngineOptions;
 
-/** Build the DDB search query parameters from a SearchParams object. */
-function searchParamsToQuery(params: SearchParams): QueryParams {
-  // Spread facet-value filters first so the well-known core parameters below
-  // always win if a filter key happens to collide with one of them.
-  const query: QueryParams = { ...(params.filters ?? {}) };
-  query["query"] = params.query;
-  if (params.rows !== undefined) query["rows"] = params.rows;
-  if (params.offset !== undefined) query["offset"] = params.offset;
-  if (params.sort !== undefined) query["sort"] = params.sort;
-  if (params.facet !== undefined && params.facet.length > 0) query["facet"] = params.facet;
-  if (params.facetLimit !== undefined) query["facet.limit"] = params.facetLimit;
-  return query;
-}
+/** Map an item part to its `/items/{id}` path suffix (`aip` is the bare endpoint). */
+const PART_SUFFIX: Record<ItemPart, string> = {
+  view: "/view",
+  aip: "",
+  edm: "/edm",
+  binaries: "/binaries",
+  children: "/children",
+  parents: "/parents",
+  source: "/source",
+  "source-description": "/source/description",
+  "source-record": "/source/record",
+  iiif: "/iiif",
+  // NB: the upstream path is misspelled "citiation"; we expose the correct name.
+  citation: "/citiation",
+};
+
+/** Item parts that accept a `lang` query parameter for localised labels. */
+const LANG_PARTS = new Set<ItemPart>([
+  "view",
+  "aip",
+  "edm",
+  "binaries",
+  "source",
+  "source-description",
+]);
 
 export class DdbClient {
   private readonly engine: RequestEngine;
 
   constructor(options: DdbClientOptions = {}) {
-    const { apiKey, ...engineOptions } = options;
-    // Only send Authorization when a non-blank key was supplied; never default one.
-    const key = apiKey?.trim() ? apiKey.trim() : undefined;
-    this.engine = new RequestEngine({
-      ...engineOptions,
-      defaultHeaders: {
-        ...(key ? { Authorization: `OAuth oauth_consumer_key="${key}"` } : {}),
-        ...engineOptions.defaultHeaders,
-      },
-    });
-  }
-
-  /** Full-text / faceted search over the DDB object index. */
-  search(params: SearchParams): Promise<SearchResponse> {
-    return this.engine.getJson<SearchResponse>("/search", searchParamsToQuery(params));
+    this.engine = new RequestEngine(options);
   }
 
   /**
-   * Fetch one AIP component of an item by its 32-character id. Defaults to the
-   * `view` component (the data set a DDB frontend page is built on).
+   * Search the DDB object index via the v2 Solr passthrough
+   * (`GET /2/search/index/{collection}/{requestHandler}`). Values use Solr
+   * syntax; the response is native Solr JSON. `wt=json` is always forced.
    */
-  item(id: string, part: ItemPart = "view"): Promise<JsonObject> {
-    const suffix = part === "aip" ? "" : `/${part}`;
-    return this.engine.getJson<JsonObject>(`/items/${enc(id)}${suffix}`);
-  }
-
-  /** List the available facet fields. */
-  facets(): Promise<JsonObject> {
-    return this.engine.getJson<JsonObject>("/search/facets");
+  search(params: SearchParams): Promise<SolrResponse> {
+    const collection = params.collection ?? "search";
+    const handler = params.requestHandler ?? "select";
+    const query: QueryParams = { q: params.query, wt: "json" };
+    if (params.rows !== undefined) query["rows"] = params.rows;
+    if (params.start !== undefined) query["start"] = params.start;
+    if (params.sort !== undefined) query["sort"] = params.sort;
+    if (params.fields !== undefined) query["fl"] = params.fields;
+    if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters;
+    if (params.facetFields !== undefined && params.facetFields.length > 0) {
+      query["facet"] = "true";
+      query["facet.field"] = params.facetFields;
+      if (params.facetLimit !== undefined) query["facet.limit"] = params.facetLimit;
+    }
+    return this.engine.getJson<SolrResponse>(
+      `/search/index/${enc(collection)}/${enc(handler)}`,
+      query,
+    );
   }
 
   /**
-   * List the values (with counts) of one facet, optionally scoped to a query.
-   * `facetName` is a field such as `place_fct`, `type_fct` or `provider_fct`.
+   * Fetch one component of an item by its 32-character id (defaults to `view`).
+   * Decodes by Content-Type: JSON components are parsed into `json`, while the
+   * XML / file components (edm, source-record, citation) are returned as `text`.
    */
-  facetValues(facetName: string, opts: { query?: string } = {}): Promise<JsonObject> {
+  async item(id: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
     const query: QueryParams = {};
-    if (opts.query !== undefined) query["query"] = opts.query;
-    return this.engine.getJson<JsonObject>(`/search/facets/${enc(facetName)}`, query);
+    if (opts.lang !== undefined && LANG_PARTS.has(part)) query["lang"] = opts.lang;
+    if (part === "children") {
+      if (opts.rows !== undefined) query["rows"] = opts.rows;
+      if (opts.offset !== undefined) query["offset"] = opts.offset;
+    }
+    const res = await this.engine.getRaw(
+      `/items/${enc(id)}${PART_SUFFIX[part]}`,
+      "application/json, application/xml;q=0.9, text/plain;q=0.8, */*;q=0.5",
+      query,
+    );
+    const text = res.data.toString("utf8");
+    if (/\bjson\b/i.test(res.contentType)) {
+      if (text.trim().length === 0) return { part, contentType: res.contentType, json: null };
+      try {
+        return { part, contentType: res.contentType, json: JSON.parse(text) };
+      } catch (cause) {
+        throw new DdbParseError(`Failed to parse JSON for item ${id} (${part})`, { cause });
+      }
+    }
+    return { part, contentType: res.contentType, text };
   }
 
-  /** List institutions registered at the DDB (optionally filtered). */
-  institutions(opts: { hasItems?: boolean; sector?: Sector } = {}): Promise<Institution[]> {
-    const query: QueryParams = {};
-    if (opts.hasItems !== undefined) query["hasItems"] = opts.hasItems;
-    if (opts.sector !== undefined) query["sector"] = opts.sector;
-    return this.engine.getJson<Institution[]>("/institutions", query);
-  }
-
-  /** The version string of the DDB backend. Public — works without an API key. */
+  /** The version string of the DDB backend. Public — works without a key. */
   version(): Promise<string> {
     return this.engine.getText("/version");
   }

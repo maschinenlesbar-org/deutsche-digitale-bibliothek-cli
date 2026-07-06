@@ -44,15 +44,14 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     }
     if (err instanceof DdbApiError) {
       deps.io.err(`Error: ${err.message}`);
-      // A 403 is almost always a key problem. No key is bundled, so the request
-      // likely went out with no Authorization header (or one whose security
-      // level is too low); point the user at how to supply a key rather than
-      // leaving them with a bare 403.
+      // A 403 on a v2 read route is unexpected (they are public). It usually
+      // means --base-url was pointed at an auth-only endpoint, or the item
+      // component is access-restricted; hint at that rather than a bare 403.
       if (err.status === 403) {
         deps.io.err(
-          "Access denied (403). The DDB API requires an API key. Pass --api-key <key> " +
-            "or set DDB_API_KEY. A free personal key is available from a \"Mein DDB\" " +
-            "account — see the README.",
+          "Access denied (403). The v2 read routes (search, item, version) are public; " +
+            "a 403 usually means --base-url targets an authenticated endpoint or the " +
+            "requested item component is access-restricted.",
         );
       }
       // Map a few notable statuses to distinct exit codes for scripting.

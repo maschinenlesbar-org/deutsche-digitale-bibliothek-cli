@@ -79,7 +79,6 @@ export function parseHeaderValue(value: string): string {
 
 export interface GlobalOptions {
   baseUrl?: string;
-  apiKey?: string;
   timeout?: number;
   userAgent?: string;
   maxRetries?: number;
@@ -92,12 +91,6 @@ export interface GlobalOptions {
 export function toEngineOptions(global: GlobalOptions): DdbClientOptions {
   const options: DdbClientOptions = {};
   if (global.baseUrl !== undefined) options.baseUrl = global.baseUrl;
-  // A blank/whitespace-only --api-key is treated as unset (mirroring the
-  // DDB_API_KEY handling in readEnvApiKey) so it never produces a malformed
-  // `Authorization: OAuth oauth_consumer_key=""` header.
-  if (global.apiKey !== undefined && global.apiKey.trim().length > 0) {
-    options.apiKey = global.apiKey.trim();
-  }
   if (global.timeout !== undefined) options.timeoutMs = global.timeout;
   // Likewise, a blank --user-agent falls back to the engine's default UA rather
   // than sending an empty User-Agent header.
