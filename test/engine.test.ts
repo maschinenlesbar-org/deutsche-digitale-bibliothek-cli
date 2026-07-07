@@ -1,9 +1,45 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RequestEngine } from "../src/client/engine.js";
+import { RequestEngine, sanitizeServerText } from "../src/client/engine.js";
 import { DdbApiError, DdbParseError } from "../src/client/errors.js";
 import type { HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
+
+// Control characters are built via char codes so no raw control byte ever appears
+// in this source file.
+const ESC = String.fromCharCode(0x1b);
+const BEL = String.fromCharCode(0x07);
+const NUL = String.fromCharCode(0x00);
+
+test("sanitizeServerText strips C0/C1 control bytes but keeps tab and newline", () => {
+  const tab = String.fromCharCode(0x09);
+  const nl = String.fromCharCode(0x0a);
+  const c1 = String.fromCharCode(0x9b); // a C1 control (CSI)
+  const del = String.fromCharCode(0x7f);
+  assert.equal(sanitizeServerText(`a${ESC}[31mb${BEL}${NUL}c`), "a[31mbc");
+  assert.equal(sanitizeServerText(`x${tab}y${nl}z`), `x${tab}y${nl}z`);
+  assert.equal(sanitizeServerText(`p${c1}${del}q`), "pq");
+  assert.equal(sanitizeServerText("plain <edm>OK</edm>"), "plain <edm>OK</edm>");
+});
+
+test("error detail is stripped of terminal control characters (DDB-01)", async () => {
+  // JSON.parse turns the six-char backslash-u-001b escape below into a real ESC.
+  const evil = JSON.stringify({ message: `pwn${ESC}]0;title${BEL}ed` });
+  const mt = makeMockTransport(() => rawResponse(evil, "application/json", 400));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(
+    () => e.getJson("/x"),
+    (err) => {
+      assert.ok(err instanceof DdbApiError);
+      // detail is sanitized: the ESC and BEL bytes are gone, text otherwise intact.
+      assert.equal(err.detail, "pwn]0;titleed");
+      assert.ok(!err.detail!.includes(ESC));
+      // The full raw body (the JSON envelope) is preserved untouched.
+      assert.equal(err.body, evil);
+      return true;
+    },
+  );
+});
 
 test("buildUrl normalises the path and appends the query", () => {
   const e = new RequestEngine({ baseUrl: "https://example.test/" });

@@ -4,6 +4,7 @@
 
 import type { Command } from "commander";
 import type { CliDeps } from "../io.js";
+import { sanitizeServerText } from "../../client/engine.js";
 import { action } from "../shared.js";
 
 export function registerCatalogCommands(program: Command, deps: CliDeps): void {
@@ -14,11 +15,14 @@ export function registerCatalogCommands(program: Command, deps: CliDeps): void {
       action(deps, async ({ client, global }) => {
         const version = (await client.version()).trim();
         if (global.output) {
+          // File output keeps the bytes verbatim (a file is not a terminal).
           const data = Buffer.from(version + "\n", "utf8");
           deps.io.writeFile(global.output, data);
           deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
         } else {
-          deps.io.out(version);
+          // The version string is attacker-controlled under a hostile --base-url;
+          // strip control bytes before it reaches the terminal (DDB-01).
+          deps.io.out(sanitizeServerText(version));
         }
       }),
     );

@@ -8,6 +8,7 @@ import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "../io.js";
 import type { ItemOptions, ItemPart } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
+import { sanitizeServerText } from "../../client/engine.js";
 import { action, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
 
 const PARTS: readonly ItemPart[] = [
@@ -73,13 +74,22 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
     );
 }
 
-/** Write a raw text body to --output (with a stderr note) or to stdout. */
+/**
+ * Write a raw text body to --output (with a stderr note) or to stdout.
+ *
+ * The XML/edm/citation body is attacker-controlled (a hostile `--base-url` or a
+ * MITM'd upstream). When it goes to the terminal we strip C0/C1 control bytes
+ * (keeping tab/newline) so it can't drive ANSI/OSC escape sequences into the
+ * user's shell (DDB-01). We do NOT alter the XML structure — only control bytes
+ * are removed. File output via `-o` keeps the bytes verbatim: the file is not a
+ * terminal, and callers piping to `> file.xml` expect the exact upstream bytes.
+ */
 function writeText(deps: CliDeps, output: string | undefined, text: string): void {
   if (output) {
     const data = Buffer.from(text.endsWith("\n") ? text : text + "\n", "utf8");
     deps.io.writeFile(output, data);
     deps.io.err(`Wrote ${data.length} bytes to ${output}`);
   } else {
-    deps.io.out(text.replace(/\n$/, ""));
+    deps.io.out(sanitizeServerText(text).replace(/\n$/, ""));
   }
 }

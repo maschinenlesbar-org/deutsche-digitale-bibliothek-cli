@@ -9,21 +9,26 @@ import * as fx from "./fixtures.js";
 
 const ID = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
 
+// Control chars via char codes so no raw control byte appears in this source file.
+const ESC = String.fromCharCode(0x1b);
+const BEL = String.fromCharCode(0x07);
+
 function makeCli(responder: (req: HttpRequest) => HttpResponse, env: Record<string, string | undefined> = {}) {
   const out: string[] = [];
   const err: string[] = [];
+  const files: { path: string; data: Buffer }[] = [];
   const mt = makeMockTransport(responder);
   const deps: CliDeps = {
     io: {
       out: (s) => out.push(s),
       err: (s) => err.push(s),
-      writeFile: () => {},
+      writeFile: (path, data) => files.push({ path, data }),
       outBinary: () => {},
     },
     createClient: (opts) => new DdbClient({ ...opts, transport: mt.transport }),
     env,
   };
-  return { deps, out, err, mt };
+  return { deps, out, err, files, mt };
 }
 
 test("search renders the response and hits the Solr passthrough path", async () => {
@@ -126,6 +131,26 @@ test("item --part edm targets the edm sub-endpoint and prints raw XML", async ()
   assert.equal(cli.out.join("\n"), fx.edmXml);
 });
 
+test("item raw text to the terminal is stripped of control bytes (DDB-01)", async () => {
+  const evil = `<edm>${ESC}]0;pwned${BEL}<title>ok</title></edm>`;
+  const cli = makeCli(() => rawResponse(evil, "application/rdf+xml"));
+  const code = await run(["item", ID, "--part", "edm"], cli.deps);
+  assert.equal(code, 0);
+  // Control bytes gone; XML structure otherwise intact.
+  assert.equal(cli.out.join("\n"), "<edm>]0;pwned<title>ok</title></edm>");
+});
+
+test("item raw text to -o keeps the bytes verbatim (DDB-01)", async () => {
+  const evil = `<edm>${ESC}]0;raw${BEL}</edm>`;
+  const cli = makeCli(() => rawResponse(evil, "application/rdf+xml"));
+  const code = await run(["item", ID, "--part", "edm", "-o", "out.xml"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.out.length, 0);
+  // File output is not a terminal: the exact upstream bytes (incl. ESC/BEL) survive.
+  assert.equal(cli.files.length, 1);
+  assert.equal(cli.files[0]!.data.toString("utf8"), evil + "\n");
+});
+
 test("item --lang is forwarded", async () => {
   const cli = makeCli(() => jsonResponse(fx.itemView));
   await run(["item", ID, "--lang", "en"], cli.deps);
@@ -153,6 +178,13 @@ test("version prints the plain-text backend version", async () => {
   assert.equal(code, 0);
   assert.equal(new URL(cli.mt.last().url).pathname, "/2/version");
   assert.equal(cli.out.join("\n"), "7.5");
+});
+
+test("version to the terminal is stripped of control bytes (DDB-01)", async () => {
+  const cli = makeCli(() => rawResponse(`7.5${ESC}]0;pwned${BEL}\n`, "text/plain"));
+  const code = await run(["version"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.out.join("\n"), "7.5]0;pwned");
 });
 
 test("a 404 exits 4", async () => {

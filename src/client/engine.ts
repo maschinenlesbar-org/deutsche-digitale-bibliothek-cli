@@ -46,6 +46,27 @@ export interface EngineOptions {
 
 const DEFAULT_MAX_RESPONSE_BYTES = 100 * 1024 * 1024;
 
+/**
+ * Strip C0/C1 control characters (except tab and newline) from a string that
+ * originated in an attacker-controlled response body. A JSON error body can encode
+ * an ESC as the six-character escape backslash-u-001b, which `JSON.parse` decodes
+ * into a real control byte; without this a hostile or MITM'd endpoint could drive
+ * ANSI/OSC escape sequences into the user's terminal when the error `detail` is
+ * printed to stderr. It is also reused by the CLI to clean the raw item/version
+ * passthrough before it reaches a terminal. The JSON success path is already safe
+ * (`JSON.stringify` re-escapes these), so only raw-text paths need it. Written with
+ * a char-code check so no control byte ever appears literally in this source.
+ */
+export function sanitizeServerText(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const n = ch.codePointAt(0) ?? 0;
+    if (n <= 8 || (n >= 0x0b && n <= 0x1f) || (n >= 0x7f && n <= 0x9f)) continue;
+    out += ch;
+  }
+  return out;
+}
+
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -212,6 +233,10 @@ export class RequestEngine {
     } catch {
       // Non-JSON error body (e.g. an item XML component's error page); leave undefined.
     }
+    // `detail` came from the attacker-controlled response body; strip control
+    // characters so a hostile/MITM'd endpoint can't smuggle terminal escape
+    // sequences into stderr when this message is printed (DDB-01).
+    if (detail !== undefined) detail = sanitizeServerText(detail);
     return new DdbApiError({ status, url, method, body: text, detail, apiName });
   }
 }
