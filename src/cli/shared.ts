@@ -142,7 +142,12 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
-    const client = deps.createClient(toEngineOptions(global));
+    // Route engine warnings (e.g. an https->http redirect downgrade) to stderr so
+    // stdout stays clean for piping.
+    const client = deps.createClient({
+      ...toEngineOptions(global),
+      warn: (message) => deps.io.err(message),
+    });
     await fn({ client, global, opts: command.opts() }, positionals);
   };
 }

@@ -42,6 +42,12 @@ export interface EngineOptions {
   maxResponseBytes?: number;
   /** Injectable sleep, primarily for deterministic tests. */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Optional diagnostic sink for non-fatal warnings (e.g. a followed
+   * `https:`->`http:` redirect downgrade). Defaults to a no-op so the client
+   * stays silent as a library; the CLI wires it to stderr.
+   */
+  warn?: (message: string) => void;
 }
 
 const DEFAULT_MAX_RESPONSE_BYTES = 100 * 1024 * 1024;
@@ -94,6 +100,7 @@ export class RequestEngine {
   private readonly maxRedirects: number;
   private readonly maxResponseBytes: number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly warn: (message: string) => void;
 
   constructor(options: EngineOptions = {}) {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
@@ -106,6 +113,7 @@ export class RequestEngine {
     this.maxRedirects = options.maxRedirects ?? 5;
     this.maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
     this.sleep = options.sleep ?? realSleep;
+    this.warn = options.warn ?? (() => {});
   }
 
   /** Build a fully-qualified URL from a path and optional query parameters. */
@@ -165,6 +173,16 @@ export class RequestEngine {
         // that fetch/curl guard against).
         if (next.origin !== prev.origin) {
           headers = stripCredentialHeaders(headers);
+        }
+        // A same-scheme change from https: to http: is a transport downgrade: the
+        // remaining hops (and the response body) travel in cleartext. Credentials
+        // are already stripped above (the origin differs), but warn so a hostile
+        // host silently steering the client onto http: is visible to the user.
+        if (prev.protocol === "https:" && next.protocol === "http:") {
+          this.warn(
+            `Warning: following an https->http redirect downgrade to ${next.origin} ` +
+              "(subsequent traffic is unencrypted; credentials were stripped).",
+          );
         }
         url = next.toString();
         redirects += 1;

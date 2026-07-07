@@ -161,6 +161,43 @@ test("a cross-origin redirect drops credential headers", async () => {
   assert.equal(followUp.headers?.["Accept"], "application/json");
 });
 
+test("an https->http redirect downgrade warns and strips credentials (DDB-04)", async () => {
+  let calls = 0;
+  const mt = makeMockTransport(() => {
+    calls += 1;
+    return calls === 1 ? redirectResponse("http://api.test/moved") : jsonResponse({ ok: 1 });
+  });
+  const warnings: string[] = [];
+  const e = new RequestEngine({
+    baseUrl: "https://api.test",
+    transport: mt.transport,
+    defaultHeaders: { Authorization: "Bearer SECRET" },
+    warn: (m) => warnings.push(m),
+  });
+  assert.deepEqual(await e.getJson("/x"), { ok: 1 });
+  // Credentials stripped on the downgrade hop...
+  assert.equal(mt.calls[1]?.headers?.["Authorization"], undefined);
+  // ...and a single stderr-bound warning was emitted.
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /https->http redirect downgrade/);
+});
+
+test("a same-scheme https redirect emits no downgrade warning (DDB-04)", async () => {
+  let calls = 0;
+  const mt = makeMockTransport(() => {
+    calls += 1;
+    return calls === 1 ? redirectResponse("https://api.test/moved") : jsonResponse({ ok: 1 });
+  });
+  const warnings: string[] = [];
+  const e = new RequestEngine({
+    baseUrl: "https://api.test",
+    transport: mt.transport,
+    warn: (m) => warnings.push(m),
+  });
+  await e.getJson("/x");
+  assert.equal(warnings.length, 0);
+});
+
 test("a 3xx without a Location surfaces as a DdbApiError", async () => {
   const mt = makeMockTransport(() => ({ status: 302, headers: {}, body: Buffer.alloc(0) }));
   const e = new RequestEngine({ transport: mt.transport });

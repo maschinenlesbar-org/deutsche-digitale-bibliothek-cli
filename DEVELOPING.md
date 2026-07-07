@@ -198,8 +198,11 @@ automatically with backoff, up to `--max-retries`. `DdbApiError` exposes
 `isRetryable` (true for `429`/`503`).
 
 **Cross-origin credential stripping.** When the API issues a redirect that
-crosses an origin boundary, the engine strips credential headers
-(`Authorization`, `X-API-Key`, `Cookie`) before following it.
+crosses an origin boundary (scheme, host **or** port), the engine strips credential
+headers (`Authorization`, `X-API-Key`, `Cookie`) before following it — this
+includes a same-host `https:`->`http:` downgrade. A followed `https:`->`http:`
+downgrade additionally emits a one-line warning through the `warn` hook (wired to
+stderr by the CLI), because the remaining hops travel in cleartext.
 
 **maxResponseBytes.** A cap on the response body size in bytes (`0` = unlimited;
 default 100 MiB), guarding against unbounded responses.
