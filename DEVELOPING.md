@@ -204,6 +204,13 @@ crosses an origin boundary, the engine strips credential headers
 **maxResponseBytes.** A cap on the response body size in bytes (`0` = unlimited;
 default 100 MiB), guarding against unbounded responses.
 
+**Timeout (`--timeout`).** Enforced two ways so a hostile/slow server cannot hang
+the CLI: an idle-socket timeout (no bytes for `timeoutMs`) **and** a total
+wall-clock deadline for the whole exchange. Without the latter a server that
+drips one byte per interval — below both the idle timeout and `maxResponseBytes` —
+could keep the request alive indefinitely. A breach of either surfaces as a
+`DdbNetworkError`.
+
 **Query builder.** [`buildQueryString`](src/client/query.ts) — a dependency-free
 serialiser: omits `undefined`/`null`, repeats keys for arrays, renders booleans
 as `true`/`false`, and encodes spaces as `%20` (not `+`).

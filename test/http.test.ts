@@ -53,3 +53,27 @@ test("enforces maxResponseBytes", async () => {
     },
   );
 });
+
+test("a slow drip that never idles still hits the wall-clock deadline (DDB-03)", async () => {
+  // The server writes one byte every 15ms and never ends. Each write resets the
+  // idle-socket timeout, so only the total deadline can stop this — proving the
+  // deadline is a wall-clock limit, not just an idle-socket timeout.
+  const timers: NodeJS.Timeout[] = [];
+  await withServer(
+    (_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      const drip = (): void => {
+        res.write("x");
+        timers.push(setTimeout(drip, 15));
+      };
+      drip();
+    },
+    async (baseUrl) => {
+      await assert.rejects(
+        () => nodeHttpTransport({ method: "GET", url: baseUrl, timeoutMs: 60 }),
+        (err) => err instanceof DdbNetworkError && /deadline/.test(err.message),
+      );
+    },
+  );
+  for (const t of timers) clearTimeout(t);
+});

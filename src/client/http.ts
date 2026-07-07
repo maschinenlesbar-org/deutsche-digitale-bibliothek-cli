@@ -58,6 +58,18 @@ export const nodeHttpTransport: Transport = (request) =>
     const driver = isHttps ? https : http;
     const maxBytes = request.maxResponseBytes;
 
+    // Wall-clock deadline for the *whole* exchange. `req.setTimeout` below only
+    // fires on an idle socket, so a server that drips one byte per interval could
+    // otherwise keep the request alive forever despite --timeout. This total timer
+    // destroys the request once `timeoutMs` has elapsed regardless of activity.
+    let deadline: NodeJS.Timeout | undefined;
+    const clearDeadline = (): void => {
+      if (deadline !== undefined) {
+        clearTimeout(deadline);
+        deadline = undefined;
+      }
+    };
+
     const req = driver.request(
       url,
       {
@@ -74,6 +86,7 @@ export const nodeHttpTransport: Transport = (request) =>
           received += chunk.length;
           if (maxBytes !== undefined && received > maxBytes) {
             aborted = true;
+            clearDeadline();
             res.destroy();
             reject(new DdbNetworkError(`Response exceeded maxResponseBytes (${maxBytes})`));
             return;
@@ -82,6 +95,7 @@ export const nodeHttpTransport: Transport = (request) =>
         });
         res.on("end", () => {
           if (aborted) return;
+          clearDeadline();
           resolve({
             status: res.statusCode ?? 0,
             headers: res.headers,
@@ -90,18 +104,28 @@ export const nodeHttpTransport: Transport = (request) =>
         });
         res.on("error", (err) => {
           if (aborted) return; // we already rejected with the size-cap error
+          clearDeadline();
           reject(new DdbNetworkError(`Response stream error: ${err.message}`, { cause: err }));
         });
       },
     );
 
     if (request.timeoutMs && request.timeoutMs > 0) {
+      // Idle-socket timeout (no bytes for timeoutMs).
       req.setTimeout(request.timeoutMs, () => {
         req.destroy(new DdbNetworkError(`Request timed out after ${request.timeoutMs}ms`));
       });
+      // Total wall-clock deadline (bytes may keep trickling but the whole exchange
+      // must finish within timeoutMs). `unref` so a pending timer never keeps the
+      // process alive on its own.
+      deadline = setTimeout(() => {
+        req.destroy(new DdbNetworkError(`Request exceeded the ${request.timeoutMs}ms deadline`));
+      }, request.timeoutMs);
+      deadline.unref?.();
     }
 
     req.on("error", (err) => {
+      clearDeadline();
       // A timeout destroy already passes a DdbNetworkError; don't double-wrap.
       reject(err instanceof DdbNetworkError ? err : new DdbNetworkError(err.message, { cause: err }));
     });
