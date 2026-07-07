@@ -66,7 +66,7 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
         const result = await client.item(trimmed, part, itemOpts);
         if (result.text !== undefined) {
           // XML / BIB file component: emit the raw body verbatim (no JSON quoting).
-          writeText(deps, global.output, result.text);
+          writeText(deps, global.output, result.text, global.force);
         } else {
           renderJson(deps, global, result.json);
         }
@@ -84,10 +84,15 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
  * are removed. File output via `-o` keeps the bytes verbatim: the file is not a
  * terminal, and callers piping to `> file.xml` expect the exact upstream bytes.
  */
-function writeText(deps: CliDeps, output: string | undefined, text: string): void {
+function writeText(
+  deps: CliDeps,
+  output: string | undefined,
+  text: string,
+  force: boolean | undefined,
+): void {
   if (output) {
     const data = Buffer.from(text.endsWith("\n") ? text : text + "\n", "utf8");
-    deps.io.writeFile(output, data);
+    deps.io.writeFile(output, data, force);
     deps.io.err(`Wrote ${data.length} bytes to ${output}`);
   } else {
     deps.io.out(sanitizeServerText(text).replace(/\n$/, ""));

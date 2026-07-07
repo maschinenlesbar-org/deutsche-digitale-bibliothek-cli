@@ -17,7 +17,7 @@ export function registerCatalogCommands(program: Command, deps: CliDeps): void {
         if (global.output) {
           // File output keeps the bytes verbatim (a file is not a terminal).
           const data = Buffer.from(version + "\n", "utf8");
-          deps.io.writeFile(global.output, data);
+          deps.io.writeFile(global.output, data, global.force);
           deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
         } else {
           // The version string is attacker-controlled under a hostile --base-url;

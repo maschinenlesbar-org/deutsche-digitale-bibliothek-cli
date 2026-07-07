@@ -16,13 +16,13 @@ const BEL = String.fromCharCode(0x07);
 function makeCli(responder: (req: HttpRequest) => HttpResponse, env: Record<string, string | undefined> = {}) {
   const out: string[] = [];
   const err: string[] = [];
-  const files: { path: string; data: Buffer }[] = [];
+  const files: { path: string; data: Buffer; force?: boolean }[] = [];
   const mt = makeMockTransport(responder);
   const deps: CliDeps = {
     io: {
       out: (s) => out.push(s),
       err: (s) => err.push(s),
-      writeFile: (path, data) => files.push({ path, data }),
+      writeFile: (path, data, force) => files.push({ path, data, force }),
       outBinary: () => {},
     },
     createClient: (opts) => new DdbClient({ ...opts, transport: mt.transport }),
@@ -149,6 +149,17 @@ test("item raw text to -o keeps the bytes verbatim (DDB-01)", async () => {
   // File output is not a terminal: the exact upstream bytes (incl. ESC/BEL) survive.
   assert.equal(cli.files.length, 1);
   assert.equal(cli.files[0]!.data.toString("utf8"), evil + "\n");
+});
+
+test("-o does not pass force by default; --force threads through (DDB-02)", async () => {
+  const cli = makeCli(() => jsonResponse(fx.itemView));
+  await run(["item", ID, "-o", "out.json"], cli.deps);
+  assert.equal(cli.files.length, 1);
+  assert.equal(cli.files[0]!.force, undefined);
+
+  const cli2 = makeCli(() => jsonResponse(fx.itemView));
+  await run(["item", ID, "-o", "out.json", "--force"], cli2.deps);
+  assert.equal(cli2.files[0]!.force, true);
 });
 
 test("item --lang is forwarded", async () => {

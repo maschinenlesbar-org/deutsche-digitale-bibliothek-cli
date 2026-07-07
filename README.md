@@ -185,7 +185,8 @@ These may be given **before or after** the command, e.g.
 | `-V, --version` | Print the CLI version number |
 | `-h, --help` | Show help for the program or a command |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
-| `-o, --output <file>` | Write output to this file instead of stdout |
+| `-o, --output <file>` | Write output to this file instead of stdout (refuses to overwrite an existing file unless `--force`) |
+| `--force` | Overwrite the `--output` file if it already exists |
 | `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`) |
 | `--timeout <ms>` | Per-request timeout (default `30000`) |
 | `--user-agent <ua>` | `User-Agent` header value |
