@@ -4,6 +4,8 @@
 [![Release](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/actions/workflows/release.yml/badge.svg)](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/@maschinenlesbar.org/deutsche-digitale-bibliothek-cli)](https://www.npmjs.com/package/@maschinenlesbar.org/deutsche-digitale-bibliothek-cli)
 
+**Website:** [English](https://maschinenlesbar-org.github.io/deutsche-digitale-bibliothek-cli/) · [Deutsch](https://maschinenlesbar-org.github.io/deutsche-digitale-bibliothek-cli/de/) — command reference, guides and API docs
+
 Search Germany's **digitised cultural heritage** from your terminal. `ddb` is a
 command-line tool over the **v2**
 [Deutsche Digitale Bibliothek API](https://api.deutsche-digitale-bibliothek.de/2):

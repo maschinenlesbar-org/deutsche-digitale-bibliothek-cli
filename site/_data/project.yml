@@ -1,0 +1,16 @@
+# The only repo-specific texts of the website. Everything else comes from the
+# repository: the English intro from README.md, the commands from the built CLI.
+
+# How the API is accessed: open | key (env: VAR) | account (token, user, password: VARs)
+access:
+  type: open
+
+de:
+  # German version of the README's intro paragraph. Keep it in step with README.md.
+  intro: >-
+    Das **digitalisierte Kulturerbe** Deutschlands direkt im Terminal durchsuchen. `ddb` ist
+    ein Kommandozeilen-Tool für die **v2**-[API der Deutschen Digitalen
+    Bibliothek](https://api.deutsche-digitale-bibliothek.de/2): Dutzende Millionen Objekte aus
+    deutschen Archiven, Bibliotheken, Museen und Forschungseinrichtungen – durchsuchbar,
+    facettiert und als sauberes JSON, das Sie direkt an [`jq`](https://jqlang.github.io/jq/)
+    weitergeben können.
