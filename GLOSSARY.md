@@ -44,7 +44,7 @@ objects. `ddb search` caps results at `--rows 10` by default.
 **rows / start.** `--rows` is the page size (Solr `rows`); `--offset` is how many
 leading documents to skip (Solr `start`). Together they page a result set.
 
-**Response shape.** A Solr response has three parts you care about:
+**Response shape.** A Solr response has four parts you care about:
 
 | Path | What it is |
 |---|---|
@@ -61,22 +61,31 @@ fields — commonly `label` / `title` (display text), `type` (media-type codes),
 **Facet.** A field the index can group and count by — object type, place,
 provider, language, sector, time. `--facet <field>` asks Solr to *return value
 counts* for that field, in `facet_counts.facet_fields.<field>` as a **flat array**
-`[value, count, value, count, …]`.
+`[value, count, value, count, …]`. The array can include values with count `0`, and
+values are delivered as the institutions wrote them (`place_fct` has `München` next to
+`München, Oktoberfest`).
 
 **`*_fct` fields.** The DDB's facet field names end in `_fct`. The common ones:
 
 | Field | Facets by | Value form |
 |---|---|---|
-| `type_fct` | media type | codes like `mediatype_002` |
+| `type_fct` | media type | codes like `mediatype_002` (see below) |
 | `objecttype_fct` | object type | words (Druckgraphik, …) |
 | `place_fct` | place | place names |
 | `provider_fct` | contributing institution | provider names |
 | `sector_fct` | cultural sector | `sec_01`..`sec_07` |
 | `language_fct` | language | language codes |
 | `keywords_fct` | subject keywords | words |
-| `time_fct` / `begin_time` / `end_time` | time period | years |
-| `state_fct` | German federal state | state names |
+| `begin_time` / `end_time` | time period | day numbers, not years: `660725` = 1 Jan 1810 (Python `date.toordinal()` + 1) |
 | `mimetype_fct` | media MIME type | MIME types |
+
+There is no `time_fct` and no federal-state facet: `time_fct` and `state_fct` are
+undefined fields, and using one fails with HTTP 500 (exit 1).
+
+The `type_fct` codes, as labelled by the objects' `item.media` value (sampled
+2026-09-15): `mediatype_001` audio, `mediatype_002` image, `mediatype_003` text,
+`mediatype_005` video, `mediatype_007` unknown (no digitised media, metadata only),
+`mediatype_010` 3D.
 
 **`--facet` vs. `--filter`.** `--facet type_fct` asks Solr to *return counts* for
 that field (so you can see what to narrow to). `--filter` takes a raw Solr
@@ -104,7 +113,7 @@ object. Most are JSON; a few are served as XML or a plain file and are printed
 | `aip` | the Archive Information Package (the full record) | JSON |
 | `edm` | the **Europeana Data Model** record — the standardised, interoperable profile the DDB shares with [Europeana](https://www.europeana.eu) | RDF/**XML** |
 | `binaries` | related binary files (thumbnails, media) with their URLs | JSON |
-| `children` / `parents` | items one level down / up in a hierarchy (finding aids, multi-part works) | JSON |
+| `children` / `parents` | the direct children one level down / the whole chain up, starting with the object itself and ending with its institution (finding aids, multi-part works) | JSON |
 | `source` | the ingest source metadata | JSON |
 | `source-description` | a description of the source record | JSON |
 | `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML, …) | **XML** |
@@ -113,7 +122,8 @@ object. Most are JSON; a few are served as XML or a plain file and are printed
 
 > `--part children` also accepts `--rows` / `--offset` for paging a large child
 > set. `--lang <code>` sets the preferred label language for
-> `view`/`aip`/`edm`/`binaries`/`source`/`source-description`.
+> `view`/`aip`/`edm`/`binaries`/`source`/`source-description`; an object without a
+> record in that language answers `404` (seen for `--lang en`).
 
 ## Auth & rights
 
@@ -131,7 +141,9 @@ rights notices an institution may attach to a **digital object's media** (image,
 audio, video) — CC0, CC BY, CC BY-SA, Public Domain Mark, various *In Copyright*
 / *Rights Reserved* statements. Object media (not downloaded by this CLI) can
 therefore be more restricted than the CC0 metadata — always check the individual
-object's rights before reusing its media. See [DATA_LICENSE.md](DATA_LICENSE.md).
+object's rights before reusing its media: in `view` the media licence URI is
+`item.license.resource` (`item.rights` is often empty), in `binaries` it is each
+file's `kind`. See [DATA_LICENSE.md](DATA_LICENSE.md).
 
 ## CLI / technical
 

@@ -44,7 +44,7 @@ Objekte zu durchstöbern. `ddb search` begrenzt die Treffer standardmäßig auf 
 Dokumente am Anfang übersprungen werden (Solr `start`). Zusammen blättern sie durch eine
 Ergebnismenge.
 
-**Antwortstruktur.** Eine Solr-Antwort hat drei Teile, die für Sie relevant sind:
+**Antwortstruktur.** Eine Solr-Antwort hat vier Teile, die für Sie relevant sind:
 
 | Pfad | Bedeutung |
 |---|---|
@@ -61,22 +61,31 @@ Felder unterscheiden sich je nach Objekt; wählen Sie mit `jq` aus, was Sie brau
 **Facette.** Ein Feld, nach dem der Index gruppieren und zählen kann – Objekttyp, Ort,
 Einrichtung, Sprache, Sparte, Zeit. `--facet <field>` weist Solr an, für dieses Feld *die Anzahl
 je Wert zurückzugeben*, und zwar in `facet_counts.facet_fields.<field>` als **flaches Array**
-`[value, count, value, count, …]`.
+`[value, count, value, count, …]`. Das Array kann Werte mit der Anzahl `0` enthalten, und die
+Werte kommen so, wie die Einrichtungen sie erfasst haben (`place_fct` enthält `München` neben
+`München, Oktoberfest`).
 
 **`*_fct`-Felder.** Die Namen der Facettenfelder der DDB enden auf `_fct`. Die gebräuchlichsten:
 
 | Feld | Facettiert nach | Wertform |
 |---|---|---|
-| `type_fct` | Medientyp | Codes wie `mediatype_002` |
+| `type_fct` | Medientyp | Codes wie `mediatype_002` (siehe unten) |
 | `objecttype_fct` | Objekttyp | Wörter (Druckgraphik, …) |
 | `place_fct` | Ort | Ortsnamen |
 | `provider_fct` | liefernde Einrichtung | Namen der Einrichtungen |
 | `sector_fct` | Sparte | `sec_01`..`sec_07` |
 | `language_fct` | Sprache | Sprachcodes |
 | `keywords_fct` | Schlagwörter | Wörter |
-| `time_fct` / `begin_time` / `end_time` | Zeitraum | Jahre |
-| `state_fct` | Bundesland | Namen der Bundesländer |
+| `begin_time` / `end_time` | Zeitraum | Tagesnummern, keine Jahre: `660725` = 1. Januar 1810 (Python `date.toordinal()` + 1) |
 | `mimetype_fct` | MIME-Typ der Medien | MIME-Typen |
+
+Es gibt kein `time_fct` und keine Facette für Bundesländer: `time_fct` und `state_fct` sind
+undefinierte Felder, ihre Verwendung scheitert mit HTTP 500 (Exit-Code 1).
+
+Die `type_fct`-Codes, benannt nach dem Wert `item.media` der Objekte (Stichprobe vom
+15.09.2026): `mediatype_001` Audio, `mediatype_002` Bild, `mediatype_003` Text,
+`mediatype_005` Video, `mediatype_007` unbekannt (kein Digitalisat, nur Metadaten),
+`mediatype_010` 3D.
 
 **`--facet` vs. `--filter`.** `--facet type_fct` weist Solr an, für dieses Feld *Anzahlen
 zurückzugeben* (damit Sie sehen, worauf Sie eingrenzen können). `--filter` nimmt eine rohe
@@ -104,7 +113,7 @@ ausgegeben (damit sie bei `> file.xml` und in Pipes unverändert bleiben):
 | `aip` | das Archive Information Package (der vollständige Datensatz) | JSON |
 | `edm` | der Datensatz im **Europeana Data Model** – dem standardisierten, interoperablen Profil, das die DDB mit [Europeana](https://www.europeana.eu) teilt | RDF/**XML** |
 | `binaries` | zugehörige Binärdateien (Vorschaubilder, Medien) mit ihren URLs | JSON |
-| `children` / `parents` | Items eine Ebene tiefer / höher in einer Hierarchie (Findmittel, mehrteilige Werke) | JSON |
+| `children` / `parents` | die direkten Kind-Objekte eine Ebene tiefer / die ganze Kette nach oben, beginnend mit dem Objekt selbst und endend mit seiner Einrichtung (Findmittel, mehrteilige Werke) | JSON |
 | `source` | die Metadaten der Ingest-Quelle | JSON |
 | `source-description` | eine Beschreibung des Quelldatensatzes | JSON |
 | `source-record` | der rohe Datensatz der liefernden Einrichtung (METS/MODS, LIDO, MARCXML, …) | **XML** |
@@ -113,7 +122,8 @@ ausgegeben (damit sie bei `> file.xml` und in Pipes unverändert bleiben):
 
 > `--part children` akzeptiert zusätzlich `--rows` / `--offset`, um durch eine große Menge von
 > Kind-Objekten zu blättern. `--lang <code>` legt die bevorzugte Sprache der Bezeichnungen für
-> `view`/`aip`/`edm`/`binaries`/`source`/`source-description` fest.
+> `view`/`aip`/`edm`/`binaries`/`source`/`source-description` fest; hat ein Objekt keinen
+> Datensatz in dieser Sprache, antwortet die API mit `404` (beobachtet bei `--lang en`).
 
 ## Authentifizierung & Rechte
 
@@ -131,7 +141,9 @@ die eine Einrichtung den **Medien eines digitalen Objekts** (Bild, Audio, Video)
 CC0, CC BY, CC BY-SA, Public Domain Mark, verschiedene Hinweise wie *In Copyright* /
 *Rights Reserved*. Die Medien eines Objekts (die diese CLI nicht herunterlädt) können daher
 strenger lizenziert sein als die CC0-Metadaten – prüfen Sie immer die Rechte des einzelnen
-Objekts, bevor Sie seine Medien nachnutzen. Siehe [DATA_LICENSE.md](DATA_LICENSE.md).
+Objekts, bevor Sie seine Medien nachnutzen: In `view` steht die Lizenz-URI der Medien in
+`item.license.resource` (`item.rights` ist oft leer), in `binaries` im Feld `kind` jeder Datei.
+Siehe [DATA_LICENSE.md](DATA_LICENSE.md).
 
 ## CLI / Technik
 
