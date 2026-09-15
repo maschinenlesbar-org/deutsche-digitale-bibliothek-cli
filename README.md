@@ -190,7 +190,7 @@ These may be given **before or after** the command, e.g.
 | `-o, --output <file>` | Write output to this file instead of stdout (refuses to overwrite an existing file unless `--force`) |
 | `--force` | Overwrite the `--output` file if it already exists |
 | `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`) |
-| `--timeout <ms>` | Per-request timeout (default `30000`) |
+| `--timeout <ms>` | Per-request timeout (default `30000`; at most `2147483647`) |
 | `--user-agent <ua>` | `User-Agent` header value |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses (0..10, default `2`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |

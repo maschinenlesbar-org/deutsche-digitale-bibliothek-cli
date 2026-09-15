@@ -32,6 +32,12 @@ export interface HttpResponse {
 export type Transport = (request: HttpRequest) => Promise<HttpResponse>;
 
 /**
+ * The longest delay Node's timers support (2^31 - 1 ms, about 24.8 days). A longer one
+ * prints a TimeoutOverflowWarning and fires after 1 ms, so timeouts are capped here.
+ */
+export const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
  * Default transport. Resolves with the raw response (including non-2xx) — status
  * interpretation is the client's job. Rejects only on transport-level failures
  * (connection errors, timeouts, malformed URLs).
@@ -111,8 +117,9 @@ export const nodeHttpTransport: Transport = (request) =>
     );
 
     if (request.timeoutMs && request.timeoutMs > 0) {
+      const delay = Math.min(request.timeoutMs, MAX_TIMEOUT_MS);
       // Idle-socket timeout (no bytes for timeoutMs).
-      req.setTimeout(request.timeoutMs, () => {
+      req.setTimeout(delay, () => {
         req.destroy(new DdbNetworkError(`Request timed out after ${request.timeoutMs}ms`));
       });
       // Total wall-clock deadline (bytes may keep trickling but the whole exchange
@@ -120,7 +127,7 @@ export const nodeHttpTransport: Transport = (request) =>
       // process alive on its own.
       deadline = setTimeout(() => {
         req.destroy(new DdbNetworkError(`Request exceeded the ${request.timeoutMs}ms deadline`));
-      }, request.timeoutMs);
+      }, delay);
       deadline.unref?.();
     }
 

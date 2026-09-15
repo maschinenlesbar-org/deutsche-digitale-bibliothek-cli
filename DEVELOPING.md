@@ -212,7 +212,9 @@ the CLI: an idle-socket timeout (no bytes for `timeoutMs`) **and** a total
 wall-clock deadline for the whole exchange. Without the latter a server that
 drips one byte per interval — below both the idle timeout and `maxResponseBytes` —
 could keep the request alive indefinitely. A breach of either surfaces as a
-`DdbNetworkError`.
+`DdbNetworkError`. Both timers are capped at `MAX_TIMEOUT_MS` (2^31 - 1 ms, the
+longest delay Node's timers support; a longer one would fire after 1 ms), and the
+CLI rejects a larger `--timeout` as a usage error.
 
 **Query builder.** [`buildQueryString`](src/client/query.ts) — a dependency-free
 serialiser: omits `undefined`/`null`, repeats keys for arrays, renders booleans
