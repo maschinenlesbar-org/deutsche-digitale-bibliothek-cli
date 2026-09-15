@@ -247,6 +247,22 @@ test("an unknown command exits 2", async () => {
   assert.equal(await run(["boguscmd"], cli.deps), 2);
 });
 
+test("DEL and C1 control characters in server data are escaped in the JSON output", async () => {
+  const controls = String.fromCharCode(0x7f, 0x85, 0x9b) + "2J";
+  const served = {
+    response: { numFound: 1, start: 0, docs: [{ id: ID, title: `Faust${controls}`, label: `${ESC}[31m` }] },
+  };
+  for (const format of [[], ["--compact"]]) {
+    const cli = makeCli(() => jsonResponse(served));
+    assert.equal(await run([...format, "search", "Goethe"], cli.deps), 0);
+    const text = cli.out.join("\n");
+    const raw = [...text].filter((c) => c.charCodeAt(0) < 0x20 ? c !== "\n" : c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) <= 0x9f);
+    assert.deepEqual(raw, [], format.join(" "));
+    assert.match(text, /Faust\\u007f\\u0085\\u009b2J/);
+    assert.deepEqual(JSON.parse(text), served);
+  }
+});
+
 test("--compact prints single-line JSON", async () => {
   const cli = makeCli(() => jsonResponse(fx.solrExact));
   await run(["search", "x", "--compact"], cli.deps);
