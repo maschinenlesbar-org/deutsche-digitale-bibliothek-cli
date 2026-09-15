@@ -85,6 +85,19 @@ test("search prints no paging note when the whole result set is returned", async
   assert.equal(cli.err.join("\n"), "");
 });
 
+test("search prints no paging note for a --rows 0 facet-only query", async () => {
+  const facetOnly = {
+    response: { numFound: 1614, start: 0, docs: [] },
+    facet_counts: { facet_fields: { type_fct: ["mediatype_007", 1029, "mediatype_002", 477] } },
+  };
+  const cli = makeCli(() => jsonResponse(facetOnly));
+  const code = await run(["search", "Oktoberfest", "--rows", "0", "--facet", "type_fct"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(queryOf(cli.mt.last()).get("rows"), "0");
+  assert.equal(cli.err.join("\n"), "");
+  assert.equal(JSON.parse(cli.out.join("\n")).response.numFound, 1614);
+});
+
 test("an empty search query is a usage error (exit 2), no request", async () => {
   const cli = makeCli(() => jsonResponse(fx.solr));
   const code = await run(["search", "   "], cli.deps);

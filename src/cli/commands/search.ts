@@ -71,9 +71,10 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
         const result = await client.search(params);
 
         // Nudge toward paging when more documents match than were returned, so a
-        // capped first page isn't mistaken for the whole result set.
+        // capped first page isn't mistaken for the whole result set. `--rows 0`
+        // asks for counts/facets only, so paging advice doesn't apply there.
         const body = result.response;
-        if (body && typeof body.numFound === "number") {
+        if (params.rows !== 0 && body && typeof body.numFound === "number") {
           const shown = (body.start ?? 0) + (Array.isArray(body.docs) ? body.docs.length : 0);
           if (body.numFound > shown) {
             deps.io.err(
