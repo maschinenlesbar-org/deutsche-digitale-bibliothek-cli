@@ -95,23 +95,25 @@ Query strings and `--filter` use **Solr syntax**; pass `'*:*'` to match
 everything. `--filter` restricts the set (repeat to AND; OR inside one fq like
 `'place_fct:("Berlin" OR "Dessau")'`), while `--facet` only *counts* values.
 When more documents match than were returned, `ddb` prints a short paging hint to
-stderr.
+stderr (not for `--rows 0`, which asks for counts and facets only).
 
 ### Common facet fields
 
 | Facet | Narrows by |
 | --- | --- |
-| `type_fct` | Media type (`mediatype_*` codes) |
+| `type_fct` | Media type (`mediatype_*` codes; see the [Glossary](GLOSSARY.md)) |
 | `objecttype_fct` | Object type (Druckgraphik, …) |
 | `place_fct` | Place |
 | `provider_fct` | Contributing institution |
 | `sector_fct` | Cultural sector (`sec_01`..`sec_07`) |
 | `language_fct` | Language |
 | `keywords_fct` | Subject keywords |
-| `state_fct` | German federal state |
+| `mimetype_fct` | MIME type of the media |
 
 Facet counts come back under `facet_counts.facet_fields.<field>` as a flat
-`[value, count, …]` array.
+`[value, count, …]` array, which can include values with count `0`. There is no
+federal-state or `time_fct` facet (both fail with HTTP 500 "undefined field");
+dates live in `begin_time` / `end_time` as day numbers, not years.
 
 ## Common tasks
 
@@ -122,8 +124,8 @@ use-case-driven set.
 # Paging: documents 21–40 of a search
 ddb search "Weimarer Republik" --rows 20 --offset 20
 
-# Everything from Bavaria, id + label only, as compact JSON
-ddb --compact search '*:*' --filter 'state_fct:"Bayern"' --fields id,label
+# Everything from one institution, id + label only, as compact JSON
+ddb --compact search '*:*' --filter 'provider_fct:"Staatsarchiv München"' --fields id,label
 
 # The Europeana Data Model record for one object (RDF/XML, straight to a file)
 ddb item TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK --part edm -o goethe.edm.xml

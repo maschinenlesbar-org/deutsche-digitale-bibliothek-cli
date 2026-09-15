@@ -84,13 +84,15 @@ ddb search Goethe --rows 0 --facet objecttype_fct --facet-limit 5 \
   | jq '.facet_counts.facet_fields.objecttype_fct'
 ```
 
-Facet counts arrive as a **flat array** `[value, count, value, count, …]`. To turn
-one into `{value, count}` objects:
+Facet counts arrive as a **flat array** `[value, count, value, count, …]`, which
+can include values with count `0`. To turn one into `{value, count}` objects and
+drop the zeros:
 
 ```bash
 ddb search Bauhaus --rows 0 --facet place_fct --facet-limit 10 \
   | jq '.facet_counts.facet_fields.place_fct
-        | [range(0; length; 2) as $i | {value: .[$i], count: .[$i+1]}]'
+        | [range(0; length; 2) as $i | {value: .[$i], count: .[$i+1]}]
+        | map(select(.count > 0))'
 ```
 
 ### Paging
@@ -103,7 +105,8 @@ ddb search Goethe --rows 10 --offset 10
 
 When more documents match than were returned, `ddb` prints a note like
 `Note: 99866 documents match; 10 shown.` to **stderr** — page with `--offset` or
-narrow with `--filter`. Read `response.numFound` for the true total.
+narrow with `--filter`. Read `response.numFound` for the true total. A `--rows 0`
+facet query gets no note.
 
 ## `item` — object detail
 
@@ -122,7 +125,7 @@ and print **raw** (so `> file.xml` and piping keep them intact):
 | `edm` | the Europeana Data Model record | RDF/**XML** |
 | `binaries` | related binary files (thumbnails, media) and their URLs | JSON |
 | `children` | child items (accepts `--rows`/`--offset`) | JSON |
-| `parents` | parent items up the hierarchy | JSON |
+| `parents` | the chain up the hierarchy: the object itself first, the institution last | JSON |
 | `source` | the ingest source metadata | JSON |
 | `source-description` | a description of the source record | JSON |
 | `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML) | **XML** |
@@ -130,7 +133,10 @@ and print **raw** (so `> file.xml` and piping keep them intact):
 | `citation` | a newspaper-issue citation file (only where applicable) | BIB file |
 
 `--lang <code>` sets the preferred label language for
-`view`/`aip`/`edm`/`binaries`/`source`/`source-description`.
+`view`/`aip`/`edm`/`binaries`/`source`/`source-description`. An object without a
+record in that language answers `404` (exit 4); `--lang en` did so for every
+object tried on 2026-09-15, so retry without `--lang` before treating the id as
+wrong.
 
 ```bash
 ID=$(ddb search Goethe --fields id | jq -r '.response.docs[0].id')
