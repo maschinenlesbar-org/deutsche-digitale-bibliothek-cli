@@ -55,18 +55,34 @@ restricts the set with a Solr filter query. Common facets:
 
 | Facet | Narrows by |
 |---|---|
-| `type_fct` | media type (`mediatype_*` codes) |
+| `type_fct` | media type (`mediatype_*` codes, see below) |
 | `objecttype_fct` | object type (Druckgraphik, …) |
 | `place_fct` | place |
 | `provider_fct` | contributing institution |
-| `sector_fct` | cultural sector (`sec_01`..`sec_07`) |
-| `language_fct` | language |
+| `sector_fct` | cultural sector (`sec_01`..`sec_07`, see below) |
+| `language_fct` | language (`ger`, `eng`, …) |
 | `keywords_fct` | subject keywords |
-| `state_fct` | German federal state |
+| `mimetype_fct` | MIME type of the media (`image/jpeg`, …) |
+
+There is **no federal-state facet and no `time_fct`**: `state_fct` and `time_fct` fail
+with exit 1 (`HTTP 500 … undefined field`). For time, filter on `begin_time` /
+`end_time` (see the recipe and Traps).
+
+**Media types** (`type_fct`), labelled by the `item.media` value of sampled objects on
+2026-09-15:
+
+| Code | Media | Code | Media |
+|---|---|---|---|
+| `mediatype_001` | audio | `mediatype_005` | video |
+| `mediatype_002` | image | `mediatype_007` | unknown: no digitised media, metadata only (the largest group) |
+| `mediatype_003` | text | `mediatype_010` | 3D model |
+
+**Sectors** (`sector_fct`): `sec_01` archive, `sec_02` library, `sec_03` monument
+protection, `sec_04` research, `sec_05` media library, `sec_06` museum, `sec_07` other.
 
 For a pure **distribution** ("which places/providers have the most X?"), request
 counts with `--rows 0` so you get facets without documents. Counts come back as a
-**flat array** `[value, count, value, count, …]`.
+**flat array** `[value, count, value, count, …]`, and can include values with count `0`.
 
 ## Recipes
 
@@ -82,10 +98,16 @@ ddb search Goethe --filter type_fct:mediatype_002 --filter 'place_fct:"Berlin"' 
 ddb search "mittelalterliche Handschrift" --rows 0 --facet objecttype_fct --facet-limit 10 \
   | jq '.facet_counts.facet_fields.objecttype_fct'
 
-# Top places as {value,count} pairs
+# Top places as {value,count} pairs, zero counts dropped
 ddb search Bauhaus --rows 0 --facet place_fct --facet-limit 10 \
   | jq '.facet_counts.facet_fields.place_fct
-        | [range(0;length;2) as $i | {value:.[$i], count:.[$i+1]}]'
+        | [range(0;length;2) as $i | {value:.[$i], count:.[$i+1]}]
+        | map(select(.count > 0))'
+
+# Objects whose date range starts in 1900–1909 (begin_time is a day number)
+FROM=$(jq -n '1900 | (. - 1) as $p | 365*$p + ($p/4|floor) - ($p/100|floor) + ($p/400|floor) + 2')
+TO=$(jq -n '1910 | (. - 1) as $p | 365*$p + ($p/4|floor) - ($p/100|floor) + ($p/400|floor) + 1')
+ddb search Oktoberfest --filter "begin_time:[$FROM TO $TO]" --rows 0 | jq '.response.numFound'
 
 # Second page of results (11–20)
 ddb search Weimar --rows 10 --offset 10
@@ -102,10 +124,24 @@ ddb search Weimar --rows 10 --offset 10
   `--filter` to AND constraints; OR inside one fq (`'place_fct:("Berlin" OR "Dessau")'`).
 - **Facet counts are a flat array** `[value, count, …]` under
   `.facet_counts.facet_fields.<field>` — zip pairs in `jq` (see recipe).
+- **Facets include zero counts.** `type_fct` for "Oktoberfest" lists `mediatype_001 0`
+  and `mediatype_010 0`; with `--filter type_fct:mediatype_007 --facet mimetype_fct
+  --facet-limit 4` all four values were `0`. The CLI can't set Solr's `facet.mincount`, so
+  drop zeros (`map(select(.count > 0))`) before building a "top N"; a padded list can be
+  all zeros.
+- **Facet values are raw, not normalised.** `place_fct` for "Oktoberfest" returns
+  `München` next to `München, Oktoberfest`, `München M; Oktoberfest` and
+  `München, Königliche Polizeidirektion`, and mixes places with regions (`Bayern`). For
+  "which places have the most X?", say the values are as delivered, or merge obvious
+  variants of one place and say so.
+- **`begin_time` / `end_time` are day numbers, not years.** The 1810 print
+  `YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ` has `begin_time [660725]` (1 Jan 1810) and
+  `end_time [661089]` (31 Dec 1810); the value is Python's `date.toordinal()` + 1. Convert
+  years first (see recipe); `begin_time:[1900 TO 1909]` returns 0 hits without an error.
 - **`--filter` is a raw Solr `fq`**, e.g. `type_fct:mediatype_002` or
   `place_fct:"Berlin"` — not `facet=value`. Quote values with spaces.
 - **The query is required.** Use `'*:*'` to browse everything (still capped at `--rows`).
 - **A paging note on stderr** (`… documents match; N shown`) is informational, not
-  an error — stdout stays clean JSON.
+  an error — stdout stays clean JSON. It is not printed for `--rows 0`.
 - Fetching one object's detail → the **ddb-item** skill.
 - The API returns **only CC0 metadata**; cite the DDB as the source as a courtesy.
