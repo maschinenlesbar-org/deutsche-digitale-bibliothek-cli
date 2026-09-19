@@ -10,9 +10,13 @@ import type { SearchParams } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
 import { action, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
 
-/** commander accumulator for repeatable string options. */
+/**
+ * commander accumulator for repeatable string options. Each value must be
+ * non-blank: an empty `fq=`/`facet.field=` is never meaningful, so a blank
+ * value (often an unset shell variable) is a usage error, not a silent no-op.
+ */
 function collect(value: string, previous: string[] = []): string[] {
-  return previous.concat([value]);
+  return previous.concat([parseNonEmpty(value)]);
 }
 
 /**

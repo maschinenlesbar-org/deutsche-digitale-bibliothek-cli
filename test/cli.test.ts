@@ -106,6 +106,23 @@ test("an empty search query is a usage error (exit 2), no request", async () => 
   assert.match(cli.err.join("\n"), /query is required/);
 });
 
+for (const [label, argv] of [
+  ["--filter \"\"", ["search", "x", "--filter", ""]],
+  ["--filter whitespace", ["search", "x", "--filter", "   "]],
+  ["--filter blank after a valid one", ["search", "x", "--filter", "type_fct:a", "--filter", ""]],
+  ["--facet \"\"", ["search", "x", "--facet", ""]],
+  ["--facet whitespace", ["search", "x", "--facet", " \t "]],
+  ["--facet blank after a valid one", ["search", "x", "--facet", "type_fct", "--facet", ""]],
+] as const) {
+  test(`a blank ${label} is rejected at parse time (exit 2), no request`, async () => {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const code = await run([...argv], cli.deps);
+    assert.notEqual(code, 0);
+    assert.equal(code, 2);
+    assert.equal(cli.mt.calls.length, 0);
+  });
+}
+
 test("a non-integer --rows is rejected at parse time (exit 2), no request", async () => {
   const cli = makeCli(() => jsonResponse(fx.solr));
   const code = await run(["search", "x", "--rows", "lots"], cli.deps);
