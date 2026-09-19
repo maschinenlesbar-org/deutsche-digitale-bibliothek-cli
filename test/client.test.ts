@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient } from "../src/client/client.js";
+import { DdbNetworkError } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -116,4 +117,16 @@ test("version reads the plain-text /version endpoint", async () => {
   const c = new DdbClient({ transport: mt.transport });
   assert.equal(await c.version(), "7.5\n");
   assert.equal(pathOf(mt.last().url), "/2/version");
+});
+
+test("the client rejects a non-http(s) base URL even with a custom transport", () => {
+  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org"]) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new DdbClient({ baseUrl, transport: mt.transport }),
+      (err) => err instanceof DdbNetworkError,
+      baseUrl,
+    );
+    assert.equal(mt.calls.length, 0);
+  }
 });

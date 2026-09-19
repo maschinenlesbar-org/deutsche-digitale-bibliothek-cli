@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RequestEngine, sanitizeServerText } from "../src/client/engine.js";
-import { DdbApiError, DdbParseError } from "../src/client/errors.js";
+import { DdbApiError, DdbNetworkError, DdbParseError } from "../src/client/errors.js";
 import type { HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
@@ -39,6 +39,18 @@ test("error detail is stripped of terminal control characters (DDB-01)", async (
       return true;
     },
   );
+});
+
+test("a non-http(s) base URL is rejected by the engine before any request", () => {
+  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org", "not a url"]) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new RequestEngine({ baseUrl, transport: mt.transport }),
+      (err) => err instanceof DdbNetworkError,
+      baseUrl,
+    );
+    assert.equal(mt.calls.length, 0);
+  }
 });
 
 test("buildUrl normalises the path and appends the query", () => {
