@@ -10,8 +10,11 @@ description: >
   exist in the DDB?", or wants to filter cultural objects by type, place,
   provider, sector, language or time and get result counts or facet
   distributions. Builds the Solr query, filter queries, facet counts and paging.
-version: 2.0.0
-userInvocable: true
+compatibility: >
+  Requires the `ddb` CLI (npm package
+  @maschinenlesbar.org/deutsche-digitale-bibliothek-cli) on PATH, installed by
+  the user; the skill never installs it. Uses jq for JSON filtering. Network
+  access to api.deutsche-digitale-bibliothek.de.
 ---
 
 # DDB Search
@@ -24,6 +27,8 @@ index, narrows it with filter queries, and reads facet distributions.
 ## Tooling
 
 This skill drives the `ddb` command. **Before anything else, validate it is available** — run `command -v ddb` (or `ddb --version`). If it is not on your PATH, STOP and inform the user that the `ddb` CLI (`@maschinenlesbar.org/deutsche-digitale-bibliothek-cli`) is not installed — installing it is their responsibility; never install it yourself, and do not fall back to `npx` or a local `node dist/...` build.
+
+This skill also filters JSON with `jq`. **Validate it too** — run `command -v jq`. If it is missing, inform the user that `jq` is not installed — installing it is their responsibility; never install it yourself — and carry on without it: filter the CLI output with `node -e` instead (Node is already on your PATH, since the CLI runs on it).
 
 **No API key is required.** The v2 read routes (search, item, version) are public — run the commands directly; there is nothing to register or pass. A `403` is unusual and means a custom `--base-url` hit an authenticated endpoint, not "you need a key" — surface that rather than retrying. Metadata returned by the CLI is CC0 (no attribution required); object *media* carry per-object rights — see DATA_LICENSE.md.
 
