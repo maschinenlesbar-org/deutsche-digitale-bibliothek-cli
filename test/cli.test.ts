@@ -144,6 +144,29 @@ test("a Solr 400 error surfaces its msg and exits 1", async () => {
   assert.match(cli.err.join("\n"), /undefined field bogus_fct/);
 });
 
+test("a DDB-wrapped Solr error (HTTP 500, Solr JSON as a string) prints only error.msg", async () => {
+  // The live shape: the Solr error document, pretty-printed, as the envelope's message.
+  const solrDoc =
+    '{\n  "responseHeader":{\n    "zkConnected":true,\n    "status":400,\n    "QTime":1},\n' +
+    '  "error":{\n    "metadata":["error-class","org.apache.solr.common.SolrException"],\n' +
+    '    "msg":"undefined field: \\"time_fct\\"",\n    "code":400}}\n';
+  const cli = makeCli(() => jsonResponse({ message: solrDoc }, 500));
+  const code = await run(["search", "Goethe", "--rows", "0", "--facet", "time_fct"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.err.length, 1);
+  assert.match(cli.err[0]!, /^Error: HTTP 500 for GET \S+: undefined field: "time_fct"$/);
+});
+
+test("an oversized or multi-line error message is folded to one line and capped", async () => {
+  const cli = makeCli(() => jsonResponse({ message: `line one\nline two\n${"x".repeat(200_000)}` }, 500));
+  const code = await run(["search", "x"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.err.length, 1);
+  assert.ok(!cli.err[0]!.includes("\n"));
+  assert.match(cli.err[0]!, /: line one line two x+…$/);
+  assert.ok(cli.err[0]!.length < 1000, `stderr line is ${cli.err[0]!.length} chars`);
+});
+
 test("item defaults to the view component", async () => {
   const cli = makeCli(() => jsonResponse(fx.itemView));
   const code = await run(["item", ID], cli.deps);

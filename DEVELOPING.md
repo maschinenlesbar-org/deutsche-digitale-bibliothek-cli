@@ -191,7 +191,10 @@ exactly one of `json`/`text` is set, chosen by Content-Type.
 **Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs (base URL
 includes the `/2` version prefix), serialises queries, applies retry/backoff,
 follows redirects, decodes JSON/raw responses and maps errors (DDB envelope **and**
-Solr `error.msg`).
+Solr `error.msg`). A failing Solr request comes back as HTTP 500 with the Solr error
+document as a *string* in the envelope's `message`; the engine unwraps it to that
+document's `error.msg`. Every `detail` is stripped of control characters, folded to one
+line and capped at 500 characters (`…`); the full body stays on `DdbApiError.body`.
 
 **Retry / backoff.** Transient `429` and `503` responses are retried
 automatically with backoff, up to `--max-retries`. `DdbApiError` exposes

@@ -94,6 +94,41 @@ function assertHttpScheme(baseUrl: string): void {
   }
 }
 
+/**
+ * Longest error `detail` the engine keeps (in characters). A longer server message is
+ * cut and ends in "…", so a hostile or buggy body cannot flood stderr.
+ */
+const MAX_DETAIL_LENGTH = 500;
+
+/**
+ * The DDB wraps a failing Solr request as HTTP 500 `{"message": "<Solr JSON>"}`: the
+ * Solr error document arrives as a *string*. Return its `error.msg` (the one useful
+ * line, e.g. `undefined field: "time_fct"`) when `message` is such a document.
+ */
+function solrErrorMessage(message: string): string | undefined {
+  if (!message.trimStart().startsWith("{")) return undefined;
+  try {
+    const inner = JSON.parse(message) as { error?: unknown };
+    const error = inner?.error;
+    if (typeof error === "object" && error !== null) {
+      const msg = (error as { msg?: unknown }).msg;
+      if (typeof msg === "string" && msg.trim() !== "") return msg;
+    }
+  } catch {
+    // Not JSON after all: use the message as it is.
+  }
+  return undefined;
+}
+
+/**
+ * Clean an error detail for a one-line stderr message: strip control characters,
+ * fold every whitespace run (newlines included) into one space and cap the length.
+ */
+function cleanDetail(detail: string): string {
+  const clean = sanitizeServerText(detail).replace(/\s+/g, " ").trim();
+  return clean.length > MAX_DETAIL_LENGTH ? `${clean.slice(0, MAX_DETAIL_LENGTH)}…` : clean;
+}
+
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -259,7 +294,9 @@ export class RequestEngine {
         // Solr reports errors as `{ error: { msg, code } }`.
         error?: { msg?: unknown } | unknown;
       };
-      if (parsed && typeof parsed.message === "string") detail = parsed.message;
+      if (parsed && typeof parsed.message === "string") {
+        detail = solrErrorMessage(parsed.message) ?? parsed.message;
+      }
       else if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
       else if (
         parsed &&
@@ -275,8 +312,9 @@ export class RequestEngine {
     }
     // `detail` came from the attacker-controlled response body; strip control
     // characters so a hostile/MITM'd endpoint can't smuggle terminal escape
-    // sequences into stderr when this message is printed (DDB-01).
-    if (detail !== undefined) detail = sanitizeServerText(detail);
+    // sequences into stderr when this message is printed (DDB-01), and keep it to
+    // one bounded line.
+    if (detail !== undefined) detail = cleanDetail(detail);
     return new DdbApiError({ status, url, method, body: text, detail, apiName });
   }
 }
