@@ -104,7 +104,8 @@ ddb search Goethe --rows 10 --offset 10
 ```
 
 When more documents match than were returned, `ddb` prints a note like
-`Note: 99866 documents match; 10 shown.` to **stderr** — page with `--offset` or
+`Note: 99866 documents match; 10 shown.` to **stderr** (past the first page with the
+positions, e.g. `10 shown (11–20)`) — page with `--offset` or
 narrow with `--filter`. Read `response.numFound` for the true total. A `--rows 0`
 facet query gets no note.
 

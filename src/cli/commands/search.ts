@@ -81,12 +81,16 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
         // Nudge toward paging when more documents match than were returned, so a
         // capped first page isn't mistaken for the whole result set. `--rows 0`
         // asks for counts/facets only, so paging advice doesn't apply there.
+        // The note counts only this page's documents; past the first page it names
+        // their positions (1-based). A non-integer `start` is ignored (read as 0).
         const body = result.response;
         if (params.rows !== 0 && body && typeof body.numFound === "number") {
-          const shown = (body.start ?? 0) + (Array.isArray(body.docs) ? body.docs.length : 0);
-          if (body.numFound > shown) {
+          const start = Number.isSafeInteger(body.start) && body.start > 0 ? body.start : 0;
+          const shown = Array.isArray(body.docs) ? body.docs.length : 0;
+          if (body.numFound > start + shown) {
+            const range = start > 0 && shown > 0 ? ` (${start + 1}–${start + shown})` : "";
             deps.io.err(
-              `Note: ${body.numFound} documents match; ${shown} shown. ` +
+              `Note: ${body.numFound} documents match; ${shown} shown${range}. ` +
                 "Page with --offset (Solr start), or narrow with --filter.",
             );
           }

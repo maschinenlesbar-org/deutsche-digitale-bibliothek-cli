@@ -79,6 +79,20 @@ test("search prints a paging note to stderr when more match than returned", asyn
   assert.match(cli.err.join("\n"), /99866 documents match; 2 shown/);
 });
 
+test("the paging note counts only this page's documents and names their positions", async () => {
+  const page = { response: { numFound: 99215, start: 20, docs: [{ id: "a" }, { id: "b" }, { id: "c" }] } };
+  const cli = makeCli(() => jsonResponse(page));
+  await run(["search", "Goethe", "--rows", "3", "--offset", "20"], cli.deps);
+  assert.match(cli.err.join("\n"), /^Note: 99215 documents match; 3 shown \(21–23\)\. /);
+});
+
+test("the paging note ignores a non-numeric start", async () => {
+  const odd = { response: { numFound: 10, start: "-5", docs: [{ id: "a" }, { id: "b" }] } };
+  const cli = makeCli(() => jsonResponse(odd));
+  await run(["search", "x"], cli.deps);
+  assert.match(cli.err.join("\n"), /^Note: 10 documents match; 2 shown\. /);
+});
+
 test("search prints no paging note when the whole result set is returned", async () => {
   const cli = makeCli(() => jsonResponse(fx.solrExact));
   await run(["search", "Goethe"], cli.deps);
