@@ -31,7 +31,10 @@ export class DdbError extends Error {
  * The API responded with a non-2xx status code. The DDB reports errors as a JSON
  * envelope `{ name, message, stacktrace }` (e.g. `NotAuthorizedException`,
  * `ItemNotFoundException`); `apiName` holds that `name` and `detail` the human
- * readable `message` when present.
+ * readable `message` when present. For a 3xx that was not followed (not a
+ * followable status, a malformed Location, or past `maxRedirects`), `location`
+ * holds the redirect target (absolute, sanitised, userinfo redacted) and the
+ * message names it.
  */
 export class DdbApiError extends DdbError {
   readonly status: number;
@@ -40,6 +43,7 @@ export class DdbApiError extends DdbError {
   readonly url: string;
   readonly method: string;
   readonly body: string;
+  readonly location: string | undefined;
 
   constructor(args: {
     status: number;
@@ -48,10 +52,20 @@ export class DdbApiError extends DdbError {
     body: string;
     detail?: string;
     apiName?: string;
+    location?: string;
   }) {
     // The URL is shown without userinfo: a credential in --base-url must not leak.
     const url = redactUrl(args.url);
-    const detailPart = args.detail ? `: ${args.detail}` : "";
+    const parts: string[] = [];
+    if (args.detail) parts.push(args.detail);
+    if (args.status >= 300 && args.status < 400) {
+      parts.push(
+        args.location
+          ? `redirect to ${args.location} not followed`
+          : "redirect not followed (no Location header)",
+      );
+    }
+    const detailPart = parts.length > 0 ? `: ${parts.join("; ")}` : "";
     super(`HTTP ${args.status} for ${args.method} ${url}${detailPart}`);
     this.status = args.status;
     this.url = url;
@@ -59,6 +73,7 @@ export class DdbApiError extends DdbError {
     this.body = args.body;
     this.detail = args.detail;
     this.apiName = args.apiName;
+    this.location = args.location;
   }
 
   /** True for statuses the API documents as transient and retry-able. */

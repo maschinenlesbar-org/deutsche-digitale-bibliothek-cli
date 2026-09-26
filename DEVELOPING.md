@@ -209,6 +209,13 @@ or else `retryDelayMs * attempt`. A `Retry-After` above `MAX_RETRY_AFTER_MS` (30
 not retried at all: the error surfaces at once. `DdbApiError` exposes
 `isRetryable` (true for `429`/`503`).
 
+**Redirects.** Only `301`/`302`/`303`/`307`/`308` with a parseable `Location` are
+followed, up to `maxRedirects` (5). Any other 3xx, a missing or malformed
+`Location` and a hop past the limit surface as a `DdbApiError` (exit 1) whose
+`location` field and message name the target: `redirect to <url> not followed`
+(resolved, userinfo redacted, sanitised) or `redirect not followed (no Location
+header)`.
+
 **Cross-origin credential stripping.** When the API issues a redirect that
 crosses an origin boundary (scheme, host **or** port), the engine strips credential
 headers (`Authorization`, `X-API-Key`, `Cookie`) before following it — this

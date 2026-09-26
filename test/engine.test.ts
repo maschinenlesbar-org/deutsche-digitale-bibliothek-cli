@@ -301,8 +301,58 @@ test("a 3xx without a Location surfaces as a DdbApiError", async () => {
   const e = new RequestEngine({ transport: mt.transport });
   await assert.rejects(
     () => e.getJson("/x"),
-    (err) => err instanceof DdbApiError && err.status === 302,
+    (err) =>
+      err instanceof DdbApiError &&
+      err.status === 302 &&
+      err.message === "HTTP 302 for GET https://api.deutsche-digitale-bibliothek.de/2/x: redirect not followed (no Location header)",
   );
+});
+
+test("a malformed Location is a DdbApiError naming it, not a raw TypeError", async () => {
+  const mt = makeMockTransport(() => redirectResponse("http://[::1"));
+  const e = new RequestEngine({ baseUrl: "http://127.0.0.1:18109/2", transport: mt.transport });
+  await assert.rejects(
+    () => e.getJson("/x"),
+    (err) =>
+      err instanceof DdbApiError &&
+      err.location === "http://[::1" &&
+      err.message === "HTTP 302 for GET http://127.0.0.1:18109/2/x: redirect to http://[::1 not followed",
+  );
+  assert.equal(mt.calls.length, 1);
+});
+
+test("a redirect loop stops after maxRedirects and names the target", async () => {
+  const mt = makeMockTransport((req) => redirectResponse(req.url));
+  const e = new RequestEngine({ baseUrl: "http://u:p@127.0.0.1:18109/2", transport: mt.transport });
+  await assert.rejects(
+    () => e.getJson("/x"),
+    (err) =>
+      err instanceof DdbApiError &&
+      err.message === "HTTP 302 for GET http://***@127.0.0.1:18109/2/x: redirect to http://***@127.0.0.1:18109/2/x not followed",
+  );
+  assert.equal(mt.calls.length, 6); // initial + 5 redirects
+});
+
+test("only 301/302/303/307/308 are followed; 300/304/305 surface as errors", async () => {
+  for (const status of [300, 304, 305]) {
+    const mt = makeMockTransport(() => redirectResponse("/elsewhere", status));
+    const e = new RequestEngine({ baseUrl: "https://api.test/2", transport: mt.transport });
+    await assert.rejects(
+      () => e.getJson("/x"),
+      (err) =>
+        err instanceof DdbApiError &&
+        err.status === status &&
+        /: redirect to https:\/\/api\.test\/elsewhere not followed$/.test(err.message),
+      String(status),
+    );
+    assert.equal(mt.calls.length, 1);
+  }
+  for (const status of [301, 302, 303, 307, 308]) {
+    let calls = 0;
+    const mt = makeMockTransport(() => (++calls === 1 ? redirectResponse("/moved", status) : jsonResponse({ ok: 1 })));
+    const e = new RequestEngine({ baseUrl: "https://api.test/2", transport: mt.transport });
+    assert.deepEqual(await e.getJson("/x"), { ok: 1 }, String(status));
+  }
 });
 
 test("redactUrl hides userinfo and leaves other URLs alone", () => {
