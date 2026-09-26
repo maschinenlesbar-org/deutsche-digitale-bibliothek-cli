@@ -81,13 +81,13 @@ fields? The **[Glossary](GLOSSARY.md)** decodes every one.
 
 | Option | Meaning |
 | --- | --- |
-| `--rows <n>` | Number of documents to return (Solr `rows`, default 10) |
-| `--offset <n>` | Offset of the first document (Solr `start`) — for paging |
+| `--rows <n>` | Number of documents to return (Solr `rows`, default 10; at most 2147483647) |
+| `--offset <n>` | Offset of the first document (Solr `start`) — for paging (at most 2147483647) |
 | `--sort <spec>` | Solr sort, e.g. `"score desc"` (relevance) or `"id asc"` |
 | `--fields <list>` | Comma-separated fields to return (Solr `fl`), e.g. `id,label` |
 | `--filter <fq>` | Solr filter query — repeatable, e.g. `type_fct:mediatype_002` |
 | `--facet <field>` | Return value counts for this facet field — repeatable, e.g. `type_fct` |
-| `--facet-limit <n>` | Cap the number of values returned per facet (needs `--facet`) |
+| `--facet-limit <n>` | Cap the number of values returned per facet (needs `--facet`; Solr's default is 100, `-1` = all) |
 | `--collection <name>` | Solr collection (default `search`) |
 | `--handler <name>` | Solr request handler (default `select`) |
 

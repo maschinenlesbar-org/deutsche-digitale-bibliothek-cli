@@ -8,7 +8,7 @@ import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "../io.js";
 import type { SearchParams } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
-import { action, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
+import { action, parseFacetLimit, parseNonEmpty, parseSolrInt, renderJson } from "../shared.js";
 
 /**
  * commander accumulator for repeatable string options. Each value must be
@@ -41,8 +41,8 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
     .command("search")
     .description("Search cultural-heritage objects via the v2 Solr index (returns native Solr JSON)")
     .argument("<query>", "Solr query (q); use '*:*' to match everything")
-    .option("--rows <n>", "number of documents to return (Solr rows)", parseIntArg, 10)
-    .option("--offset <n>", "offset of the first document (Solr start), for paging", parseIntArg)
+    .option("--rows <n>", "number of documents to return (Solr rows)", parseSolrInt, 10)
+    .option("--offset <n>", "offset of the first document (Solr start), for paging", parseSolrInt)
     .option("--sort <spec>", "Solr sort, e.g. \"score desc\" or \"id asc\"", parseNonEmpty)
     .option("--fields <list>", "comma-separated fields to return (Solr fl), e.g. id,title", parseNonEmpty)
     .option(
@@ -51,7 +51,11 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
       collect,
     )
     .option("--facet <field>", "compute counts for this facet field (repeatable), e.g. type_fct", collect)
-    .option("--facet-limit <n>", "cap the number of values returned per facet", parseIntArg)
+    .option(
+      "--facet-limit <n>",
+      "cap the number of values returned per facet (Solr default 100; -1 = all)",
+      parseFacetLimit,
+    )
     .option("--collection <name>", "Solr collection to query", parsePathSegment, "search")
     .option("--handler <name>", "Solr request handler", parsePathSegment, "select")
     .action(

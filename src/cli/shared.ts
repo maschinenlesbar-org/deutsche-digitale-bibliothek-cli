@@ -15,24 +15,41 @@ import { DdbError, DdbUsageError } from "../client/errors.js";
  * literals, signs, padding and decimals.
  */
 export function parseIntArg(value: string): number {
-  if (!/^[0-9]+$/.test(value)) {
-    throw new InvalidArgumentError("Expected a non-negative integer.");
-  }
-  const n = Number(value);
-  if (!Number.isSafeInteger(n)) {
-    throw new InvalidArgumentError("Expected a non-negative integer.");
-  }
-  return n;
+  return parseBoundedInt(0, Number.MAX_SAFE_INTEGER)(value);
 }
 
-/** Build a commander value-parser for an integer constrained to [min, max]. */
+/**
+ * Build a commander value-parser for an integer constrained to [min, max]. A
+ * well-formed number that is too large (even beyond 2^53) says so, rather than
+ * "Expected a non-negative integer".
+ */
 export function parseBoundedInt(min: number, max: number): (value: string) => number {
   return (value: string) => {
-    const n = parseIntArg(value);
+    if (!/^[0-9]+$/.test(value)) {
+      throw new InvalidArgumentError("Expected a non-negative integer.");
+    }
+    const n = Number(value);
+    if (!Number.isSafeInteger(n) || n > max) throw new InvalidArgumentError(`Must be <= ${max}.`);
     if (n < min) throw new InvalidArgumentError(`Must be >= ${min}.`);
-    if (n > max) throw new InvalidArgumentError(`Must be <= ${max}.`);
     return n;
   };
+}
+
+/**
+ * The largest value Solr accepts for an int parameter (`rows`, `start`,
+ * `facet.limit`): Java's Integer.MAX_VALUE. Beyond it Solr fails with HTTP 500.
+ */
+export const SOLR_MAX_INT = 2_147_483_647;
+
+/** commander value-parser for a Solr int parameter: 0..SOLR_MAX_INT. */
+export const parseSolrInt = parseBoundedInt(0, SOLR_MAX_INT);
+
+/**
+ * commander value-parser for --facet-limit: 0..SOLR_MAX_INT, or -1, which Solr
+ * reads as "no limit" (every value of the facet; the default limit is 100).
+ */
+export function parseFacetLimit(value: string): number {
+  return value === "-1" ? -1 : parseSolrInt(value);
 }
 
 /** commander value-parser: a non-empty (after trimming) string. */

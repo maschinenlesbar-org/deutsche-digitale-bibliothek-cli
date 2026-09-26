@@ -464,6 +464,33 @@ test("credentials in --base-url are redacted from error messages", async () => {
   assert.ok(!cli.err.join("\n").includes("s3cret"));
 });
 
+test("--rows / --offset above Solr's int maximum are usage errors, before any request", async () => {
+  for (const args of [["--rows", "2147483648"], ["--offset", "99999999999999999999"]]) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const code = await run(["search", "x", ...args], cli.deps);
+    assert.equal(code, 2, args.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), /Must be <= 2147483647\./);
+  }
+  const ok = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["search", "x", "--rows", "2147483647"], ok.deps), 0);
+});
+
+test("--facet-limit -1 asks Solr for every facet value; other negatives are rejected", async () => {
+  const cli = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["search", "x", "--facet", "type_fct", "--facet-limit", "-1"], cli.deps), 0);
+  assert.equal(queryOf(cli.mt.last()).get("facet.limit"), "-1");
+  const bad = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["search", "x", "--facet", "type_fct", "--facet-limit", "-2"], bad.deps), 2);
+  assert.equal(bad.mt.calls.length, 0);
+});
+
+test("an oversized number says it is too large, not that it is no integer", async () => {
+  const cli = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["--max-response-bytes", "99999999999999999999", "version"], cli.deps), 2);
+  assert.match(cli.err.join("\n"), /Must be <= 9007199254740991\./);
+});
+
 test("--max-retries above the sane maximum is rejected (exit 2)", async () => {
   const cli = makeCli(() => jsonResponse(fx.solr));
   assert.equal(await run(["--max-retries", "1000", "search", "x"], cli.deps), 2);

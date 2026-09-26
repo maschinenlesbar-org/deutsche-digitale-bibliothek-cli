@@ -43,13 +43,13 @@ ddb search 'title:Faust'                  # field-scoped query
 
 | Option | Description |
 |---|---|
-| `--rows <n>` | number of documents (Solr `rows`, default 10) |
-| `--offset <n>` | offset of the first document (Solr `start`, paging) |
+| `--rows <n>` | number of documents (Solr `rows`, default 10; at most 2147483647) |
+| `--offset <n>` | offset of the first document (Solr `start`, paging; at most 2147483647) |
 | `--sort <spec>` | Solr sort, e.g. `"score desc"` or `"id asc"` |
 | `--fields <list>` | fields to return (Solr `fl`), e.g. `id,label,type` |
 | `--filter <fq>` | Solr filter query (repeatable), e.g. `type_fct:mediatype_002` |
 | `--facet <field>` | return counts for this facet field (repeatable) |
-| `--facet-limit <n>` | cap the number of values per facet (needs `--facet`) |
+| `--facet-limit <n>` | cap the number of values per facet (needs `--facet`; Solr's default is 100, `-1` = all) |
 | `--collection <name>` | Solr collection (default `search`) |
 | `--handler <name>` | Solr request handler (default `select`) |
 

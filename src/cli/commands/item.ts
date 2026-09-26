@@ -10,7 +10,7 @@ import type { ItemOptions, ItemPart } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
 import { sanitizeServerText } from "../../client/engine.js";
 import { ITEM_LANG_PARTS } from "../../client/client.js";
-import { action, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
+import { action, parseNonEmpty, parseSolrInt, renderJson } from "../shared.js";
 
 const PARTS: readonly ItemPart[] = [
   "view",
@@ -44,8 +44,8 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
       "view",
     )
     .option("--lang <code>", "preferred language for labels (view/aip/edm/binaries/source*)", parseNonEmpty)
-    .option("--rows <n>", "page size for --part children", parseIntArg)
-    .option("--offset <n>", "offset for --part children", parseIntArg)
+    .option("--rows <n>", "page size for --part children", parseSolrInt)
+    .option("--offset <n>", "offset for --part children", parseSolrInt)
     .action(
       action(deps, async ({ client, global, opts }, [id]) => {
         // DDB item ids are exactly 32 upper-case letters and digits. A wrong id
