@@ -101,6 +101,14 @@ test("--facet-limit without --facet is a usage error, before any request", async
   assert.match(cli.err.join("\n"), /--facet-limit needs --facet/);
 });
 
+test("an empty 200 body from search is a clean parse error (exit 1), not a TypeError", async () => {
+  const cli = makeCli(() => rawResponse("", "application/json"));
+  const code = await run(["search", "x"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.out.length, 0);
+  assert.match(cli.err.join("\n"), /^Error: Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\.$/);
+});
+
 test("search prints no paging note when the whole result set is returned", async () => {
   const cli = makeCli(() => jsonResponse(fx.solrExact));
   await run(["search", "Goethe"], cli.deps);

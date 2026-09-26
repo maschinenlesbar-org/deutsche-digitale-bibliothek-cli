@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient } from "../src/client/client.js";
-import { DdbNetworkError } from "../src/client/errors.js";
+import { DdbNetworkError, DdbParseError } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -128,5 +128,26 @@ test("the client rejects a non-http(s) base URL even with a custom transport", (
       baseUrl,
     );
     assert.equal(mt.calls.length, 0);
+  }
+});
+
+test("search rejects a 2xx body that is not a Solr JSON object", async () => {
+  const cases: [string, string][] = [
+    ["", "a JSON object"],
+    ["null", "a JSON object"],
+    ["[1,2,3]", "a JSON object"],
+    ["42", "a JSON object"],
+    ['{"response":[1]}', "a response object"],
+  ];
+  for (const [body, expected] of cases) {
+    const mt = makeMockTransport(() => rawResponse(body, "application/json"));
+    const c = new DdbClient({ transport: mt.transport });
+    await assert.rejects(
+      () => c.search({ query: "x" }),
+      (err) =>
+        err instanceof DdbParseError &&
+        err.message === `Unexpected response shape from /search/index/search/select: expected ${expected}.`,
+      body,
+    );
   }
 });

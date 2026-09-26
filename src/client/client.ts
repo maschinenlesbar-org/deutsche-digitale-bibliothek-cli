@@ -55,6 +55,15 @@ export const ITEM_LANG_PARTS: readonly ItemPart[] = [
 ];
 const LANG_PARTS = new Set<ItemPart>(ITEM_LANG_PARTS);
 
+/** A non-null, non-array object. */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function shapeError(path: string, expected: string): DdbParseError {
+  return new DdbParseError(`Unexpected response shape from ${path}: expected ${expected}.`);
+}
+
 export class DdbClient {
   private readonly engine: RequestEngine;
 
@@ -65,9 +74,11 @@ export class DdbClient {
   /**
    * Search the DDB object index via the v2 Solr passthrough
    * (`GET /2/search/index/{collection}/{requestHandler}`). Values use Solr
-   * syntax; the response is native Solr JSON. `wt=json` is always forced.
+   * syntax; the response is native Solr JSON. `wt=json` is always forced. A 2xx
+   * body that is not a JSON object (empty, `null`, an array, a scalar) or whose
+   * `response` is not an object raises DdbParseError.
    */
-  search(params: SearchParams): Promise<SolrResponse> {
+  async search(params: SearchParams): Promise<SolrResponse> {
     const collection = params.collection ?? "search";
     const handler = params.requestHandler ?? "select";
     const query: QueryParams = { q: params.query, wt: "json" };
@@ -81,10 +92,13 @@ export class DdbClient {
       query["facet.field"] = params.facetFields;
       if (params.facetLimit !== undefined) query["facet.limit"] = params.facetLimit;
     }
-    return this.engine.getJson<SolrResponse>(
-      `/search/index/${enc(collection)}/${enc(handler)}`,
-      query,
-    );
+    const path = `/search/index/${enc(collection)}/${enc(handler)}`;
+    const body = await this.engine.getJson<unknown>(path, query);
+    if (!isObject(body)) throw shapeError(path, "a JSON object");
+    if (body["response"] !== undefined && !isObject(body["response"])) {
+      throw shapeError(path, "a response object");
+    }
+    return body as SolrResponse;
   }
 
   /**

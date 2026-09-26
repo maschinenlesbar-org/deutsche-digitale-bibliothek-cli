@@ -157,7 +157,10 @@ src/
 
 **Design notes**
 
-- `search()` builds the Solr passthrough path and forces `wt=json`; the CLI's
+- `search()` builds the Solr passthrough path and forces `wt=json`, and checks the
+  top-level shape only: a 2xx body that is not a JSON object (empty, `null`, an
+  array) or whose `response` is not an object raises `DdbParseError`
+  (`Unexpected response shape from <path>: expected …`, exit 1). The CLI's
   `--filter`/`--facet`/`--sort`/`--fields` map straight onto `fq`/`facet.field`/
   `sort`/`fl`.
 - `item()` fetches raw via the engine and **branches on Content-Type**: JSON is
