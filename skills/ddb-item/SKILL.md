@@ -88,8 +88,10 @@ ddb item "$ID"
 
 ## Traps
 
-- **Ids are exactly 32 characters.** A wrong-length id is rejected up front
-  (exit 2). If the user pastes a DDB object URL, take the last path segment.
+- **Ids are exactly 32 upper-case letters and digits.** Any other id is rejected
+  up front (exit 2); ids are case sensitive, so a lower-cased paste gets the
+  upper-case form suggested. If the user pastes a DDB object URL, take the last
+  path segment.
 - **`view` is the friendliest starting point**; reach for `edm` when the user
   wants standardised/interoperable metadata, `binaries` for the media files,
   `iiif` for a viewer manifest.

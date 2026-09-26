@@ -169,8 +169,8 @@ are **global options** that work before or after the command.
   `npx @maschinenlesbar.org/deutsche-digitale-bibliothek-cli …`.
 - **Exit `4` / "not found"** — the id passed to `item` doesn't exist (or that
   component isn't available for it — e.g. `iiif`/`citation` only exist for some
-  objects). Re-fetch the id from a fresh `search`. Ids are exactly 32 characters;
-  a wrong-length id is rejected up front (exit `2`).
+  objects). Re-fetch the id from a fresh `search`. Ids are exactly 32 upper-case
+  letters and digits; any other id is rejected up front (exit `2`).
 - **Empty `docs` array** — the query matched nothing; broaden the keyword or relax
   a `--filter`, and check `response.numFound`.
 - **Unexpected `403`** — the read routes are public, so this usually means a custom

@@ -115,7 +115,8 @@ facet query gets no note.
 ddb item <id> [--part <component>] [--lang <code>]
 ```
 
-`<id>` is the exact **32-character** id from a search result's `id`. `--part`
+`<id>` is the exact **32-character** id from a search result's `id` (upper-case
+letters and digits; anything else is a usage error, exit 2). `--part`
 selects which component to fetch — most are JSON, a few are XML / a plain file
 and print **raw** (so `> file.xml` and piping keep them intact). With `-o`, a
 redirect or a pipe you get the upstream bytes exactly — any charset, CRs included,

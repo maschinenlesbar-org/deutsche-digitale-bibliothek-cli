@@ -360,6 +360,23 @@ test("an item id of the wrong length is a usage error (exit 2), no request", asy
   assert.match(cli.err.join("\n"), /exactly 32 characters/);
 });
 
+test("a 32-character item id with other characters is a usage error (exit 2), no request", async () => {
+  const cases: [string, RegExp][] = [
+    [ID.toLowerCase(), new RegExp(`Item ids are upper case: try "${ID}"\\.`)],
+    ["😀".repeat(16), /32 upper-case letters and digits/],
+    [".".repeat(32), /32 upper-case letters and digits/],
+    ["/".repeat(32), /32 upper-case letters and digits/],
+    [`${ID.slice(0, 31)}-`, /32 upper-case letters and digits/],
+  ];
+  for (const [id, message] of cases) {
+    const cli = makeCli(() => jsonResponse({}));
+    const code = await run(["item", id], cli.deps);
+    assert.equal(code, 2, id);
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), message);
+  }
+});
+
 test("an unknown item --part is rejected (exit 2)", async () => {
   const cli = makeCli(() => jsonResponse({}));
   const code = await run(["item", ID, "--part", "bogus"], cli.deps);
