@@ -96,3 +96,15 @@ test("a slow drip that never idles still hits the wall-clock deadline (DDB-03)",
   );
   for (const t of timers) clearTimeout(t);
 });
+
+test("a header value Node cannot send is a DdbNetworkError, not a raw TypeError", async () => {
+  await assert.rejects(
+    () =>
+      nodeHttpTransport({
+        method: "GET",
+        url: "http://127.0.0.1:9/",
+        headers: { "User-Agent": "bot \u{1F600}" },
+      }),
+    (err) => err instanceof DdbNetworkError && /^Invalid request: /.test(err.message),
+  );
+});

@@ -419,6 +419,25 @@ test("a control character in --user-agent is rejected (exit 2), no request", asy
   assert.equal(cli.mt.calls.length, 0);
 });
 
+test("a blank or non-Latin-1 --user-agent is a usage error (exit 2), no request", async () => {
+  for (const [ua, message] of [
+    ["", /Expected a non-empty value\./],
+    ["   ", /Expected a non-empty value\./],
+    ["bot 😀", /outside Latin-1 \(above U\+00FF\)/],
+    ["bot \u20ac", /outside Latin-1 \(above U\+00FF\)/],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const code = await run(["--user-agent", ua, "version"], cli.deps);
+    assert.equal(code, 2, JSON.stringify(ua));
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), message);
+  }
+  // Tab and Latin-1 are what HTTP allows, and still pass.
+  const ok = makeCli(() => rawResponse("1.0", "text/plain"));
+  assert.equal(await run(["--user-agent", "müller-bot/1.0\t(test)", "version"], ok.deps), 0);
+  assert.equal(ok.mt.last().headers?.["User-Agent"], "müller-bot/1.0\t(test)");
+});
+
 test("an empty --base-url is rejected (exit 2), no request", async () => {
   const cli = makeCli(() => jsonResponse(fx.solr));
   const code = await run(["--base-url", "", "search", "x"], cli.deps);
