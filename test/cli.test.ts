@@ -392,6 +392,16 @@ test("a --base-url with a path prefix still works", async () => {
   assert.equal(cli.mt.last().url, "https://mirror.example/ddb/2/version");
 });
 
+test("credentials in --base-url are redacted from error messages", async () => {
+  const cli = makeCli(() => jsonResponse({ message: "nope" }, 403));
+  const code = await run(["--base-url", "http://user:s3cret@127.0.0.1:18109/e403/2", "version"], cli.deps);
+  assert.equal(code, 1);
+  // ...but still sent: the request URL keeps the userinfo (Node turns it into Basic auth).
+  assert.equal(cli.mt.last().url, "http://user:s3cret@127.0.0.1:18109/e403/2/version");
+  assert.equal(cli.err[0], "Error: HTTP 403 for GET http://***@127.0.0.1:18109/e403/2/version: nope");
+  assert.ok(!cli.err.join("\n").includes("s3cret"));
+});
+
 test("--max-retries above the sane maximum is rejected (exit 2)", async () => {
   const cli = makeCli(() => jsonResponse(fx.solr));
   assert.equal(await run(["--max-retries", "1000", "search", "x"], cli.deps), 2);

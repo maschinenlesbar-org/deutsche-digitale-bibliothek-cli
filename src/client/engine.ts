@@ -5,7 +5,7 @@
 
 import { nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError } from "./errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, redactUrl } from "./errors.js";
 
 // The v2 API is versioned in the path: every resource lives under `/2`. The
 // read routes this client targets (search, items, version) are public — no key.
@@ -126,15 +126,15 @@ function assertHttpScheme(baseUrl: string): void {
   try {
     url = new URL(baseUrl);
   } catch {
-    throw new DdbNetworkError(`Invalid base URL: ${baseUrl}`);
+    throw new DdbNetworkError(`Invalid base URL: ${redactUrl(baseUrl)}`);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new DdbNetworkError(
-      `Unsupported protocol "${url.protocol}" in base URL: ${baseUrl}`,
+      `Unsupported protocol "${url.protocol}" in base URL: ${redactUrl(baseUrl)}`,
     );
   }
   if (/[?#]/.test(baseUrl)) {
-    throw new DdbNetworkError(`Base URL must not contain a query or fragment: ${baseUrl}`);
+    throw new DdbNetworkError(`Base URL must not contain a query or fragment: ${redactUrl(baseUrl)}`);
   }
 }
 

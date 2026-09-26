@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText } from "../src/client/engine.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError } from "../src/client/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, redactUrl } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
 import type { HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
@@ -303,4 +303,14 @@ test("a 3xx without a Location surfaces as a DdbApiError", async () => {
     () => e.getJson("/x"),
     (err) => err instanceof DdbApiError && err.status === 302,
   );
+});
+
+test("redactUrl hides userinfo and leaves other URLs alone", () => {
+  assert.equal(redactUrl("https://u:p@example.test/a?b=1"), "https://***@example.test/a?b=1");
+  assert.equal(redactUrl("https://token@example.test/"), "https://***@example.test/");
+  assert.equal(redactUrl("https://example.test/a b"), "https://example.test/a b");
+  assert.equal(redactUrl("not a url"), "not a url");
+  const err = new DdbApiError({ status: 500, url: "https://u:p@example.test/x", method: "GET", body: "" });
+  assert.equal(err.url, "https://***@example.test/x");
+  assert.ok(!err.message.includes("u:p"));
 });

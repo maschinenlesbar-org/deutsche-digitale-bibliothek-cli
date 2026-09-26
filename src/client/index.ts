@@ -8,6 +8,6 @@ export { MAX_TIMEOUT_MS, nodeHttpTransport } from "./http.js";
 export type { Transport, HttpRequest, HttpResponse } from "./http.js";
 export { buildQueryString } from "./query.js";
 export type { QueryParams, QueryValue } from "./query.js";
-export { DdbError, DdbApiError, DdbNetworkError, DdbParseError, DdbUsageError } from "./errors.js";
+export { DdbError, DdbApiError, DdbNetworkError, DdbParseError, DdbUsageError, redactUrl } from "./errors.js";
 
 export * from "./types.js";
