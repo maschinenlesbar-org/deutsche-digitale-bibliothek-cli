@@ -91,3 +91,15 @@ test("another stderr write error exits 1", () => {
   s.stderr.emit("error", writeError("EIO"));
   assert.deepEqual(s.exits, [1]);
 });
+
+test("writeFile to a directory says so, with or without force", () => {
+  withTempDir((dir) => {
+    for (const force of [false, true]) {
+      assert.throws(
+        () => defaultIO.writeFile(dir, Buffer.from("x"), force),
+        (err) => err instanceof DdbError && err.message === `"${dir}" is a directory; give a file path to --output.`,
+        String(force),
+      );
+    }
+  });
+});

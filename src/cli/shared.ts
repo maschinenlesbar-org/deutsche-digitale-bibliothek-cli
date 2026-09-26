@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
+import { DdbUsageError } from "../client/errors.js";
 
 /**
  * commander value-parser: a plain base-10 non-negative integer.
@@ -40,6 +41,16 @@ export function parseNonEmpty(value: string): string {
     throw new InvalidArgumentError("Expected a non-empty value.");
   }
   return value;
+}
+
+/**
+ * commander value-parser for `-o, --output <file>`. A blank or whitespace-only path
+ * is a usage error: `-o ""` used to print to stdout silently and `-o " "` created a
+ * file named " ". `-` is kept as is and means stdout (see {@link action}), the
+ * usual convention, rather than a file named "-".
+ */
+export function parseOutputPath(value: string): string {
+  return parseNonEmpty(value);
 }
 
 /**
@@ -172,6 +183,12 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
+    // --force only lets -o overwrite a file; on its own it would be ignored.
+    if (global.force === true && global.output === undefined) {
+      throw new DdbUsageError("--force needs --output (it only allows overwriting the -o file).");
+    }
+    // `-o -` means stdout: from here on it is the same as no -o.
+    if (global.output === "-") delete global.output;
     // Route engine warnings (e.g. an https->http redirect downgrade) to stderr so
     // stdout stays clean for piping.
     const client = deps.createClient({

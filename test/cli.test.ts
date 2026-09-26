@@ -290,6 +290,34 @@ test("item --lang / --rows / --offset for a part that ignores them is a usage er
   assert.equal(await run(["item", ID, "--part", "edm", "--lang", "de"], ok.deps), 0);
 });
 
+test("a blank -o path is a usage error, before any request", async () => {
+  for (const path of ["", "   "]) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const code = await run(["search", "x", "-o", path], cli.deps);
+    assert.equal(code, 2, JSON.stringify(path));
+    assert.equal(cli.mt.calls.length, 0);
+    assert.equal(cli.files.length, 0);
+    assert.match(cli.err.join("\n"), /Expected a non-empty value\./);
+  }
+});
+
+test("-o - writes to stdout, not to a file named -", async () => {
+  const cli = makeCli(() => jsonResponse(fx.solrExact));
+  const code = await run(["--compact", "-o", "-", "search", "x"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.files.length, 0);
+  assert.equal(JSON.parse(cli.out.join("\n")).response.numFound, 2);
+  assert.ok(!cli.err.some((line) => line.startsWith("Wrote")));
+});
+
+test("--force without --output is a usage error, before any request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.solr));
+  const code = await run(["search", "x", "--force"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /--force needs --output/);
+});
+
 test("-o does not pass force by default; --force threads through (DDB-02)", async () => {
   const cli = makeCli(() => jsonResponse(fx.itemView));
   await run(["item", ID, "-o", "out.json"], cli.deps);

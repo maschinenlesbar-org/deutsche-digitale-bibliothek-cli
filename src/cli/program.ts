@@ -10,7 +10,7 @@ import { defaultIO } from "./io.js";
 import { DdbClient } from "../client/client.js";
 import { DEFAULT_BASE_URL } from "../client/engine.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
-import { parseBaseUrl, parseBoundedInt, parseHeaderValue, parseIntArg } from "./shared.js";
+import { parseBaseUrl, parseBoundedInt, parseHeaderValue, parseIntArg, parseOutputPath } from "./shared.js";
 import { registerCommands } from "./commands/index.js";
 
 /**
@@ -64,7 +64,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       parseIntArg,
     )
     .option("--compact", "print JSON on a single line instead of pretty-printed")
-    .option("-o, --output <file>", "write output to this file instead of stdout")
+    .option("-o, --output <file>", "write output to this file instead of stdout (- = stdout)", parseOutputPath)
     .option("--force", "overwrite the --output file if it already exists")
     .showHelpAfterError();
 

@@ -1,7 +1,7 @@
 // I/O seam for the CLI. Everything the CLI writes goes through a CliIO object so
 // tests can capture output instead of hitting the real stdout/stderr/filesystem.
 
-import { writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
 import type { DdbClient, DdbClientOptions } from "../client/client.js";
 import { DdbError } from "../client/errors.js";
 
@@ -67,6 +67,14 @@ export function handleOutputErrors(
   });
 }
 
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export const defaultIO: CliIO = {
   out: (text) => process.stdout.write(text + "\n"),
   err: (text) => process.stderr.write(text + "\n"),
@@ -77,6 +85,10 @@ export const defaultIO: CliIO = {
       writeFileSync(path, data, { flag: force ? "w" : "wx" });
     } catch (cause) {
       const code = (cause as NodeJS.ErrnoException | undefined)?.code;
+      // `wx` answers EEXIST and `w` EISDIR for a directory; --force cannot help there.
+      if ((code === "EEXIST" || code === "EISDIR") && isDirectory(path)) {
+        throw new DdbError(`"${path}" is a directory; give a file path to --output.`, { cause });
+      }
       if (code === "EEXIST") {
         throw new DdbError(
           `Refusing to overwrite existing file "${path}"; pass --force to overwrite.`,
