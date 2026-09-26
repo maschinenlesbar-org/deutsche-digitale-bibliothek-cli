@@ -49,7 +49,7 @@ ddb search 'title:Faust'                  # field-scoped query
 | `--fields <list>` | fields to return (Solr `fl`), e.g. `id,label,type` |
 | `--filter <fq>` | Solr filter query (repeatable), e.g. `type_fct:mediatype_002` |
 | `--facet <field>` | return counts for this facet field (repeatable) |
-| `--facet-limit <n>` | cap the number of values per facet |
+| `--facet-limit <n>` | cap the number of values per facet (needs `--facet`) |
 | `--collection <name>` | Solr collection (default `search`) |
 | `--handler <name>` | Solr request handler (default `select`) |
 

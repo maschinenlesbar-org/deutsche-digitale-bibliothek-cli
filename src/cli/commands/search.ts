@@ -63,6 +63,11 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
             "A query is required, e.g. `search Goethe` (or `search '*:*'` for all).",
           );
         }
+        // Solr's facet.limit only applies to facet fields; without --facet it would
+        // be silently dropped, so say so instead.
+        if (opts["facetLimit"] !== undefined && opts["facet"] === undefined) {
+          throw new DdbUsageError("--facet-limit needs --facet (it caps the values returned per facet field).");
+        }
         const params: SearchParams = { query };
         if (typeof opts["rows"] === "number") params.rows = opts["rows"];
         if (typeof opts["offset"] === "number") params.start = opts["offset"];

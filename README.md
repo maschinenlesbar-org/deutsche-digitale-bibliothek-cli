@@ -87,7 +87,7 @@ fields? The **[Glossary](GLOSSARY.md)** decodes every one.
 | `--fields <list>` | Comma-separated fields to return (Solr `fl`), e.g. `id,label` |
 | `--filter <fq>` | Solr filter query — repeatable, e.g. `type_fct:mediatype_002` |
 | `--facet <field>` | Return value counts for this facet field — repeatable, e.g. `type_fct` |
-| `--facet-limit <n>` | Cap the number of values returned per facet |
+| `--facet-limit <n>` | Cap the number of values returned per facet (needs `--facet`) |
 | `--collection <name>` | Solr collection (default `search`) |
 | `--handler <name>` | Solr request handler (default `select`) |
 

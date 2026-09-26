@@ -93,6 +93,14 @@ test("the paging note ignores a non-numeric start", async () => {
   assert.match(cli.err.join("\n"), /^Note: 10 documents match; 2 shown\. /);
 });
 
+test("--facet-limit without --facet is a usage error, before any request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.solr));
+  const code = await run(["search", "Goethe", "--rows", "0", "--facet-limit", "3"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /--facet-limit needs --facet/);
+});
+
 test("search prints no paging note when the whole result set is returned", async () => {
   const cli = makeCli(() => jsonResponse(fx.solrExact));
   await run(["search", "Goethe"], cli.deps);
