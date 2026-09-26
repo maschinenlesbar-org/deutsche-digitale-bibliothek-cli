@@ -162,7 +162,10 @@ src/
   `sort`/`fl`.
 - `item()` fetches raw via the engine and **branches on Content-Type**: JSON is
   parsed into `ItemResult.json`; anything else (RDF/XML, XML, BIB) is returned as
-  `ItemResult.text` and the CLI prints it raw.
+  `ItemResult.text` (decoded as UTF-8) plus the exact upstream `ItemResult.bytes`.
+  The CLI writes those bytes unchanged with `-o` and to a non-terminal stdout
+  (`CliIO.isTerminal()` false → `outBinary`); only a terminal gets the decoded text
+  with control characters stripped.
 - The engine accepts `defaultHeaders` merged into every request — the read routes
   need none; it's the injection seam for a caller that reaches an authed endpoint.
 - The HTTP layer is a single `Transport` function; the default uses

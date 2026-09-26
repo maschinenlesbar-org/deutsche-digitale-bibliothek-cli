@@ -112,7 +112,7 @@ export class DdbClient {
         throw new DdbParseError(`Failed to parse JSON for item ${id} (${part})`, { cause });
       }
     }
-    return { part, contentType: res.contentType, text };
+    return { part, contentType: res.contentType, text, bytes: res.data };
   }
 
   /** The version string of the DDB backend. Public — works without a key. */

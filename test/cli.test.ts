@@ -201,7 +201,33 @@ test("item raw text to -o keeps the bytes verbatim (DDB-01)", async () => {
   assert.equal(cli.out.length, 0);
   // File output is not a terminal: the exact upstream bytes (incl. ESC/BEL) survive.
   assert.equal(cli.files.length, 1);
-  assert.equal(cli.files[0]!.data.toString("utf8"), evil + "\n");
+  assert.equal(cli.files[0]!.data.toString("utf8"), evil);
+});
+
+test("item raw XML keeps non-UTF-8 bytes and CRs byte-exact with -o", async () => {
+  // "<t>Müller</t>" in Latin-1 (0xFC), CRLF line ends, no trailing newline.
+  const latin1 = Buffer.from([0x3c, 0x74, 0x3e, 0x4d, 0xfc, 0x6c, 0x6c, 0x65, 0x72, 0x0d, 0x0a, 0x3c, 0x2f, 0x74, 0x3e]);
+  const cli = makeCli(() => rawResponse(latin1, "application/xml"));
+  const code = await run(["item", ID, "--part", "source-record", "-o", "l1.xml"], cli.deps);
+  assert.equal(code, 0);
+  assert.ok(cli.files[0]!.data.equals(latin1));
+  assert.deepEqual(cli.err, [`Wrote ${latin1.length} bytes to l1.xml`]);
+});
+
+test("item raw XML to a non-terminal stdout is written byte-exact", async () => {
+  const body = Buffer.concat([
+    Buffer.from(`<a>\r\n<b>x${String.fromCharCode(0x0c)}y</b>\r\n</a>`, "latin1"),
+    Buffer.from([0xfc]),
+  ]);
+  const cli = makeCli(() => rawResponse(body, "application/xml"));
+  const binary: Buffer[] = [];
+  cli.deps.io.outBinary = (data) => binary.push(data);
+  cli.deps.io.isTerminal = () => false;
+  const code = await run(["item", ID, "--part", "edm"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.out.length, 0);
+  assert.equal(binary.length, 1);
+  assert.ok(binary[0]!.equals(body));
 });
 
 test("-o does not pass force by default; --force threads through (DDB-02)", async () => {

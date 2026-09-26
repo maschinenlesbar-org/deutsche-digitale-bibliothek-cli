@@ -65,8 +65,9 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
 
         const result = await client.item(trimmed, part, itemOpts);
         if (result.text !== undefined) {
-          // XML / BIB file component: emit the raw body verbatim (no JSON quoting).
-          writeText(deps, global.output, result.text, global.force);
+          // XML / BIB file component: emit the raw body (no JSON quoting).
+          const bytes = result.bytes ?? Buffer.from(result.text, "utf8");
+          writeRaw(deps, global.output, result.text, bytes, global.force);
         } else {
           renderJson(deps, global, result.json);
         }
@@ -75,25 +76,28 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
 }
 
 /**
- * Write a raw text body to --output (with a stderr note) or to stdout.
+ * Write a raw XML/file body to --output (with a stderr note) or to stdout.
  *
- * The XML/edm/citation body is attacker-controlled (a hostile `--base-url` or a
- * MITM'd upstream). When it goes to the terminal we strip C0/C1 control bytes
+ * `-o` and a non-terminal stdout (`> file.xml`, a pipe) get the exact upstream
+ * bytes: any charset, CRs and control bytes intact, nothing appended.
+ *
+ * The body is attacker-controlled (a hostile `--base-url` or a MITM'd upstream).
+ * Only when stdout is a terminal is it decoded and stripped of C0/C1 control bytes
  * (keeping tab/newline) so it can't drive ANSI/OSC escape sequences into the
- * user's shell (DDB-01). We do NOT alter the XML structure — only control bytes
- * are removed. File output via `-o` keeps the bytes verbatim: the file is not a
- * terminal, and callers piping to `> file.xml` expect the exact upstream bytes.
+ * user's shell (DDB-01). The XML structure is not altered.
  */
-function writeText(
+function writeRaw(
   deps: CliDeps,
   output: string | undefined,
   text: string,
+  bytes: Buffer,
   force: boolean | undefined,
 ): void {
   if (output) {
-    const data = Buffer.from(text.endsWith("\n") ? text : text + "\n", "utf8");
-    deps.io.writeFile(output, data, force);
-    deps.io.err(`Wrote ${data.length} bytes to ${output}`);
+    deps.io.writeFile(output, bytes, force);
+    deps.io.err(`Wrote ${bytes.length} bytes to ${output}`);
+  } else if (deps.io.isTerminal?.() === false) {
+    deps.io.outBinary(bytes);
   } else {
     deps.io.out(sanitizeServerText(text).replace(/\n$/, ""));
   }

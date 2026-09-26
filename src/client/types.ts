@@ -78,8 +78,16 @@ export interface ItemResult {
   contentType: string;
   /** Parsed JSON body, when the component returned JSON. */
   json?: JsonValue;
-  /** Raw text body, when the component returned XML / a plain file. */
+  /**
+   * Text body, when the component returned XML / a plain file: the bytes decoded as
+   * UTF-8 (a record in another charset, e.g. Latin-1, gets U+FFFD substitutions).
+   */
   text?: string;
+  /**
+   * The exact upstream bytes, set together with `text`. Use these to save or pass on
+   * the record unchanged (any charset, CRs and control bytes intact).
+   */
+  bytes?: Buffer;
 }
 
 /** Options for an item-component request. */

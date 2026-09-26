@@ -16,6 +16,12 @@ export interface CliIO {
   writeFile(path: string, data: Buffer, force?: boolean): void;
   /** Write raw bytes to stdout (binary-safe). */
   outBinary(data: Buffer): void;
+  /**
+   * Whether stdout is a terminal. Raw server bodies are cleaned of control bytes
+   * only for a terminal; a pipe or redirect gets the exact bytes. Absent means
+   * "treat as a terminal" (the safe default).
+   */
+  isTerminal?(): boolean;
 }
 
 export interface CliDeps {
@@ -82,4 +88,5 @@ export const defaultIO: CliIO = {
     }
   },
   outBinary: (data) => process.stdout.write(data),
+  isTerminal: () => process.stdout.isTTY === true,
 };

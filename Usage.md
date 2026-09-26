@@ -116,7 +116,9 @@ ddb item <id> [--part <component>] [--lang <code>]
 
 `<id>` is the exact **32-character** id from a search result's `id`. `--part`
 selects which component to fetch — most are JSON, a few are XML / a plain file
-and print **raw** (so `> file.xml` and piping keep them intact):
+and print **raw** (so `> file.xml` and piping keep them intact). With `-o`, a
+redirect or a pipe you get the upstream bytes exactly — any charset, CRs included,
+nothing appended; only on a terminal are control characters removed first:
 
 | `--part` | Returns | Format |
 |---|---|---|
