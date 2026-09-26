@@ -369,6 +369,29 @@ test("a non-http --base-url is rejected (exit 2)", async () => {
   assert.equal(await run(["--base-url", "ftp://x/y", "search", "x"], cli.deps), 2);
 });
 
+test("a --base-url with a query, a fragment or surrounding whitespace is a usage error", async () => {
+  for (const [baseUrl, message] of [
+    ["http://127.0.0.1:18109/echo/2?key=1", /cannot have a query \(\?\) or fragment \(#\)/],
+    ["http://127.0.0.1:18109/echo/2#frag", /cannot have a query \(\?\) or fragment \(#\)/],
+    ["http://127.0.0.1:18109?", /cannot have a query \(\?\) or fragment \(#\)/],
+    [" https://api.deutsche-digitale-bibliothek.de/2", /cannot have surrounding whitespace/],
+    ["https://api.deutsche-digitale-bibliothek.de/2\t", /cannot have surrounding whitespace/],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const code = await run(["--base-url", baseUrl, "version"], cli.deps);
+    assert.equal(code, 2, baseUrl);
+    assert.equal(cli.mt.calls.length, 0, baseUrl);
+    assert.match(cli.err.join("\n"), message, baseUrl);
+  }
+});
+
+test("a --base-url with a path prefix still works", async () => {
+  const cli = makeCli(() => rawResponse("1.0", "text/plain"));
+  const code = await run(["--base-url", "https://mirror.example/ddb/2/", "version"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.mt.last().url, "https://mirror.example/ddb/2/version");
+});
+
 test("--max-retries above the sane maximum is rejected (exit 2)", async () => {
   const cli = makeCli(() => jsonResponse(fx.solr));
   assert.equal(await run(["--max-retries", "1000", "search", "x"], cli.deps), 2);

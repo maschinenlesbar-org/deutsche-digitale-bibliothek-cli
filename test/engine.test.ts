@@ -54,6 +54,19 @@ test("a non-http(s) base URL is rejected by the engine before any request", () =
   }
 });
 
+test("a base URL with a query or fragment is rejected at construction", () => {
+  for (const baseUrl of ["https://example.test/2?x=1", "https://example.test/2#frag", "https://example.test?"]) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new RequestEngine({ transport: mt.transport, baseUrl }),
+      (err: unknown) =>
+        err instanceof DdbNetworkError && /Base URL must not contain a query or fragment/.test(err.message),
+      baseUrl,
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+});
+
 test("buildUrl normalises the path and appends the query", () => {
   const e = new RequestEngine({ baseUrl: "https://example.test/" });
   assert.equal(e.buildUrl("search/"), "https://example.test/search/");
