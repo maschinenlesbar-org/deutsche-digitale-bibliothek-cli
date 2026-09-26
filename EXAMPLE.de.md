@@ -3,7 +3,8 @@
 Echte Beispiele für die Claude-Code-Skills des Plugins `ddb`, eines pro Skill: eine
 Anfrage, die `ddb`-Befehle, die der Skill ausgeführt hat, und Claudes Antwort.
 
-Jedes Beispiel lief am 15. September 2026 mit `ddb` 0.0.4 gegen die Live-API.
+Jedes Beispiel lief am 15. September 2026 mit `ddb` 0.0.4 gegen die Live-API, außer
+ddb-item, das am 26. September 2026 mit 0.0.8 neu lief.
 Die Daten ändern sich, Ihre Ergebnisse werden also abweichen; mit den gezeigten IDs und
 Schlüsseln können Sie die Anfragen selbst ausprobieren. Lange Listen sind gekürzt.
 
@@ -46,7 +47,7 @@ Binärdateien: 1
   image/jpeg · primär · „Oktoberfest 1810"
   https://objekt.db.dhm.de/GR105655/download/large_without_watermark
 IIIF:     keins (404; auch die Viewer-Liste der Ansicht ist leer)
-EDM:      oktoberfest-1810.edm.xml geschrieben, 11.575 Byte RDF/XML
+EDM:      oktoberfest-1810.edm.xml geschrieben, 9.212 Byte RDF/XML
           (edm:type IMAGE, edm:isShownBy = das JPEG oben, edm:rights CC BY-NC-ND 4.0)
 ```
 
