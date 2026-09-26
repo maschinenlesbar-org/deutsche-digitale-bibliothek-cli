@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient } from "../src/client/client.js";
-import { DdbNetworkError, DdbParseError } from "../src/client/errors.js";
+import { DdbError, DdbNetworkError, DdbParseError } from "../src/client/errors.js";
+import type { ItemPart, SearchParams } from "../src/client/types.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -150,4 +151,72 @@ test("search rejects a 2xx body that is not a Solr JSON object", async () => {
       body,
     );
   }
+});
+
+test("the client rejects bad search parameters without a request", async () => {
+  const cases: [SearchParams, string][] = [
+    [{ query: "" }, 'Invalid query: expected a non-empty string, got "".'],
+    [{ query: "   " }, 'Invalid query: expected a non-empty string, got "   ".'],
+    [{ query: "x", rows: -5 }, "Invalid rows: expected an integer from 0 to 2147483647, got -5."],
+    [{ query: "x", start: 1.5 }, "Invalid start: expected an integer from 0 to 2147483647, got 1.5."],
+    [{ query: "x", rows: 2147483648 }, "Invalid rows: expected an integer from 0 to 2147483647, got 2147483648."],
+    [
+      { query: "x", facetFields: ["a"], facetLimit: NaN },
+      "Invalid facetLimit: expected an integer from -1 to 2147483647, got NaN.",
+    ],
+    [{ query: "x", filters: [""] }, 'Invalid filters entry: expected a non-empty string, got "".'],
+    [{ query: "x", facetFields: [" "] }, 'Invalid facetFields entry: expected a non-empty string, got " ".'],
+    [{ query: "x", sort: "" }, 'Invalid sort: expected a non-empty string, got "".'],
+    [{ query: "x", facetLimit: 3 }, "Invalid facetLimit: it needs facetFields (it caps the values returned per facet field)."],
+  ];
+  for (const [params, message] of cases) {
+    const mt = makeMockTransport(() => jsonResponse(fx.solr));
+    const c = new DdbClient({ transport: mt.transport });
+    await assert.rejects(() => c.search(params), (err) => err instanceof DdbError && err.message === message, message);
+    assert.equal(mt.calls.length, 0);
+  }
+  // -1 (Solr: no limit) is accepted.
+  const mt = makeMockTransport(() => jsonResponse(fx.solr));
+  await new DdbClient({ transport: mt.transport }).search({ query: "x", facetFields: ["a"], facetLimit: -1 });
+  assert.equal(queryOf(mt.last()).get("facet.limit"), "-1");
+});
+
+test("the client rejects a blank id, an unknown part and bad item options without a request", async () => {
+  const id = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
+  const cases: [() => Promise<unknown>, RegExp][] = [];
+  const mt = makeMockTransport(() => jsonResponse(fx.itemView));
+  const c = new DdbClient({ transport: mt.transport });
+  cases.push([() => c.item(""), /^Invalid id: expected a non-empty string, got ""\.$/]);
+  cases.push([() => c.item(id, "foo" as ItemPart), /^Invalid part: expected one of view, aip, edm, .*, got "foo"\.$/]);
+  cases.push([() => c.item(id, "toString" as ItemPart), /^Invalid part: /]);
+  cases.push([() => c.item(id, "children", { rows: -1 }), /^Invalid rows: /]);
+  cases.push([() => c.item(id, "children", { offset: 0.5 }), /^Invalid offset: /]);
+  cases.push([() => c.item(id, "view", { lang: " " }), /^Invalid lang: /]);
+  for (const [call, message] of cases) {
+    await assert.rejects(call, (err) => err instanceof DdbError && message.test(err.message), String(message));
+  }
+  assert.equal(mt.calls.length, 0);
+});
+
+test("the engine rejects out-of-range numeric options at construction", () => {
+  const bad: [string, number][] = [
+    ["timeoutMs", -1],
+    ["timeoutMs", NaN],
+    ["maxRetries", -3],
+    ["maxRetries", Infinity],
+    ["maxRetries", 11],
+    ["retryDelayMs", -100],
+    ["maxRedirects", 21],
+    ["maxResponseBytes", -1],
+  ];
+  for (const [name, value] of bad) {
+    assert.throws(
+      () => new DdbClient({ [name]: value }),
+      (err) =>
+        err instanceof DdbError &&
+        new RegExp(`^Invalid option ${name}: expected an integer from 0 to \\d+, got ${String(value)}\\.$`).test(err.message),
+      `${name}=${value}`,
+    );
+  }
+  assert.doesNotThrow(() => new DdbClient({ timeoutMs: 0, maxRetries: 10, maxRedirects: 0, maxResponseBytes: 0 }));
 });

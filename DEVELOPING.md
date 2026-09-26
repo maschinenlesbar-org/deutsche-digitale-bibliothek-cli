@@ -78,6 +78,14 @@ the read routes are unauthenticated. (If you ever need to reach an authenticated
 endpoint, inject an `Authorization` header via the engine's `defaultHeaders`; it
 is stripped on cross-origin redirects, see below.)
 
+The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
+0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
+`maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
+`DdbError` naming the option. The client also checks its own parameters before any
+request: a blank `query`/`id`/`lang`/`sort`/filter, an unknown `part`, a non-integer
+or negative `rows`/`start`/`offset` (at most 2^31−1), a `facetLimit` below −1 or
+without `facetFields` throw a `DdbError` (`Invalid <name>: expected …, got …`).
+
 ### Methods
 
 - `search(params)` → a `SolrResponse` (`GET /2/search/index/{collection}/{requestHandler}`,
