@@ -200,7 +200,10 @@ document's `error.msg`. Every `detail` is stripped of control characters, folded
 line and capped at 500 characters (`…`); the full body stays on `DdbApiError.body`.
 
 **Retry / backoff.** Transient `429` and `503` responses are retried
-automatically with backoff, up to `--max-retries`. `DdbApiError` exposes
+automatically, up to `--max-retries`. Each retry waits the response's `Retry-After`
+(delay-seconds or an IMF-fixdate, parsed strictly by the exported `parseRetryAfter`),
+or else `retryDelayMs * attempt`. A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is
+not retried at all: the error surfaces at once. `DdbApiError` exposes
 `isRetryable` (true for `429`/`503`).
 
 **Cross-origin credential stripping.** When the API issues a redirect that
