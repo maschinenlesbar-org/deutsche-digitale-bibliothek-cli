@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
-import { DdbUsageError } from "../client/errors.js";
+import { DdbError, DdbUsageError } from "../client/errors.js";
 
 /**
  * commander value-parser: a plain base-10 non-negative integer.
@@ -145,12 +145,35 @@ export function escapeControlChars(json: string): string {
 }
 
 /**
+ * JSON.stringify, pretty or compact. A deeply nested value (a hostile or broken
+ * response) overflows the stack — the pretty form far sooner than the compact one,
+ * which is why the message suggests --compact. The RangeError becomes a DdbError so
+ * the CLI prints a clear message instead of "Unexpected error: Maximum call stack
+ * size exceeded".
+ */
+function stringifyJson(value: unknown, compact: boolean): string {
+  try {
+    return compact ? JSON.stringify(value) : JSON.stringify(value, null, 2);
+  } catch (err) {
+    if (err instanceof RangeError) {
+      throw new DdbError(
+        compact
+          ? "The response is nested too deeply to print."
+          : "The response is nested too deeply to pretty-print; try --compact.",
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+}
+
+/**
  * Render a JSON value, pretty by default and compact with --compact. Writes to
  * the file given by --output (with a short stderr confirmation so stdout stays
  * clean for piping), or to stdout otherwise.
  */
 export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown): void {
-  const text = escapeControlChars(global.compact ? JSON.stringify(value) : JSON.stringify(value, null, 2));
+  const text = escapeControlChars(stringifyJson(value, global.compact === true));
   if (global.output) {
     const data = Buffer.from(text + "\n", "utf8");
     deps.io.writeFile(global.output, data, global.force);

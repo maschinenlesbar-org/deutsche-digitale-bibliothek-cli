@@ -318,6 +318,23 @@ test("--force without --output is a usage error, before any request", async () =
   assert.match(cli.err.join("\n"), /--force needs --output/);
 });
 
+test("a deeply nested response fails pretty-printing cleanly and still prints with --compact", async () => {
+  const depth = 200_000;
+  const body = '{"a":' + "[".repeat(depth) + "]".repeat(depth) + "}";
+  const deep = () => rawResponse(body, "application/json");
+  const pretty = makeCli(deep);
+  assert.equal(await run(["item", ID], pretty.deps), 1);
+  assert.deepEqual(pretty.out, []);
+  assert.equal(pretty.err.join("\n"), "Error: The response is nested too deeply to pretty-print; try --compact.");
+
+  // Compact serialisation goes much deeper (it prints this one on current Node);
+  // should a runtime's stack still be too small, it must fail just as cleanly.
+  const compact = makeCli(deep);
+  const code = await run(["--compact", "item", ID], compact.deps);
+  if (code === 0) assert.equal(compact.out.join(""), body);
+  else assert.equal(compact.err.join("\n"), "Error: The response is nested too deeply to print.");
+});
+
 test("-o does not pass force by default; --force threads through (DDB-02)", async () => {
   const cli = makeCli(() => jsonResponse(fx.itemView));
   await run(["item", ID, "-o", "out.json"], cli.deps);
