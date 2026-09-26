@@ -137,6 +137,18 @@ test("a --collection with an illegal path character is rejected (exit 2)", async
   assert.equal(cli.mt.calls.length, 0);
 });
 
+test("--collection / --handler of . or .. is a usage error, before any request", async () => {
+  for (const [opt, value] of [["--collection", ".."], ["--handler", ".."], ["--collection", "."], ["--handler", "."]]) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const code = await run(["search", "x", opt!, value!], cli.deps);
+    assert.equal(code, 2, `${opt} ${value}`);
+    assert.equal(cli.mt.calls.length, 0);
+  }
+  // A name that merely contains dots is still fine.
+  const cli = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["search", "x", "--collection", "a.b", "--handler", "..."], cli.deps), 0);
+});
+
 test("a Solr 400 error surfaces its msg and exits 1", async () => {
   const cli = makeCli(() => jsonResponse(fx.solrError, 400));
   const code = await run(["search", "bogus_fct:x"], cli.deps);

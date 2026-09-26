@@ -23,11 +23,15 @@ function collect(value: string, previous: string[] = []): string[] {
  * commander value-parser for a URL path segment (Solr collection / request
  * handler). These are interpolated into the request path, so restrict them to a
  * safe character set — a `/` or `?` would otherwise let a value escape the
- * intended `/search/index/{collection}/{requestHandler}` route.
+ * intended `/search/index/{collection}/{requestHandler}` route. "." and ".." are
+ * rejected too: URL parsing would resolve them as dot segments and leave the route.
  */
 function parsePathSegment(value: string): string {
   if (!/^[A-Za-z0-9._-]+$/.test(value)) {
     throw new InvalidArgumentError("Expected letters, digits, '.', '_' or '-' only.");
+  }
+  if (value === "." || value === "..") {
+    throw new InvalidArgumentError('"." and ".." are path navigation, not a name.');
   }
   return value;
 }

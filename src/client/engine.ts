@@ -5,7 +5,7 @@
 
 import { nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { DdbApiError, DdbNetworkError, DdbParseError } from "./errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError } from "./errors.js";
 
 // The v2 API is versioned in the path: every resource lives under `/2`. The
 // read routes this client targets (search, items, version) are public — no key.
@@ -211,9 +211,24 @@ export class RequestEngine {
     this.warn = options.warn ?? (() => {});
   }
 
-  /** Build a fully-qualified URL from a path and optional query parameters. */
+  /**
+   * Build a fully-qualified URL from a path and optional query parameters.
+   *
+   * Throws a DdbError for a path with a "." or ".." segment. The client puts ids,
+   * collections and request handlers into the path with `encodeURIComponent`, which
+   * leaves those two unchanged, and URL parsing then resolves them: a collection of
+   * ".." with handler "version" would request `/2/search/version`. Neither can name
+   * a resource. (Percent-encoded forms such as "%2e%2e" are safe:
+   * encodeURIComponent turns their "%" into "%25".)
+   */
   buildUrl(path: string, query?: QueryParams): string {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const dotSegment = normalizedPath.split("/").find((s) => s === "." || s === "..");
+    if (dotSegment !== undefined) {
+      throw new DdbError(
+        `Invalid path segment "${dotSegment}" in ${normalizedPath}: "." and ".." cannot be used as an id.`,
+      );
+    }
     const qs = query ? buildQueryString(query) : "";
     return `${this.baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
   }

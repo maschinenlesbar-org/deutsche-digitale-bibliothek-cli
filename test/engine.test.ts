@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText } from "../src/client/engine.js";
-import { DdbApiError, DdbNetworkError, DdbParseError } from "../src/client/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError } from "../src/client/errors.js";
+import { DdbClient } from "../src/client/client.js";
 import type { HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
@@ -60,6 +61,19 @@ test("buildUrl normalises the path and appends the query", () => {
     e.buildUrl("/search", { query: "x", facet: ["a", "b"] }),
     "https://example.test/search?query=x&facet=a&facet=b",
   );
+});
+
+test("a . or .. path segment is rejected without a request (library callers too)", async () => {
+  const mt = makeMockTransport(() => jsonResponse({}));
+  const client = new DdbClient({ transport: mt.transport });
+  await assert.rejects(
+    () => client.search({ query: "x", collection: "..", requestHandler: ".." }),
+    (err) =>
+      err instanceof DdbError &&
+      err.message === 'Invalid path segment ".." in /search/index/../..: "." and ".." cannot be used as an id.',
+  );
+  await assert.rejects(() => client.item("."), DdbError);
+  assert.equal(mt.calls.length, 0);
 });
 
 test("getJson parses a JSON body", async () => {
