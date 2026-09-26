@@ -105,8 +105,9 @@ component is access-restricted.
 > server serves the read routes anonymously. This was confirmed against the live
 > API (below); trust the live behaviour, not the spec's `security` blocks.
 
-**Redirect safety.** The engine strips credential headers (`Authorization`,
-`X-API-Key`, `Cookie`) before following a redirect that crosses an origin boundary.
+**Redirect safety.** Before following a redirect that crosses an origin boundary the
+engine drops every caller-supplied header (`Authorization`, `Proxy-Authorization`,
+`X-API-Key`, `Cookie`, any token header); only its own `Accept` and `User-Agent` go along.
 Nothing carries credentials by default, but this keeps the seam safe if a caller
 injects one via `defaultHeaders`.
 
@@ -217,8 +218,9 @@ followed, up to `maxRedirects` (5). Any other 3xx, a missing or malformed
 header)`.
 
 **Cross-origin credential stripping.** When the API issues a redirect that
-crosses an origin boundary (scheme, host **or** port), the engine strips credential
-headers (`Authorization`, `X-API-Key`, `Cookie`) before following it — this
+crosses an origin boundary (scheme, host **or** port), the engine keeps only its own
+`Accept` and `User-Agent` and drops every header passed in `defaultHeaders` (so
+`Proxy-Authorization` or a custom token header too) before following it — this
 includes a same-host `https:`->`http:` downgrade. A followed `https:`->`http:`
 downgrade additionally emits a one-line warning through the `warn` hook (wired to
 stderr by the CLI), because the remaining hops travel in cleartext.

@@ -248,15 +248,18 @@ test("a cross-origin redirect drops credential headers", async () => {
       Authorization: "Bearer SECRET",
       "X-API-Key": "SECRET",
       Cookie: "session=abc",
+      "Proxy-Authorization": "Basic SECRET",
+      "X-Auth-Token": "SECRET",
     },
   });
   await e.getJson("/x");
   const followUp = mt.calls[1]!;
   assert.equal(new URL(followUp.url).origin, "https://evil.example");
-  assert.equal(followUp.headers?.["Authorization"], undefined);
-  assert.equal(followUp.headers?.["X-API-Key"], undefined);
-  assert.equal(followUp.headers?.["Cookie"], undefined);
+  // Only the engine's own headers go along; every caller header is dropped.
+  assert.deepEqual(Object.keys(followUp.headers ?? {}).sort(), ["Accept", "User-Agent"]);
   assert.equal(followUp.headers?.["Accept"], "application/json");
+  // The first request's headers were not mutated.
+  assert.equal(mt.calls[0]!.headers?.["Proxy-Authorization"], "Basic SECRET");
 });
 
 test("an https->http redirect downgrade warns and strips credentials (DDB-04)", async () => {

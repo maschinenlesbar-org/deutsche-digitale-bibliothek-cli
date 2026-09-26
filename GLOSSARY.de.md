@@ -153,5 +153,6 @@ nicht gefunden · `6` Netzwerkfehler · `1` sonstiger API- oder Laufzeitfehler. 
 
 **Entfernen von Zugangsdaten beim Wechsel des Origins.** Die Lese-Routen senden keine
 Zugangsdaten. Falls Sie aber über einen Header welche mitgeben und die API jemals auf einen
-anderen Host umleitet, entfernt der Client vor dem Folgen jeden `Authorization`- / `Cookie`- /
-`X-API-Key`-Header, sodass er nie an einen anderen Origin gelangt.
+anderen Host umleitet, entfernt der Client vor dem Folgen jeden Header, den Sie hinzugefügt haben
+(`Authorization`, `Proxy-Authorization`, `Cookie`, `X-API-Key`, jeden Token-Header), sodass keiner
+an einen anderen Origin gelangt.

@@ -25,7 +25,13 @@ export interface EngineOptions {
   transport?: Transport;
   /** Value of the User-Agent header. */
   userAgent?: string;
-  /** Extra headers sent on every request (e.g. the Authorization API key). */
+  /**
+   * Extra headers sent on every request to the configured origin. When a redirect
+   * crosses to a different origin, all of them are dropped (only the engine's own
+   * Accept and User-Agent go along), so no credential — Authorization,
+   * Proxy-Authorization, Cookie, X-API-Key, X-Auth-Token or any other — leaks to an
+   * arbitrary host named in Location.
+   */
   defaultHeaders?: Record<string, string>;
   /** Per-request timeout in milliseconds (0 disables; capped at `MAX_TIMEOUT_MS`, 2^31 - 1 ms). */
   timeoutMs?: number;
@@ -187,17 +193,18 @@ function cleanDetail(detail: string): string {
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-// Header names (lower-cased) that carry credentials and must never follow a
-// redirect to a different origin.
-const CREDENTIAL_HEADERS = new Set(["authorization", "x-api-key", "cookie"]);
+// The headers the engine sets itself, under the exact keys it uses. They are the
+// only ones that follow a cross-origin redirect.
+const ENGINE_HEADERS = new Set(["Accept", "User-Agent"]);
 
-/** Return a copy of `headers` with any credential-bearing header removed. */
-function stripCredentialHeaders(headers: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [name, value] of Object.entries(headers)) {
-    if (!CREDENTIAL_HEADERS.has(name.toLowerCase())) out[name] = value;
-  }
-  return out;
+/**
+ * A copy of `headers` without any caller-supplied header (used on cross-origin
+ * redirects). A list of known credential headers is never complete
+ * (Proxy-Authorization, X-Auth-Token, ...), so only the engine's own
+ * non-credential headers are kept.
+ */
+function engineHeadersOnly(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([key]) => ENGINE_HEADERS.has(key)));
 }
 
 export class RequestEngine {
@@ -297,12 +304,12 @@ export class RequestEngine {
       if (next !== undefined) {
         const prev = new URL(url);
         // SECURITY: the v2 read routes need no credentials, but a caller may still
-        // inject an Authorization / X-API-Key / Cookie header via defaultHeaders.
-        // When a redirect crosses origins, drop every credential header so it is
-        // never sent to a foreign host (the classic credential-leak-on-redirect
-        // that fetch/curl guard against).
+        // inject one (Authorization, Proxy-Authorization, a token header ...) via
+        // defaultHeaders. When a redirect crosses origins, drop every caller header
+        // so none is ever sent to a foreign host (the classic credential-leak-on-
+        // redirect that fetch/curl guard against).
         if (next.origin !== prev.origin) {
-          headers = stripCredentialHeaders(headers);
+          headers = engineHeadersOnly(headers);
         }
         // A same-scheme change from https: to http: is a transport downgrade: the
         // remaining hops (and the response body) travel in cleartext. Credentials

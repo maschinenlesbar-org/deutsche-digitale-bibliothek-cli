@@ -153,5 +153,6 @@ not found · `6` network failure · `1` other API/runtime error. See
 
 **Cross-origin credential stripping.** The read routes send no credentials, but if
 you inject one via a header and the API ever redirects to a different host, the
-client removes any `Authorization` / `Cookie` / `X-API-Key` header before
-following, so it is never leaked to another origin.
+client drops every header you added (`Authorization`, `Proxy-Authorization`,
+`Cookie`, `X-API-Key`, any token header) before following, so none is leaked to
+another origin.
