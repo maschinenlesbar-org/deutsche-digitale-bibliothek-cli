@@ -264,6 +264,24 @@ test("item raw XML to a non-terminal stdout is written byte-exact", async () => 
   assert.ok(binary[0]!.equals(body));
 });
 
+test("item --lang / --rows / --offset for a part that ignores them is a usage error", async () => {
+  const cases: [string[], RegExp][] = [
+    [["--part", "parents", "--lang", "de"], /--lang applies only to --part view, aip, edm, binaries, source, source-description\./],
+    [["--part", "edm", "--rows", "5"], /--rows applies only to --part children\./],
+    [["--offset", "3"], /--offset applies only to --part children\./],
+  ];
+  for (const [args, message] of cases) {
+    const cli = makeCli(() => jsonResponse(fx.itemView));
+    const code = await run(["item", ID, ...args], cli.deps);
+    assert.equal(code, 2, args.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), message);
+  }
+  const ok = makeCli(() => jsonResponse(fx.itemView));
+  assert.equal(await run(["item", ID, "--part", "children", "--rows", "5", "--offset", "3"], ok.deps), 0);
+  assert.equal(await run(["item", ID, "--part", "edm", "--lang", "de"], ok.deps), 0);
+});
+
 test("-o does not pass force by default; --force threads through (DDB-02)", async () => {
   const cli = makeCli(() => jsonResponse(fx.itemView));
   await run(["item", ID, "-o", "out.json"], cli.deps);

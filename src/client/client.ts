@@ -45,14 +45,15 @@ const PART_SUFFIX: Record<ItemPart, string> = {
 };
 
 /** Item parts that accept a `lang` query parameter for localised labels. */
-const LANG_PARTS = new Set<ItemPart>([
+export const ITEM_LANG_PARTS: readonly ItemPart[] = [
   "view",
   "aip",
   "edm",
   "binaries",
   "source",
   "source-description",
-]);
+];
+const LANG_PARTS = new Set<ItemPart>(ITEM_LANG_PARTS);
 
 export class DdbClient {
   private readonly engine: RequestEngine;

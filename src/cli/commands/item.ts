@@ -9,6 +9,7 @@ import type { CliDeps } from "../io.js";
 import type { ItemOptions, ItemPart } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
 import { sanitizeServerText } from "../../client/engine.js";
+import { ITEM_LANG_PARTS } from "../../client/client.js";
 import { action, parseIntArg, parseNonEmpty, renderJson } from "../shared.js";
 
 const PARTS: readonly ItemPart[] = [
@@ -58,7 +59,16 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
           );
         }
         const part = opts["part"] as ItemPart;
-        const itemOpts: ItemOptions = {};
+        // The API ignores these where they don't apply; say so instead of
+        // silently dropping them.
+        if (opts["lang"] !== undefined && !ITEM_LANG_PARTS.includes(part)) {
+          throw new DdbUsageError(`--lang applies only to --part ${ITEM_LANG_PARTS.join(", ")}.`);
+        }
+        for (const name of ["rows", "offset"]) {
+          if (opts[name] !== undefined && part !== "children") {
+            throw new DdbUsageError(`--${name} applies only to --part children.`);
+          }
+        }        const itemOpts: ItemOptions = {};
         if (typeof opts["lang"] === "string") itemOpts.lang = opts["lang"];
         if (typeof opts["rows"] === "number") itemOpts.rows = opts["rows"];
         if (typeof opts["offset"] === "number") itemOpts.offset = opts["offset"];

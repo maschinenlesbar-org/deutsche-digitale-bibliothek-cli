@@ -127,7 +127,7 @@ nothing appended; only on a terminal are control characters removed first:
 | `aip` | the full Archive Information Package | JSON |
 | `edm` | the Europeana Data Model record | RDF/**XML** |
 | `binaries` | related binary files (thumbnails, media) and their URLs | JSON |
-| `children` | child items (accepts `--rows`/`--offset`) | JSON |
+| `children` | child items (accepts `--rows`/`--offset`, the only part that does) | JSON |
 | `parents` | the chain up the hierarchy: the object itself first, the institution last | JSON |
 | `source` | the ingest source metadata | JSON |
 | `source-description` | a description of the source record | JSON |
@@ -136,7 +136,8 @@ nothing appended; only on a terminal are control characters removed first:
 | `citation` | a newspaper-issue citation file (only where applicable) | BIB file |
 
 `--lang <code>` sets the preferred label language for
-`view`/`aip`/`edm`/`binaries`/`source`/`source-description`. An object without a
+`view`/`aip`/`edm`/`binaries`/`source`/`source-description` (with any other part
+it is a usage error, exit 2, as are `--rows`/`--offset` outside `children`). An object without a
 record in that language answers `404` (exit 4); `--lang en` did so for every
 object tried on 2026-09-15, so retry without `--lang` before treating the id as
 wrong.
