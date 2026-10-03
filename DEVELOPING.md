@@ -106,6 +106,10 @@ the older checks above still throw a plain `DdbError`):
   be exactly 32 upper-case letters and digits (`itemIdProblem`); a lower-case id
   gets the upper-case form as a hint (`Invalid id: Item ids are upper case: try
   "…".`).
+- **Solr collection and request handler** (`search({ collection, requestHandler })`):
+  letters, digits, `.`, `_` and `-` only, and not `.` or `..` (`pathNameProblem`).
+  The CLI's `--collection`/`--handler` parsers use the same rule. The engine's
+  dot-segment guard in `buildUrl` stays as a backstop for any other path.
 
 ### Methods
 

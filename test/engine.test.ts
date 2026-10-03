@@ -79,13 +79,24 @@ test("buildUrl normalises the path and appends the query", () => {
 test("a . or .. path segment is rejected without a request (library callers too)", async () => {
   const mt = makeMockTransport(() => jsonResponse({}));
   const client = new DdbClient({ transport: mt.transport });
+  // The client's own rules (pathNameProblem, normalizeItemId) reject these first ...
   await assert.rejects(
     () => client.search({ query: "x", collection: "..", requestHandler: ".." }),
     (err) =>
       err instanceof DdbError &&
-      err.message === 'Invalid path segment ".." in /search/index/../..: "." and ".." cannot be used as an id.',
+      err.message === 'Invalid collection: "." and ".." are path navigation, not a name.',
   );
   await assert.rejects(() => client.item("."), DdbError);
+  assert.equal(mt.calls.length, 0);
+  // ... and the engine's guard stays as the backstop for any other path.
+  const engine = new RequestEngine({ transport: mt.transport });
+  assert.throws(
+    () => engine.buildUrl("/search/index/../.."),
+    (err) =>
+      err instanceof DdbError &&
+      err.message === 'Invalid path segment ".." in /search/index/../..: "." and ".." cannot be used as an id.',
+  );
+  await assert.rejects(() => engine.getJson("/items/./view"), DdbError);
   assert.equal(mt.calls.length, 0);
 });
 

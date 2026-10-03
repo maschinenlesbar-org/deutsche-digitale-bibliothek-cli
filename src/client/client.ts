@@ -15,7 +15,7 @@
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import { DdbError, DdbParseError } from "./errors.js";
 import type { QueryParams } from "./query.js";
-import { normalizeItemId } from "./validate.js";
+import { assertValid, normalizeItemId, pathNameProblem } from "./validate.js";
 import type {
   ItemOptions,
   ItemPart,
@@ -94,8 +94,11 @@ function assertSearchParams(params: SearchParams): void {
   assertInt("start", params.start);
   // facet.limit -1 is Solr's "no limit".
   assertInt("facetLimit", params.facetLimit, -1);
-  for (const key of ["sort", "fields", "collection", "requestHandler"] as const) {
+  for (const key of ["sort", "fields"] as const) {
     if (params[key] !== undefined) assertText(key, params[key]);
+  }
+  for (const key of ["collection", "requestHandler"] as const) {
+    if (params[key] !== undefined) assertValid(key, params[key], pathNameProblem);
   }
   for (const key of ["filters", "facetFields"] as const) {
     for (const value of params[key] ?? []) assertText(`${key} entry`, value);
@@ -122,7 +125,9 @@ export class DdbClient {
    * syntax; the response is native Solr JSON. `wt=json` is always forced. The
    * parameters are checked first (non-blank query and strings, integers from 0 to
    * 2^31 - 1, `facetLimit` -1 or more and only with `facetFields`); a bad one
-   * throws DdbError without a request. A 2xx
+   * throws DdbError without a request. `collection` and `requestHandler` must be
+   * letters, digits, `.`, `_` and `-` (not "." or ".."; `pathNameProblem`), or the
+   * call rejects with a DdbValidationError without a request. A 2xx
    * body that is not a JSON object (empty, `null`, an array, a scalar) or whose
    * `response` is not an object raises DdbParseError.
    */

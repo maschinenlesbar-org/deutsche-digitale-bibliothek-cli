@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertValid, itemIdProblem, normalizeItemId, type Problem } from "../src/client/validate.js";
+import { assertValid, itemIdProblem, normalizeItemId, pathNameProblem, type Problem } from "../src/client/validate.js";
 import * as lib from "../src/index.js";
 import { DdbError, DdbUsageError, DdbValidationError } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
@@ -87,4 +87,16 @@ test("normalizeItemId trims, validates and is idempotent", () => {
   );
   assert.equal(lib.normalizeItemId, normalizeItemId);
   assert.equal(lib.itemIdProblem, itemIdProblem);
+});
+
+test("pathNameProblem: letters, digits, '.', '_' and '-', but not '.' or '..'", () => {
+  for (const ok of ["search", "select", "news_paper-1.0", "a..b"]) assert.equal(pathNameProblem(ok), undefined, ok);
+  for (const bad of ["", " search ", "a/b", "ü", "%2e", "select?x=1"]) {
+    assert.equal(pathNameProblem(bad), "Expected letters, digits, '.', '_' or '-' only.", bad);
+  }
+  for (const dots of [".", ".."]) {
+    assert.equal(pathNameProblem(dots), '"." and ".." are path navigation, not a name.', dots);
+  }
+  assert.equal(pathNameProblem(7), "Expected a string.");
+  assert.equal(lib.pathNameProblem, pathNameProblem);
 });

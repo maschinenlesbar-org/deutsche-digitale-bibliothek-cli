@@ -50,3 +50,17 @@ export const itemIdProblem: Problem = (id) => {
 export function normalizeItemId(id: string): string {
   return assertValid("id", typeof id === "string" ? id.trim() : id, itemIdProblem);
 }
+
+/**
+ * A Solr collection or request-handler name (`search({ collection,
+ * requestHandler })`): letters, digits, `.`, `_` and `-` only. These go into the
+ * request path, so anything else (a `/`, `?`, space or non-ASCII letter) cannot
+ * name a Solr core or handler. "." and ".." are rejected too: URL parsing would
+ * resolve them as dot segments and leave the route.
+ */
+export const pathNameProblem: Problem = (value) => {
+  if (typeof value !== "string") return "Expected a string.";
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) return "Expected letters, digits, '.', '_' or '-' only.";
+  if (value === "." || value === "..") return '"." and ".." are path navigation, not a name.';
+  return undefined;
+};

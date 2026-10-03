@@ -55,3 +55,30 @@ test("parity: a malformed item id is rejected on both sides before any request (
     assertBothRejected(r, JSON.stringify(id));
   }
 });
+
+test("parity: search collection and handler names are checked on both sides (finding #5)", async () => {
+  const cases: [string, string, Record<string, string>][] = [];
+  for (const v of [" search ", "a/b", "ü", "%2e%2e", " .. ", "..", ".", ""]) {
+    cases.push(["--collection", v, { collection: v }]);
+  }
+  for (const v of ["sel/ect", "select?x=1", " select", ".."]) cases.push(["--handler", v, { requestHandler: v }]);
+  for (const [flag, value, params] of cases) {
+    const r = await parity(
+      ["--compact", "search", "Goethe", flag, value, "--rows", "10"],
+      (t) => new DdbClient({ transport: t }).search({ query: "Goethe", rows: 10, ...params }),
+      () => jsonResponse(fx.solrExact),
+    );
+    const label = `${flag} ${JSON.stringify(value)}`;
+    assert.equal(r.cli.code, 2, label);
+    assert.equal(r.cli.requests.length, 0, label);
+    assert.equal(r.lib.ok, false, label);
+    if (!r.lib.ok) assert.ok(r.lib.error instanceof DdbValidationError, `${label}: ${String(r.lib.error)}`);
+    assert.equal(r.lib.requests.length, 0, label);
+  }
+  const ok = await parity(
+    ["--compact", "search", "Goethe", "--collection", "news_paper-1.0", "--handler", "mlt", "--rows", "10"],
+    (t) => new DdbClient({ transport: t }).search({ query: "Goethe", rows: 10, collection: "news_paper-1.0", requestHandler: "mlt" }),
+    () => jsonResponse(fx.solrExact),
+  );
+  assertSameRequests(ok, "valid names");
+});
