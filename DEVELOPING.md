@@ -82,7 +82,7 @@ The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxR
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
 `DdbError` naming the option. The client also checks its own parameters before any
-request: a blank `query`/`id`/`lang`/`sort`/filter, an unknown `part`, a non-integer
+request: a blank `query`/`lang`/`sort`/filter, an unknown `part`, a non-integer
 or negative `rows`/`start`/`offset` (at most 2^31−1), a `facetLimit` below −1 or
 without `facetFields` throw a `DdbError` (`Invalid <name>: expected …, got …`).
 
@@ -102,7 +102,10 @@ parsers call the same functions and turn a reason into commander's
 What the library rejects with `DdbValidationError` (rules move here one by one;
 the older checks above still throw a plain `DdbError`):
 
-- (filled in per rule as the rules move into the library)
+- **Item ids** (`item(id)`): the id is trimmed (`normalizeItemId`) and must then
+  be exactly 32 upper-case letters and digits (`itemIdProblem`); a lower-case id
+  gets the upper-case form as a hint (`Invalid id: Item ids are upper case: try
+  "…".`).
 
 ### Methods
 
@@ -159,8 +162,10 @@ service:
   the DDB envelope `{ name, message, stacktrace }` (item endpoints), with a proper
   HTTP status. `DdbApiError` surfaces the human-readable message as `detail` and
   any `name` as `apiName`.
-- **Item ids are exactly 32 characters.** The `item` command validates this up
-  front so a truncated id fails fast with exit 2 instead of a bare 404.
+- **Item ids are exactly 32 upper-case letters and digits.** The client
+  (`normalizeItemId`) trims the id and rejects any other one before a request, so
+  a truncated or lower-cased id fails fast (`DdbValidationError`; exit 2 in the
+  CLI) instead of a bare 404.
 
 ## Architecture
 

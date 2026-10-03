@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertValid, type Problem } from "../src/client/validate.js";
+import { assertValid, itemIdProblem, normalizeItemId, type Problem } from "../src/client/validate.js";
 import * as lib from "../src/index.js";
 import { DdbError, DdbUsageError, DdbValidationError } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
@@ -57,4 +57,34 @@ test("parity() runs one input through the CLI and the library on one recording t
   assert.deepEqual(requestLines(cli.requests), requestLines(l.requests));
   assert.equal(cli.requests.length, 1);
   assert.deepEqual(JSON.parse(cli.out), l.ok ? l.value : undefined);
+});
+
+test("itemIdProblem: 32 upper-case letters and digits, with a hint for lower case", () => {
+  const ID = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
+  assert.equal(itemIdProblem(ID), undefined);
+  assert.equal(itemIdProblem("ABC"), "Expected exactly 32 characters (got 3). Copy the `id` from a search result.");
+  assert.equal(itemIdProblem(""), "Expected exactly 32 characters (got 0). Copy the `id` from a search result.");
+  assert.equal(itemIdProblem(ID.toLowerCase()), `Item ids are upper case: try "${ID}".`);
+  for (const bad of [`${ID.slice(0, 31)}!`, ".".repeat(32), "/".repeat(32), ` ${ID.slice(1)}`]) {
+    assert.equal(
+      itemIdProblem(bad),
+      "Expected 32 upper-case letters and digits (A-Z, 0-9). Copy the `id` from a search result.",
+      bad,
+    );
+  }
+  assert.equal(itemIdProblem(42), "Expected a string.");
+});
+
+test("normalizeItemId trims, validates and is idempotent", () => {
+  const ID = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
+  assert.equal(normalizeItemId(` ${ID}\n`), ID);
+  assert.equal(normalizeItemId(normalizeItemId(ID)), ID);
+  assert.throws(
+    () => normalizeItemId("abc"),
+    (err: unknown) =>
+      err instanceof DdbValidationError &&
+      err.message === "Invalid id: Expected exactly 32 characters (got 3). Copy the `id` from a search result.",
+  );
+  assert.equal(lib.normalizeItemId, normalizeItemId);
+  assert.equal(lib.itemIdProblem, itemIdProblem);
 });

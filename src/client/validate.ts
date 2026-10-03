@@ -25,3 +25,28 @@ export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
   if (reason !== undefined) throw new DdbValidationError(`Invalid ${name}: ${reason}`);
   return value;
 }
+
+/**
+ * A DDB item id is exactly 32 upper-case letters and digits (`[A-Z0-9]{32}`). Ids
+ * are case sensitive upstream, so a lower-cased paste gets the upper-case form as
+ * a hint. Checks the value as given; {@link normalizeItemId} trims it first.
+ */
+export const itemIdProblem: Problem = (id) => {
+  if (typeof id !== "string") return "Expected a string.";
+  if (id.length !== 32) {
+    return `Expected exactly 32 characters (got ${id.length}). Copy the \`id\` from a search result.`;
+  }
+  if (/^[A-Z0-9]{32}$/.test(id)) return undefined;
+  return /^[A-Za-z0-9]{32}$/.test(id)
+    ? `Item ids are upper case: try "${id.toUpperCase()}".`
+    : "Expected 32 upper-case letters and digits (A-Z, 0-9). Copy the `id` from a search result.";
+};
+
+/**
+ * The canonical form of an item id: surrounding whitespace (a copy-paste, `$(...)`,
+ * a CSV cell) trimmed, then checked with {@link itemIdProblem}. Throws a
+ * DdbValidationError (`Invalid id: …`) for anything else. Idempotent.
+ */
+export function normalizeItemId(id: string): string {
+  return assertValid("id", typeof id === "string" ? id.trim() : id, itemIdProblem);
+}

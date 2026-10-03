@@ -15,8 +15,10 @@ research bodies) and offers one shared search across them.
 
 **Object / item.** A single catalogued thing — a book, image, archival record,
 piece of sheet music, film, audio recording, etc. Identified by a **32-character
-id** (e.g. `TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK`), the value in a search result's
-`id` and the argument to `ddb item`.
+id** of upper-case letters and digits (e.g. `TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK`),
+the value in a search result's `id` and the argument to `ddb item`. Surrounding
+whitespace is ignored; any other id is rejected before a request, by the CLI and
+the library alike.
 
 **Institution / provider.** A data partner that contributes objects. There is no
 dedicated `institutions` command in this CLI; filter or aggregate by provider

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient } from "../src/client/client.js";
-import { DdbError, DdbNetworkError, DdbParseError } from "../src/client/errors.js";
+import { DdbError, DdbNetworkError, DdbParseError, DdbValidationError } from "../src/client/errors.js";
 import type { ItemPart, SearchParams } from "../src/client/types.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
@@ -186,7 +186,7 @@ test("the client rejects a blank id, an unknown part and bad item options withou
   const cases: [() => Promise<unknown>, RegExp][] = [];
   const mt = makeMockTransport(() => jsonResponse(fx.itemView));
   const c = new DdbClient({ transport: mt.transport });
-  cases.push([() => c.item(""), /^Invalid id: expected a non-empty string, got ""\.$/]);
+  cases.push([() => c.item(""), /^Invalid id: Expected exactly 32 characters \(got 0\)\. /]);
   cases.push([() => c.item(id, "foo" as ItemPart), /^Invalid part: expected one of view, aip, edm, .*, got "foo"\.$/]);
   cases.push([() => c.item(id, "toString" as ItemPart), /^Invalid part: /]);
   cases.push([() => c.item(id, "children", { rows: -1 }), /^Invalid rows: /]);
@@ -194,6 +194,29 @@ test("the client rejects a blank id, an unknown part and bad item options withou
   cases.push([() => c.item(id, "view", { lang: " " }), /^Invalid lang: /]);
   for (const [call, message] of cases) {
     await assert.rejects(call, (err) => err instanceof DdbError && message.test(err.message), String(message));
+  }
+  assert.equal(mt.calls.length, 0);
+});
+
+test("item trims the id and rejects a malformed one with DdbValidationError, without a request", async () => {
+  const id = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
+  const mt = makeMockTransport(() => jsonResponse(fx.itemView));
+  const c = new DdbClient({ transport: mt.transport });
+  await c.item(` ${id}\n`, "edm");
+  assert.equal(pathOf(mt.last().url), `/2/items/${id}/edm`);
+  mt.calls.length = 0;
+  const cases: [string, RegExp][] = [
+    ["ABC", /^Invalid id: Expected exactly 32 characters \(got 3\)\./],
+    [id.toLowerCase(), new RegExp(`^Invalid id: Item ids are upper case: try "${id}"\\.$`)],
+    [`${id.slice(0, 31)}!`, /^Invalid id: Expected 32 upper-case letters and digits/],
+    ["a/b", /^Invalid id: Expected exactly 32 characters/],
+  ];
+  for (const [bad, message] of cases) {
+    await assert.rejects(
+      () => c.item(bad),
+      (err) => err instanceof DdbValidationError && message.test(err.message),
+      bad,
+    );
   }
   assert.equal(mt.calls.length, 0);
 });

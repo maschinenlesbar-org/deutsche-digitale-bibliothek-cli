@@ -15,6 +15,7 @@
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import { DdbError, DdbParseError } from "./errors.js";
 import type { QueryParams } from "./query.js";
+import { normalizeItemId } from "./validate.js";
 import type {
   ItemOptions,
   ItemPart,
@@ -153,11 +154,13 @@ export class DdbClient {
    * Fetch one component of an item by its 32-character id (defaults to `view`).
    * Decodes by Content-Type: JSON components are parsed into `json`, while the
    * XML / file components (edm, source-record, citation) are returned as `text`
-   * (plus the exact `bytes`). A blank id, an unknown part, a blank `lang` or a
+   * (plus the exact `bytes`). The id is trimmed and must then be exactly 32
+   * upper-case letters and digits (`normalizeItemId`); anything else rejects with
+   * a DdbValidationError without a request. An unknown part, a blank `lang` or a
    * non-integer / negative `rows`/`offset` throws DdbError without a request.
    */
-  async item(id: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
-    assertText("id", id);
+  async item(rawId: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
+    const id = normalizeItemId(rawId);
     if (!Object.hasOwn(PART_SUFFIX, part)) {
       throw invalid("part", `one of ${Object.keys(PART_SUFFIX).join(", ")}`, part);
     }

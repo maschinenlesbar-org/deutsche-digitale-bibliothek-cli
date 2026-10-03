@@ -48,25 +48,6 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
     .option("--offset <n>", "offset for --part children", parseSolrInt)
     .action(
       action(deps, async ({ client, global, opts }, [id]) => {
-        // DDB item ids are exactly 32 upper-case letters and digits. A wrong id
-        // would hit a 404 (or the collection endpoint); reject it up front with a
-        // clear message so a truncated/typo'd id is obvious. Ids are case
-        // sensitive upstream, so a lower-cased paste gets the upper-case form.
-        const trimmed = (id ?? "").trim();
-        if (trimmed.length !== 32) {
-          throw new DdbUsageError(
-            `Item id must be exactly 32 characters (got ${trimmed.length}). ` +
-              "Copy the `id` from a search result.",
-          );
-        }
-        if (!/^[A-Z0-9]{32}$/.test(trimmed)) {
-          throw new DdbUsageError(
-            /^[A-Za-z0-9]{32}$/.test(trimmed)
-              ? `Item ids are upper case: try "${trimmed.toUpperCase()}".`
-              : "Item id must be 32 upper-case letters and digits (A-Z, 0-9). " +
-                  "Copy the `id` from a search result.",
-          );
-        }
         const part = opts["part"] as ItemPart;
         // The API ignores these where they don't apply; say so instead of
         // silently dropping them.
@@ -82,7 +63,9 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
         if (typeof opts["rows"] === "number") itemOpts.rows = opts["rows"];
         if (typeof opts["offset"] === "number") itemOpts.offset = opts["offset"];
 
-        const result = await client.item(trimmed, part, itemOpts);
+        // The library trims the id and rejects a malformed one (normalizeItemId)
+        // before any request; run.ts maps that to exit 2.
+        const result = await client.item(id ?? "", part, itemOpts);
         if (result.text !== undefined) {
           // XML / BIB file component: emit the raw body (no JSON quoting).
           const bytes = result.bytes ?? Buffer.from(result.text, "utf8");

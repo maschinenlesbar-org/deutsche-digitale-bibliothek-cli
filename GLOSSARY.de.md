@@ -14,9 +14,11 @@ rund 500 Partnereinrichtungen (Archive, Bibliotheken, Museen, Forschungseinricht
 eine gemeinsame Suche über alle an.
 
 **Objekt / Item.** Ein einzelnes katalogisiertes Stück – ein Buch, ein Bild, eine Archivalie, ein
-Notenblatt, ein Film, eine Tonaufnahme usw. Es wird über eine **32-stellige ID** identifiziert
-(z. B. `TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK`); das ist der Wert von `id` in einem Suchtreffer und
-das Argument für `ddb item`.
+Notenblatt, ein Film, eine Tonaufnahme usw. Es wird über eine **32-stellige ID** aus
+Großbuchstaben und Ziffern identifiziert (z. B. `TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK`); das ist der
+Wert von `id` in einem Suchtreffer und das Argument für `ddb item`. Leerraum am Anfang und Ende
+wird ignoriert; jede andere ID wird vor einer Anfrage abgelehnt, von der CLI wie von der
+Bibliothek.
 
 **Einrichtung / Provider.** Ein Datenpartner, der Objekte liefert. Diese CLI hat keinen eigenen
 Befehl `institutions`; filtern oder aggregieren Sie stattdessen über die Facette
