@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DdbClient } from "../src/client/client.js";
+import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
 import { DdbValidationError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import { parity, jsonResponse, requestLines, type ParityResult } from "./helpers.js";
@@ -81,4 +81,27 @@ test("parity: search collection and handler names are checked on both sides (fin
     () => jsonResponse(fx.solrExact),
   );
   assertSameRequests(ok, "valid names");
+});
+
+test("parity: search sends the same default page size on both sides (finding #6)", async () => {
+  const plain = await parity(
+    ["--compact", "search", "Goethe"],
+    (t) => new DdbClient({ transport: t }).search({ query: "Goethe" }),
+    () => jsonResponse(fx.solrExact),
+  );
+  assertSameRequests(plain, "no rows");
+  assert.equal(new URL(plain.lib.requests[0]!.url).searchParams.get("rows"), String(DEFAULT_SEARCH_ROWS));
+  const facet = await parity(
+    ["--compact", "search", "Goethe", "--facet", "type_fct"],
+    (t) => new DdbClient({ transport: t }).search({ query: "Goethe", facetFields: ["type_fct"] }),
+    () => jsonResponse(fx.solrExact),
+  );
+  assertSameRequests(facet, "facet, no rows");
+  const zero = await parity(
+    ["--compact", "search", "Goethe", "--rows", "0"],
+    (t) => new DdbClient({ transport: t }).search({ query: "Goethe", rows: 0 }),
+    () => jsonResponse(fx.solrExact),
+  );
+  assertSameRequests(zero, "rows 0");
+  assert.equal(new URL(zero.lib.requests[0]!.url).searchParams.get("rows"), "0");
 });

@@ -45,6 +45,13 @@ const PART_SUFFIX: Record<ItemPart, string> = {
   citation: "/citiation",
 };
 
+/**
+ * The page size `search()` asks for when the caller gives no `rows`: Solr's
+ * stock default, sent explicitly so a collection or handler with another
+ * configured default returns the same page.
+ */
+export const DEFAULT_SEARCH_ROWS = 10;
+
 /** Item parts that accept a `lang` query parameter for localised labels. */
 export const ITEM_LANG_PARTS: readonly ItemPart[] = [
   "view",
@@ -122,7 +129,8 @@ export class DdbClient {
   /**
    * Search the DDB object index via the v2 Solr passthrough
    * (`GET /2/search/index/{collection}/{requestHandler}`). Values use Solr
-   * syntax; the response is native Solr JSON. `wt=json` is always forced. The
+   * syntax; the response is native Solr JSON. `wt=json` is always forced, and
+   * `rows` defaults to `DEFAULT_SEARCH_ROWS` (10). The
    * parameters are checked first (non-blank query and strings, integers from 0 to
    * 2^31 - 1, `facetLimit` -1 or more and only with `facetFields`); a bad one
    * throws DdbError without a request. `collection` and `requestHandler` must be
@@ -136,7 +144,7 @@ export class DdbClient {
     const collection = params.collection ?? "search";
     const handler = params.requestHandler ?? "select";
     const query: QueryParams = { q: params.query, wt: "json" };
-    if (params.rows !== undefined) query["rows"] = params.rows;
+    query["rows"] = params.rows ?? DEFAULT_SEARCH_ROWS;
     if (params.start !== undefined) query["start"] = params.start;
     if (params.sort !== undefined) query["sort"] = params.sort;
     if (params.fields !== undefined) query["fl"] = params.fields;

@@ -108,7 +108,7 @@ export interface ItemOptions {
 export interface SearchParams {
   /** The Solr query (`q`). Use `*:*` to match everything. */
   query: string;
-  /** Number of documents to return (`rows`). */
+  /** Number of documents to return (`rows`). Defaults to `DEFAULT_SEARCH_ROWS` (10). */
   rows?: number;
   /** Offset of the first returned document (`start`), for paging. */
   start?: number;

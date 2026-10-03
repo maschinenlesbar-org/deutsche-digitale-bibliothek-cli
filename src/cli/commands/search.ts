@@ -9,6 +9,7 @@ import type { CliDeps } from "../io.js";
 import type { SearchParams } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
 import { pathNameProblem } from "../../client/validate.js";
+import { DEFAULT_SEARCH_ROWS } from "../../client/client.js";
 import { action, parseFacetLimit, parseNonEmpty, parseSolrInt, renderJson } from "../shared.js";
 
 /**
@@ -35,7 +36,7 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
     .command("search")
     .description("Search cultural-heritage objects via the v2 Solr index (returns native Solr JSON)")
     .argument("<query>", "Solr query (q); use '*:*' to match everything")
-    .option("--rows <n>", "number of documents to return (Solr rows)", parseSolrInt, 10)
+    .option("--rows <n>", `number of documents to return (Solr rows; default ${DEFAULT_SEARCH_ROWS})`, parseSolrInt)
     .option("--offset <n>", "offset of the first document (Solr start), for paging", parseSolrInt)
     .option("--sort <spec>", "Solr sort, e.g. \"score desc\" or \"id asc\"", parseNonEmpty)
     .option("--fields <list>", "comma-separated fields to return (Solr fl), e.g. id,title", parseNonEmpty)

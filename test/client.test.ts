@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DdbClient } from "../src/client/client.js";
+import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
+import * as lib from "../src/index.js";
 import { DdbError, DdbNetworkError, DdbParseError, DdbValidationError } from "../src/client/errors.js";
 import type { ItemPart, SearchParams } from "../src/client/types.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
@@ -23,6 +24,14 @@ test("search hits the Solr passthrough path and forwards q, rows, start, sort, f
   assert.equal(q.get("sort"), "id asc");
   assert.equal(q.get("fl"), "id,title");
   assert.equal(q.get("wt"), "json");
+});
+
+test("search sends rows=DEFAULT_SEARCH_ROWS (10) when no rows is given", async () => {
+  assert.equal(DEFAULT_SEARCH_ROWS, 10);
+  assert.equal(lib.DEFAULT_SEARCH_ROWS, DEFAULT_SEARCH_ROWS);
+  const mt = makeMockTransport(() => jsonResponse(fx.solr));
+  await new DdbClient({ transport: mt.transport }).search({ query: "Goethe" });
+  assert.equal(queryOf(mt.last()).get("rows"), "10");
 });
 
 test("search enables faceting and forwards repeated facet.field + facet.limit", async () => {

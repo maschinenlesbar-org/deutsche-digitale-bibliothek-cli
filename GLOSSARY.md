@@ -41,7 +41,8 @@ phrases"`, boolean `AND`/`OR`/`NOT`, field-scoped terms (`title:Faust`), ranges,
 and **`*:*`** to match every document.
 
 **`q` (the query).** The search term(s). Required; pass `'*:*'` to browse all
-objects. `ddb search` caps results at `--rows 10` by default.
+objects. `ddb search` caps results at `--rows 10` by default; the library's
+`search()` sends the same default (`DEFAULT_SEARCH_ROWS`).
 
 **rows / start.** `--rows` is the page size (Solr `rows`); `--offset` is how many
 leading documents to skip (Solr `start`). Together they page a result set.

@@ -114,7 +114,8 @@ the older checks above still throw a plain `DdbError`):
 ### Methods
 
 - `search(params)` → a `SolrResponse` (`GET /2/search/index/{collection}/{requestHandler}`,
-  default `search`/`select`). Params map to Solr: `query`→`q`, `rows`, `start`,
+  default `search`/`select`). Params map to Solr: `query`→`q`, `rows` (default
+  `DEFAULT_SEARCH_ROWS`, 10, sent explicitly), `start`,
   `sort`, `fields`→`fl`, `filters`→`fq` (repeatable), `facetFields`→`facet.field`
   (sets `facet=true`), `facetLimit`→`facet.limit`. `wt=json` is forced.
 - `item(id, part?, opts?)` → an `ItemResult` (`GET /2/items/{id}...`). `part`

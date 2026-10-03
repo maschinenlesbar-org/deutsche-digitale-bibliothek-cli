@@ -40,7 +40,8 @@ Anführungszeichen (`"quoted phrases"`), die booleschen Operatoren `AND`/`OR`/`N
 Terme (`title:Faust`), Bereiche und **`*:*`** als Treffer für alle Dokumente.
 
 **`q` (die Abfrage).** Der oder die Suchbegriffe. Pflichtangabe; übergeben Sie `'*:*'`, um alle
-Objekte zu durchstöbern. `ddb search` begrenzt die Treffer standardmäßig auf `--rows 10`.
+Objekte zu durchstöbern. `ddb search` begrenzt die Treffer standardmäßig auf `--rows 10`;
+`search()` in der Bibliothek sendet denselben Standardwert (`DEFAULT_SEARCH_ROWS`).
 
 **rows / start.** `--rows` ist die Seitengröße (Solr `rows`); `--offset` gibt an, wie viele
 Dokumente am Anfang übersprungen werden (Solr `start`). Zusammen blättern sie durch eine
