@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText } from "../src/client/engine.js";
+import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/client/engine.js";
 import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, redactUrl } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
 import type { HttpResponse } from "../src/client/http.js";
@@ -65,6 +65,19 @@ test("a base URL with a query or fragment is rejected at construction", () => {
     );
     assert.equal(mt.calls.length, 0);
   }
+});
+
+test("a base URL with surrounding whitespace is rejected at construction, before the slash strip", () => {
+  for (const baseUrl of ["https://example.test/2 ", " https://example.test/2", "https://example.test/2/ ", "\thttps://example.test"]) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new RequestEngine({ transport: mt.transport, baseUrl }),
+      (err: unknown) => err instanceof DdbError && /surrounding whitespace/.test(err.message),
+      JSON.stringify(baseUrl),
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+  assert.equal(validateBaseUrl("https://example.test/2//"), "https://example.test/2");
 });
 
 test("buildUrl normalises the path and appends the query", () => {

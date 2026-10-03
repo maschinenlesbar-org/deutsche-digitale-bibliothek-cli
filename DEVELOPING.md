@@ -78,6 +78,11 @@ the read routes are unauthenticated. (If you ever need to reach an authenticated
 endpoint, inject an `Authorization` header via the engine's `defaultHeaders`; it
 is stripped on cross-origin redirects, see below.)
 
+The base URL is checked raw by the exported `validateBaseUrl` before the
+trailing-slash strip: surrounding whitespace, a URL that does not parse, a scheme
+other than `http:`/`https:` and a query or fragment make the constructor throw
+(userinfo is allowed and redacted from messages).
+
 The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a

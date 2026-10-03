@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
-import { DdbValidationError } from "../src/client/errors.js";
+import { DdbError, DdbValidationError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import type { ItemOptions, ItemPart } from "../src/client/types.js";
 import { parity, jsonResponse, rawResponse, requestLines, type ParityResult } from "./helpers.js";
@@ -177,4 +177,28 @@ test("parity: a User-Agent the CLI rejects is rejected by the library before any
     assert.equal(r.cli.requests[0]!.headers?.["User-Agent"], ua);
     assert.equal(r.lib.requests[0]!.headers?.["User-Agent"], ua);
   }
+});
+
+test("parity: a base URL with surrounding whitespace is rejected on both sides before any request (finding #3)", async () => {
+  const LF = String.fromCharCode(0x0a);
+  for (const baseUrl of ["https://h.example/2 ", " https://h.example/2", "\thttps://h.example/2", "https://h.example/2/ ", `https://h.example/2${LF}`]) {
+    const r = await parity(
+      ["--compact", "--base-url", baseUrl, "version"],
+      (t) => new DdbClient({ transport: t, baseUrl }).version(),
+      () => rawResponse("9.9.9", "text/plain"),
+    );
+    const label = JSON.stringify(baseUrl);
+    assert.equal(r.cli.code, 2, label);
+    assert.equal(r.cli.requests.length, 0, label);
+    assert.equal(r.lib.ok, false, label);
+    if (!r.lib.ok) assert.ok(r.lib.error instanceof DdbError, `${label}: ${String(r.lib.error)}`);
+    assert.equal(r.lib.requests.length, 0, label);
+  }
+  const ok = await parity(
+    ["--compact", "--base-url", "https://h.example/2/", "version"],
+    (t) => new DdbClient({ transport: t, baseUrl: "https://h.example/2/" }).version(),
+    () => rawResponse("9.9.9", "text/plain"),
+  );
+  assertSameRequests(ok, "trailing slash");
+  assert.equal(ok.lib.requests[0]!.url, "https://h.example/2/version");
 });

@@ -25,7 +25,11 @@ export interface RawResponse {
  * NaN, Infinity, too large) makes the constructor throw a DdbError.
  */
 export interface EngineOptions {
-  /** Base URL of the API. Defaults to https://api.deutsche-digitale-bibliothek.de */
+  /**
+   * Base URL of the API. Defaults to https://api.deutsche-digitale-bibliothek.de/2.
+   * Checked by `validateBaseUrl`: no surrounding whitespace, http(s) only, no query
+   * or fragment.
+   */
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
   transport?: Transport;
@@ -166,15 +170,26 @@ export function sanitizeServerText(text: string): string {
 }
 
 /**
- * Reject a base URL whose scheme is not http(s), or that has a query or fragment.
- * The default transport already gates the scheme per hop, but the engine is
- * exported as a library and may be handed a custom transport that does no such
- * check, so gate the configured base URL here too (a `file:`/`ftp:` base URL fails
- * fast with a typed error). Request paths are appended to the base URL as a string,
- * so a `?` or `#` in it would swallow every path: `http://h/2?x=1` requests
- * `/2?x=1/version` and `http://h/2#f` requests `/2`.
+ * Check a configured base URL and return it with trailing slashes stripped. Rejects
+ * surrounding whitespace, a URL that does not parse, a scheme other than http(s),
+ * and a query or fragment.
+ *
+ * Runs on the raw value, before the slash strip. `new URL()` trims surrounding
+ * whitespace silently, but the engine appends request paths to the raw string, so
+ * `"https://h/2 "` would request `/2%20/version` and `"https://h/2/ "` would slip
+ * past the slash strip. The default transport already gates the scheme per hop,
+ * but the engine is exported as a library and may be handed a custom transport
+ * that does no such check, so gate the configured base URL here too (a
+ * `file:`/`ftp:` base URL fails fast with a typed error). A `?` or `#` would
+ * swallow every path: `http://h/2?x=1` requests `/2?x=1/version` and
+ * `http://h/2#f` requests `/2`.
  */
-function assertHttpScheme(baseUrl: string): void {
+export function validateBaseUrl(baseUrl: string): string {
+  if (typeof baseUrl === "string" && baseUrl !== baseUrl.trim()) {
+    throw new DdbNetworkError(
+      `Base URL must not have surrounding whitespace: ${JSON.stringify(redactUrl(baseUrl.trim()))}`,
+    );
+  }
   let url: URL;
   try {
     url = new URL(baseUrl);
@@ -189,6 +204,7 @@ function assertHttpScheme(baseUrl: string): void {
   if (/[?#]/.test(baseUrl)) {
     throw new DdbNetworkError(`Base URL must not contain a query or fragment: ${redactUrl(baseUrl)}`);
   }
+  return baseUrl.replace(/\/+$/, "");
 }
 
 /**
@@ -257,8 +273,8 @@ export class RequestEngine {
   private readonly warn: (message: string) => void;
 
   constructor(options: EngineOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    assertHttpScheme(this.baseUrl);
+    // Checked raw, before the trailing-slash strip (see validateBaseUrl).
+    this.baseUrl = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
     this.transport = options.transport ?? nodeHttpTransport;
     // Only `undefined` selects the default; a blank or otherwise unsendable value
     // is a DdbValidationError here rather than a network error at request time.
