@@ -274,9 +274,9 @@ test("item raw XML to a non-terminal stdout is written byte-exact", async () => 
 
 test("item --lang / --rows / --offset for a part that ignores them is a usage error", async () => {
   const cases: [string[], RegExp][] = [
-    [["--part", "parents", "--lang", "de"], /--lang applies only to --part view, aip, edm, binaries, source, source-description\./],
-    [["--part", "edm", "--rows", "5"], /--rows applies only to --part children\./],
-    [["--offset", "3"], /--offset applies only to --part children\./],
+    [["--part", "parents", "--lang", "de"], /^Error: Invalid lang: applies only to part view, aip, edm, binaries, source, source-description \(got parents\)\.$/],
+    [["--part", "edm", "--rows", "5"], /^Error: Invalid rows: applies only to part children \(got edm\)\.$/],
+    [["--offset", "3"], /^Error: Invalid offset: applies only to part children \(got view\)\.$/],
   ];
   for (const [args, message] of cases) {
     const cli = makeCli(() => jsonResponse(fx.itemView));

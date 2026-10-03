@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
 import { DdbValidationError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
+import type { ItemOptions, ItemPart } from "../src/client/types.js";
 import { parity, jsonResponse, requestLines, type ParityResult } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -104,4 +105,36 @@ test("parity: search sends the same default page size on both sides (finding #6)
   );
   assertSameRequests(zero, "rows 0");
   assert.equal(new URL(zero.lib.requests[0]!.url).searchParams.get("rows"), "0");
+});
+
+test("parity: item lang/rows/offset for a part that ignores them are rejected on both sides (finding #2)", async () => {
+  const cases: [string[], ItemPart | undefined, ItemOptions][] = [
+    [["--part", "iiif", "--lang", "en"], "iiif", { lang: "en" }],
+    [["--part", "children", "--lang", "en"], "children", { lang: "en" }],
+    [["--part", "citation", "--lang", "en"], "citation", { lang: "en" }],
+    [["--part", "view", "--rows", "5", "--offset", "3"], "view", { rows: 5, offset: 3 }],
+    [["--rows", "5"], undefined, { rows: 5 }],
+    [["--part", "parents", "--offset", "5"], "parents", { offset: 5 }],
+    [["--part", "aip", "--rows", "5"], "aip", { rows: 5 }],
+  ];
+  for (const [args, part, opts] of cases) {
+    const r = await parity(
+      ["--compact", "item", ID, ...args],
+      (t) => new DdbClient({ transport: t }).item(ID, part, opts),
+      itemResponder,
+    );
+    assertBothRejected(r, args.join(" "));
+  }
+  const children = await parity(
+    ["--compact", "item", ID, "--part", "children", "--rows", "5", "--offset", "3"],
+    (t) => new DdbClient({ transport: t }).item(ID, "children", { rows: 5, offset: 3 }),
+    itemResponder,
+  );
+  assertSameRequests(children, "children rows/offset");
+  const edm = await parity(
+    ["--compact", "item", ID, "--part", "edm", "--lang", "de"],
+    (t) => new DdbClient({ transport: t }).item(ID, "edm", { lang: "de" }),
+    itemResponder,
+  );
+  assertSameRequests(edm, "edm lang");
 });

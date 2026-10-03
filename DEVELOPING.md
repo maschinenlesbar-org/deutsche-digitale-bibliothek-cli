@@ -110,6 +110,10 @@ the older checks above still throw a plain `DdbError`):
   letters, digits, `.`, `_` and `-` only, and not `.` or `..` (`pathNameProblem`).
   The CLI's `--collection`/`--handler` parsers use the same rule. The engine's
   dot-segment guard in `buildUrl` stays as a backstop for any other path.
+- **Item options for a part that ignores them** (`item(id, part, opts)`,
+  `validateItemOptions`): `lang` outside `ITEM_LANG_PARTS` and `rows`/`offset` for
+  any part but `children` (`Invalid lang: applies only to part …`). The API would
+  silently ignore them.
 
 ### Methods
 
@@ -123,7 +127,8 @@ the older checks above still throw a plain `DdbError`):
   `source`, `source-description`, `source-record`, `iiif`, `citation`. The result
   has `json` (for JSON components) **or** `text` (for `edm`/`source-record`/
   `citation`, which the API serves as XML or a file), plus the `contentType`.
-  `opts`: `lang` (localised labels), and `rows`/`offset` for `part: "children"`.
+  `opts`: `lang` (localised labels), and `rows`/`offset` for `part: "children"`;
+  passed for any other part they reject (`validateItemOptions`).
 - `version()` → the backend version string (`GET /2/version`).
 
 ## No authentication

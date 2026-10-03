@@ -126,7 +126,9 @@ ausgegeben (damit sie bei `> file.xml` und in Pipes unverändert bleiben):
 > `--part children` akzeptiert zusätzlich `--rows` / `--offset`, um durch eine große Menge von
 > Kind-Objekten zu blättern. `--lang <code>` legt die bevorzugte Sprache der Bezeichnungen für
 > `view`/`aip`/`edm`/`binaries`/`source`/`source-description` fest; hat ein Objekt keinen
-> Datensatz in dieser Sprache, antwortet die API mit `404` (beobachtet bei `--lang en`).
+> Datensatz in dieser Sprache, antwortet die API mit `404` (beobachtet bei `--lang en`). Alle
+> anderen Komponenten ignorieren diese Optionen bei der API, deshalb lehnen CLI und Bibliothek
+> sie dort vor einer Anfrage ab.
 
 ## Authentifizierung & Rechte
 

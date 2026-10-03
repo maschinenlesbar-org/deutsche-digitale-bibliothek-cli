@@ -13,7 +13,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
-import { DdbError, DdbParseError } from "./errors.js";
+import { DdbError, DdbParseError, DdbValidationError } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, normalizeItemId, pathNameProblem } from "./validate.js";
 import type {
@@ -61,7 +61,27 @@ export const ITEM_LANG_PARTS: readonly ItemPart[] = [
   "source",
   "source-description",
 ];
-const LANG_PARTS = new Set<ItemPart>(ITEM_LANG_PARTS);
+
+/**
+ * Check which item options apply to `part`, before any request: `lang` only to the
+ * parts in {@link ITEM_LANG_PARTS}, `rows`/`offset` only to `children`. The API
+ * ignores them elsewhere, so a caller asking for English labels on `iiif` or a
+ * page of 5 on `view` would get default data with no sign the option was dropped.
+ * Throws a DdbValidationError (`Invalid <option>: applies only to part …`).
+ */
+export function validateItemOptions(part: ItemPart, opts: ItemOptions): ItemOptions {
+  if (opts.lang !== undefined && !ITEM_LANG_PARTS.includes(part)) {
+    throw new DdbValidationError(
+      `Invalid lang: applies only to part ${ITEM_LANG_PARTS.join(", ")} (got ${part}).`,
+    );
+  }
+  for (const key of ["rows", "offset"] as const) {
+    if (opts[key] !== undefined && part !== "children") {
+      throw new DdbValidationError(`Invalid ${key}: applies only to part children (got ${part}).`);
+    }
+  }
+  return opts;
+}
 
 /** A non-null, non-array object. */
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -170,7 +190,9 @@ export class DdbClient {
    * (plus the exact `bytes`). The id is trimmed and must then be exactly 32
    * upper-case letters and digits (`normalizeItemId`); anything else rejects with
    * a DdbValidationError without a request. An unknown part, a blank `lang` or a
-   * non-integer / negative `rows`/`offset` throws DdbError without a request.
+   * non-integer / negative `rows`/`offset` throws DdbError without a request, and
+   * `lang` outside {@link ITEM_LANG_PARTS} or `rows`/`offset` for any part but
+   * `children` rejects with a DdbValidationError (`validateItemOptions`).
    */
   async item(rawId: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
     const id = normalizeItemId(rawId);
@@ -180,12 +202,11 @@ export class DdbClient {
     if (opts.lang !== undefined) assertText("lang", opts.lang);
     assertInt("rows", opts.rows);
     assertInt("offset", opts.offset);
+    validateItemOptions(part, opts);
     const query: QueryParams = {};
-    if (opts.lang !== undefined && LANG_PARTS.has(part)) query["lang"] = opts.lang;
-    if (part === "children") {
-      if (opts.rows !== undefined) query["rows"] = opts.rows;
-      if (opts.offset !== undefined) query["offset"] = opts.offset;
-    }
+    if (opts.lang !== undefined) query["lang"] = opts.lang;
+    if (opts.rows !== undefined) query["rows"] = opts.rows;
+    if (opts.offset !== undefined) query["offset"] = opts.offset;
     const res = await this.engine.getRaw(
       `/items/${enc(id)}${PART_SUFFIX[part]}`,
       "application/json, application/xml;q=0.9, text/plain;q=0.8, */*;q=0.5",

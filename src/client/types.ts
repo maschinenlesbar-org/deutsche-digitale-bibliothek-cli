@@ -92,11 +92,15 @@ export interface ItemResult {
 
 /** Options for an item-component request. */
 export interface ItemOptions {
-  /** Preferred language for localised labels (accepted by view/aip/edm/binaries/source*). */
+  /**
+   * Preferred language for localised labels. Only for the parts in
+   * `ITEM_LANG_PARTS` (view/aip/edm/binaries/source/source-description); any other
+   * part rejects with a DdbValidationError.
+   */
   lang?: string;
-  /** For `--part children`: page size. */
+  /** Page size, for part `children` only (any other part rejects). */
   rows?: number;
-  /** For `--part children`: offset of the first child. */
+  /** Offset of the first child, for part `children` only (any other part rejects). */
   offset?: number;
 }
 

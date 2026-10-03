@@ -106,15 +106,30 @@ test("item citation maps to the (misspelled) upstream /citiation path", async ()
   assert.equal(pathOf(mt.last().url), "/2/items/TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK/citiation");
 });
 
-test("item forwards lang for view but not for parents; children takes rows/offset", async () => {
+test("item forwards lang for view, rejects it for parents; children takes rows/offset", async () => {
   const mt = makeMockTransport(() => jsonResponse({}));
   const c = new DdbClient({ transport: mt.transport });
 
   await c.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "view", { lang: "en" });
   assert.equal(queryOf(mt.last()).get("lang"), "en");
 
-  await c.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "parents", { lang: "en" });
-  assert.equal(queryOf(mt.last()).get("lang"), null);
+  const before = mt.calls.length;
+  await assert.rejects(
+    () => c.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "parents", { lang: "en" }),
+    (err) =>
+      err instanceof DdbValidationError &&
+      err.message ===
+        "Invalid lang: applies only to part view, aip, edm, binaries, source, source-description (got parents).",
+  );
+  await assert.rejects(
+    () => c.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm", { rows: 5 }),
+    (err) => err instanceof DdbValidationError && err.message === "Invalid rows: applies only to part children (got edm).",
+  );
+  await assert.rejects(
+    () => c.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", undefined, { offset: 0 }),
+    (err) => err instanceof DdbValidationError && err.message === "Invalid offset: applies only to part children (got view).",
+  );
+  assert.equal(mt.calls.length, before);
 
   await c.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "children", { rows: 5, offset: 10 });
   const q = queryOf(mt.last());

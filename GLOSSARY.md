@@ -126,7 +126,9 @@ object. Most are JSON; a few are served as XML or a plain file and are printed
 > `--part children` also accepts `--rows` / `--offset` for paging a large child
 > set. `--lang <code>` sets the preferred label language for
 > `view`/`aip`/`edm`/`binaries`/`source`/`source-description`; an object without a
-> record in that language answers `404` (seen for `--lang en`).
+> record in that language answers `404` (seen for `--lang en`). Any other part
+> ignores these upstream, so the CLI and the library reject them there before a
+> request.
 
 ## Auth & rights
 
