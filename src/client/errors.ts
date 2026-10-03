@@ -86,11 +86,19 @@ export class DdbApiError extends DdbError {
 export class DdbNetworkError extends DdbError {}
 
 /**
- * A CLI usage error (bad/missing argument detected after commander parsing, e.g.
- * an item id of the wrong length). Mapped to the conventional usage exit code 2
- * so scripts can distinguish it from a runtime error (1).
+ * A usage error (bad/missing argument detected before any request, e.g. `--force`
+ * without `--output`). Mapped to the conventional usage exit code 2 so scripts can
+ * distinguish it from a runtime error (1).
  */
 export class DdbUsageError extends DdbError {}
+
+/**
+ * The library rejected an input before sending any request (message
+ * `Invalid <name>: <reason>`, see `validate.ts`). It extends `DdbUsageError`, so
+ * existing `instanceof DdbUsageError` checks keep catching it, and the CLI maps it
+ * to the usage exit code 2.
+ */
+export class DdbValidationError extends DdbUsageError {}
 
 /** The response body could not be parsed as the expected JSON shape. */
 export class DdbParseError extends DdbError {}

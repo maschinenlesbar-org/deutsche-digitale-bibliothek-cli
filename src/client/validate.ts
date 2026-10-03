@@ -1,0 +1,27 @@
+// Input validation shared by the library and the CLI. Every rule about what a
+// request may contain lives in src/client as a pure, exported function, so the
+// CLI calls the very same rule instead of keeping a copy.
+//
+// - A `Problem` returns the reason a value is invalid ("Expected a non-empty
+//   value."), or `undefined` when it is valid. The CLI's commander parsers turn
+//   that reason into an `InvalidArgumentError` (exit 2).
+// - `assertValid` runs a `Problem` in the library and throws a
+//   `DdbValidationError` ("Invalid <name>: <reason>") before any request is made.
+//   Methods that return a promise call it inside the async body, so they reject
+//   rather than throw synchronously; constructors throw.
+
+import { DdbValidationError } from "./errors.js";
+
+/** A validation rule: the reason `value` is invalid, or `undefined` when it is valid. */
+export type Problem<T = unknown> = (value: T) => string | undefined;
+
+/**
+ * Check `value` against `problem` and return it unchanged when it is valid.
+ * Otherwise throw a {@link DdbValidationError} with the message
+ * `Invalid <name>: <reason>`.
+ */
+export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
+  const reason = problem(value);
+  if (reason !== undefined) throw new DdbValidationError(`Invalid ${name}: ${reason}`);
+  return value;
+}

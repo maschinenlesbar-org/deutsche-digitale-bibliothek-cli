@@ -86,6 +86,24 @@ request: a blank `query`/`id`/`lang`/`sort`/filter, an unknown `part`, a non-int
 or negative `rows`/`start`/`offset` (at most 2^31−1), a `facetLimit` below −1 or
 without `facetFields` throw a `DdbError` (`Invalid <name>: expected …, got …`).
 
+### Library input validation
+
+The library owns every rule about what a request may contain; the CLI only turns
+argv strings into typed values and calls the same rules. The rules are pure,
+exported functions in `src/client` (`…Problem(value)` returns the reason a value is
+invalid, or `undefined`). The client enforces them before any request through
+`assertValid(name, value, problem)` from `src/client/validate.ts`, which throws
+**`DdbValidationError`** (`Invalid <name>: <reason>`); a client method rejects its
+promise, a constructor throws. `DdbValidationError` extends `DdbUsageError`, so
+`run.ts` maps it to exit 2 and prints `Error: <message>`. The CLI's commander
+parsers call the same functions and turn a reason into commander's
+`InvalidArgumentError` (exit 2 too).
+
+What the library rejects with `DdbValidationError` (rules move here one by one;
+the older checks above still throw a plain `DdbError`):
+
+- (filled in per rule as the rules move into the library)
+
 ### Methods
 
 - `search(params)` → a `SolrResponse` (`GET /2/search/index/{collection}/{requestHandler}`,
@@ -150,10 +168,11 @@ service:
 src/
   client/
     types.ts     # SolrResponse/SolrDoc; ItemPart/ItemResult; SearchParams
+    validate.ts  # the Problem type + assertValid (throws DdbValidationError)
     query.ts     # dependency-free query-string builder
     http.ts      # the Transport interface + default node:http/https transport
     engine.ts    # URL building (base incl. /2), retry/backoff, redirects, decoding, errors
-    errors.ts    # DdbError / DdbApiError / DdbNetworkError / DdbParseError / DdbUsageError
+    errors.ts    # DdbError / DdbApiError / DdbNetworkError / DdbParseError / DdbUsageError / DdbValidationError
     client.ts    # DdbClient — search (Solr) / item (content-type aware) / version
   cli/
     io.ts        # injectable I/O seam (stdout/stderr/file)
@@ -256,9 +275,10 @@ mocked client and captured output — no subprocess.
 
 **Error types.** [`errors.ts`](src/client/errors.ts): `DdbApiError` (non-2xx,
 carries `status`/`apiName`/`detail`/`url`/`method`/`body`, with `isRetryable`),
-`DdbNetworkError` (transport failure/timeout), `DdbParseError` (bad JSON), and
-`DdbUsageError` (a CLI usage error such as a wrong-length item id — no request
-made), all extending `DdbError`.
+`DdbNetworkError` (transport failure/timeout), `DdbParseError` (bad JSON),
+`DdbUsageError` (a usage error such as `--force` without `--output` — no request
+made) and `DdbValidationError` (the library rejected an input before any request;
+it extends `DdbUsageError`), all extending `DdbError`.
 
 ## Testing
 
@@ -275,6 +295,9 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`client.test.ts`** — the Solr passthrough path and params, `fq`/`facet.field`
   forwarding, content-type-aware `item` decoding (JSON vs XML), the item sub-paths,
   and that no `Authorization` header is sent — mocked transport.
+- **`validate.test.ts`** — `assertValid`, the `DdbValidationError` → exit 2
+  mapping and the `parity()` helper (`test/helpers.ts`), which sends one input
+  through `run()` and through the library on one recording mock transport.
 - **`cli.test.ts`** — command parsing, `--filter`/`--facet`/`--sort`/`--fields`,
   the paging note, raw-XML item output, id validation, and exit codes — mocked client.
 

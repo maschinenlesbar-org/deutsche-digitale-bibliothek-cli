@@ -5,7 +5,7 @@
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import type { CliDeps } from "./io.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbUsageError } from "../client/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbUsageError, DdbValidationError } from "../client/errors.js";
 
 /**
  * Apply exitOverride + output redirection to every command in the tree.
@@ -58,9 +58,10 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       if (err.status === 404) return 4;
       return 1;
     }
-    if (err instanceof DdbUsageError) {
-      // A usage error detected in an action (e.g. an item id of the wrong
-      // length): exit 2, matching commander's own usage/parse errors.
+    if (err instanceof DdbValidationError || err instanceof DdbUsageError) {
+      // A usage error detected in an action, or the library rejecting an input
+      // before any request (DdbValidationError, which extends DdbUsageError; named
+      // here for clarity): exit 2, matching commander's own usage/parse errors.
       deps.io.err(`Error: ${err.message}`);
       return 2;
     }
