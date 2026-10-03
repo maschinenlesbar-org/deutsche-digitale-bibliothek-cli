@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
 import * as lib from "../src/index.js";
-import { DdbError, DdbNetworkError, DdbParseError, DdbValidationError } from "../src/client/errors.js";
+import { DdbError, DdbParseError, DdbValidationError } from "../src/client/errors.js";
 import type { ItemPart, SearchParams } from "../src/client/types.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
@@ -149,7 +149,9 @@ test("the client rejects a non-http(s) base URL even with a custom transport", (
     const mt = makeMockTransport(() => jsonResponse({}));
     assert.throws(
       () => new DdbClient({ baseUrl, transport: mt.transport }),
-      (err) => err instanceof DdbNetworkError,
+      (err) =>
+        err instanceof DdbValidationError &&
+        err.message === "Invalid baseUrl: Only http: and https: base URLs are supported.",
       baseUrl,
     );
     assert.equal(mt.calls.length, 0);

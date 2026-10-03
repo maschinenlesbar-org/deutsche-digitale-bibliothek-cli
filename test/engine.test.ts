@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/client/engine.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, redactUrl } from "../src/client/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, redactUrl } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
 import type { HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
@@ -42,12 +42,12 @@ test("error detail is stripped of terminal control characters (DDB-01)", async (
   );
 });
 
-test("a non-http(s) base URL is rejected by the engine before any request", () => {
-  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org", "not a url"]) {
+test("a non-http(s) or unparseable base URL is a DdbValidationError before any request", () => {
+  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org", "not a url", ""]) {
     const mt = makeMockTransport(() => jsonResponse({}));
     assert.throws(
       () => new RequestEngine({ baseUrl, transport: mt.transport }),
-      (err) => err instanceof DdbNetworkError,
+      (err) => err instanceof DdbValidationError && !(err instanceof DdbNetworkError),
       baseUrl,
     );
     assert.equal(mt.calls.length, 0);
@@ -60,7 +60,8 @@ test("a base URL with a query or fragment is rejected at construction", () => {
     assert.throws(
       () => new RequestEngine({ transport: mt.transport, baseUrl }),
       (err: unknown) =>
-        err instanceof DdbNetworkError && /Base URL must not contain a query or fragment/.test(err.message),
+        err instanceof DdbValidationError &&
+        err.message === "Invalid baseUrl: A base URL cannot have a query (?) or fragment (#).",
       baseUrl,
     );
     assert.equal(mt.calls.length, 0);

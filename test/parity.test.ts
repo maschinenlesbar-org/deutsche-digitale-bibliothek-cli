@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
+import { run } from "../src/cli/run.js";
 import { DdbError, DdbValidationError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import type { ItemOptions, ItemPart } from "../src/client/types.js";
@@ -212,4 +213,46 @@ test("parity: version returns the same trimmed string on both sides (finding #7)
     const file = await parity(["-o", "v.txt", "version"], (t) => new DdbClient({ transport: t }).version(), () => rawResponse(body, "text/plain"));
     assert.equal(file.cli.files.get("v.txt")?.toString("utf8"), `${file.lib.ok ? String(file.lib.value) : "?"}\n`);
   }
+});
+
+test("parity: an invalid base URL is the same usage error on both sides, not a network error (finding #8)", async () => {
+  const cases: [string, string][] = [
+    ["ftp://h.example/2", "Only http: and https: base URLs are supported."],
+    ["file:///etc/passwd", "Only http: and https: base URLs are supported."],
+    ["", "Expected a non-empty URL."],
+    ["   ", "Expected a non-empty URL."],
+    ["not a url", "Expected a valid URL."],
+    ["https://h.example/2?x=1", "A base URL cannot have a query (?) or fragment (#)."],
+    ["https://h.example/2#f", "A base URL cannot have a query (?) or fragment (#)."],
+    ["https://h.example/2 ", "A base URL cannot have surrounding whitespace."],
+  ];
+  for (const [baseUrl, reason] of cases) {
+    const r = await parity(
+      ["--base-url", baseUrl, "version"],
+      (t) => new DdbClient({ transport: t, baseUrl }).version(),
+      () => rawResponse("9.9.9", "text/plain"),
+    );
+    const label = JSON.stringify(baseUrl);
+    assert.equal(r.cli.code, 2, label);
+    assert.equal(r.cli.requests.length, 0, label);
+    assert.ok(r.cli.err.includes(reason), `${label}: ${r.cli.err}`);
+    assert.equal(r.lib.ok, false, label);
+    if (!r.lib.ok) {
+      assert.ok(r.lib.error instanceof DdbValidationError, `${label}: ${String(r.lib.error)}`);
+      assert.equal((r.lib.error as Error).message, `Invalid baseUrl: ${reason}`, label);
+    }
+    assert.equal(r.lib.requests.length, 0, label);
+  }
+});
+
+test("run() maps the library's base-URL rejection to exit 2, not the network exit 6 (finding #8)", async () => {
+  const out: string[] = [];
+  const err: string[] = [];
+  const code = await run(["version"], {
+    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {}, outBinary: () => {} },
+    // Bypass --base-url parsing: the library's own check must give the usage code.
+    createClient: (opts) => new DdbClient({ ...opts, baseUrl: "ftp://h.example/2" }),
+  });
+  assert.equal(code, 2);
+  assert.deepEqual(err, ["Error: Invalid baseUrl: Only http: and https: base URLs are supported."]);
 });

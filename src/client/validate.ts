@@ -96,3 +96,31 @@ export const headerNameProblem: Problem = (name) =>
 export function assertHeaderValue(name: string, value: string): string {
   return assertValid(name, value, headerValueProblem);
 }
+
+/**
+ * A configured base URL (`baseUrl`, `--base-url`): not blank, no surrounding
+ * whitespace, a parseable `http:`/`https:` URL without a query or fragment.
+ * Userinfo (`https://user:pw@host/`) is allowed; it is redacted from messages.
+ *
+ * Surrounding whitespace is checked on the raw value: `new URL()` trims it
+ * silently, but request paths are appended to the raw string, so
+ * `"https://h/2 "` would request `/2%20/version`. A `?` or `#` would swallow
+ * every path: `http://h/2?x=1` requests `/2?x=1/version` and `http://h/2#f`
+ * requests `/2`.
+ */
+export const baseUrlProblem: Problem = (value) => {
+  if (typeof value !== "string") return "Expected a string.";
+  if (value.trim() === "") return "Expected a non-empty URL.";
+  if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "Expected a valid URL.";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "Only http: and https: base URLs are supported.";
+  }
+  if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
+  return undefined;
+};

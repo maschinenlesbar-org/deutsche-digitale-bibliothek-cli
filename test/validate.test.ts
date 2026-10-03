@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assertHeaderValue,
   assertValid,
+  baseUrlProblem,
   headerNameProblem,
   headerValueProblem,
   itemIdProblem,
@@ -152,4 +153,17 @@ test("the client checks userAgent and defaultHeaders at construction", () => {
     (err: unknown) => err instanceof DdbValidationError && err.message.startsWith('Invalid defaultHeaders name "X Foo": '),
   );
   assert.doesNotThrow(() => new DdbClient({ userAgent: "bot/1", defaultHeaders: { Authorization: "Bearer x" } }));
+});
+
+test("baseUrlProblem: the CLI's --base-url reasons", () => {
+  assert.equal(baseUrlProblem("https://api.deutsche-digitale-bibliothek.de/2"), undefined);
+  assert.equal(baseUrlProblem("http://user:pw@127.0.0.1:8080/2/"), undefined);
+  assert.equal(baseUrlProblem(""), "Expected a non-empty URL.");
+  assert.equal(baseUrlProblem(" \t"), "Expected a non-empty URL.");
+  assert.equal(baseUrlProblem(" https://h.example/2"), "A base URL cannot have surrounding whitespace.");
+  assert.equal(baseUrlProblem("not a url"), "Expected a valid URL.");
+  assert.equal(baseUrlProblem("ftp://h.example"), "Only http: and https: base URLs are supported.");
+  assert.equal(baseUrlProblem("https://h.example/2#f"), "A base URL cannot have a query (?) or fragment (#).");
+  assert.equal(baseUrlProblem(3), "Expected a string.");
+  assert.equal(lib.baseUrlProblem, baseUrlProblem);
 });

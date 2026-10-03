@@ -27,6 +27,7 @@ export {
 export {
   assertHeaderValue,
   assertValid,
+  baseUrlProblem,
   headerNameProblem,
   headerValueProblem,
   itemIdProblem,

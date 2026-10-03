@@ -79,9 +79,11 @@ endpoint, inject an `Authorization` header via the engine's `defaultHeaders`; it
 is stripped on cross-origin redirects, see below.)
 
 The base URL is checked raw by the exported `validateBaseUrl` before the
-trailing-slash strip: surrounding whitespace, a URL that does not parse, a scheme
-other than `http:`/`https:` and a query or fragment make the constructor throw
-(userinfo is allowed and redacted from messages).
+trailing-slash strip: a blank value, surrounding whitespace, a URL that does not
+parse, a scheme other than `http:`/`https:` and a query or fragment make the
+constructor throw a `DdbValidationError` (`Invalid baseUrl: …`; userinfo is
+allowed). It is a configuration error, not a `DdbNetworkError`: that class is kept
+for the default transport's per-hop scheme check and real transport failures.
 
 The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
@@ -115,6 +117,9 @@ the older checks above still throw a plain `DdbError`):
   letters, digits, `.`, `_` and `-` only, and not `.` or `..` (`pathNameProblem`).
   The CLI's `--collection`/`--handler` parsers use the same rule. The engine's
   dot-segment guard in `buildUrl` stays as a backstop for any other path.
+- **Base URL** (`baseUrl`), at construction (`validateBaseUrl`, `baseUrlProblem`):
+  blank, surrounding whitespace, unparseable, not `http:`/`https:`, or with a
+  query or fragment. `--base-url` uses the same rule, so its messages match.
 - **Header values** (`userAgent`, `defaultHeaders`), at construction: a blank
   value, a C0 control character other than tab, DEL or anything above U+00FF
   (`headerValueProblem`, `assertHeaderValue`), and a `defaultHeaders` name that is

@@ -5,8 +5,8 @@
 
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, redactUrl } from "./errors.js";
-import { assertValid, headerNameProblem, headerValueProblem } from "./validate.js";
+import { DdbApiError, DdbError, DdbParseError, redactUrl } from "./errors.js";
+import { assertValid, baseUrlProblem, headerNameProblem, headerValueProblem } from "./validate.js";
 
 // The v2 API is versioned in the path: every resource lives under `/2`. The
 // read routes this client targets (search, items, version) are public — no key.
@@ -27,8 +27,9 @@ export interface RawResponse {
 export interface EngineOptions {
   /**
    * Base URL of the API. Defaults to https://api.deutsche-digitale-bibliothek.de/2.
-   * Checked by `validateBaseUrl`: no surrounding whitespace, http(s) only, no query
-   * or fragment.
+   * Checked by `validateBaseUrl`: not blank, no surrounding whitespace, http(s)
+   * only, no query or fragment; anything else makes the constructor throw a
+   * DdbValidationError.
    */
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
@@ -170,41 +171,19 @@ export function sanitizeServerText(text: string): string {
 }
 
 /**
- * Check a configured base URL and return it with trailing slashes stripped. Rejects
- * surrounding whitespace, a URL that does not parse, a scheme other than http(s),
- * and a query or fragment.
+ * Check a configured base URL ({@link baseUrlProblem}: not blank, no surrounding
+ * whitespace, a parseable http(s) URL without a query or fragment) and return it
+ * with trailing slashes stripped. Throws a DdbValidationError
+ * (`Invalid baseUrl: …`), never echoing the value.
  *
- * Runs on the raw value, before the slash strip. `new URL()` trims surrounding
- * whitespace silently, but the engine appends request paths to the raw string, so
- * `"https://h/2 "` would request `/2%20/version` and `"https://h/2/ "` would slip
- * past the slash strip. The default transport already gates the scheme per hop,
- * but the engine is exported as a library and may be handed a custom transport
- * that does no such check, so gate the configured base URL here too (a
- * `file:`/`ftp:` base URL fails fast with a typed error). A `?` or `#` would
- * swallow every path: `http://h/2?x=1` requests `/2?x=1/version` and
- * `http://h/2#f` requests `/2`.
+ * Runs on the raw value, before the slash strip, so `"https://h/2/ "` cannot slip
+ * past it. The default transport also gates the scheme per hop (a
+ * DdbNetworkError), but the engine is exported as a library and may be handed a
+ * custom transport that does no such check, so the configured base URL is gated
+ * here too.
  */
 export function validateBaseUrl(baseUrl: string): string {
-  if (typeof baseUrl === "string" && baseUrl !== baseUrl.trim()) {
-    throw new DdbNetworkError(
-      `Base URL must not have surrounding whitespace: ${JSON.stringify(redactUrl(baseUrl.trim()))}`,
-    );
-  }
-  let url: URL;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    throw new DdbNetworkError(`Invalid base URL: ${redactUrl(baseUrl)}`);
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new DdbNetworkError(
-      `Unsupported protocol "${url.protocol}" in base URL: ${redactUrl(baseUrl)}`,
-    );
-  }
-  if (/[?#]/.test(baseUrl)) {
-    throw new DdbNetworkError(`Base URL must not contain a query or fragment: ${redactUrl(baseUrl)}`);
-  }
-  return baseUrl.replace(/\/+$/, "");
+  return assertValid("baseUrl", baseUrl, baseUrlProblem).replace(/\/+$/, "");
 }
 
 /**
