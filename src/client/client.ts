@@ -224,8 +224,11 @@ export class DdbClient {
     return { part, contentType: res.contentType, text, bytes: res.data };
   }
 
-  /** The version string of the DDB backend. Public — works without a key. */
-  version(): Promise<string> {
-    return this.engine.getText("/version");
+  /**
+   * The version string of the DDB backend, with surrounding whitespace (the body's
+   * trailing newline, CRs) trimmed. Public — works without a key.
+   */
+  async version(): Promise<string> {
+    return (await this.engine.getText("/version")).trim();
   }
 }

@@ -13,9 +13,11 @@ export function registerCatalogCommands(program: Command, deps: CliDeps): void {
     .description("Print the DDB backend version — a quick connectivity check (no key needed)")
     .action(
       action(deps, async ({ client, global }) => {
-        const version = (await client.version()).trim();
+        // The library returns the version trimmed.
+        const version = await client.version();
         if (global.output) {
-          // File output keeps the bytes verbatim (a file is not a terminal).
+          // File output is not sanitised (a file is not a terminal); it gets the
+          // version plus a trailing newline.
           const data = Buffer.from(version + "\n", "utf8");
           deps.io.writeFile(global.output, data, global.force);
           deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);

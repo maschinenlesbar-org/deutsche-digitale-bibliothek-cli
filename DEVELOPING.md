@@ -139,7 +139,8 @@ the older checks above still throw a plain `DdbError`):
   `citation`, which the API serves as XML or a file), plus the `contentType`.
   `opts`: `lang` (localised labels), and `rows`/`offset` for `part: "children"`;
   passed for any other part they reject (`validateItemOptions`).
-- `version()` → the backend version string (`GET /2/version`).
+- `version()` → the backend version string (`GET /2/version`), trimmed of
+  surrounding whitespace (the body ends in a newline). The CLI prints it as is.
 
 ## No authentication
 

@@ -202,3 +202,14 @@ test("parity: a base URL with surrounding whitespace is rejected on both sides b
   assertSameRequests(ok, "trailing slash");
   assert.equal(ok.lib.requests[0]!.url, "https://h.example/2/version");
 });
+
+test("parity: version returns the same trimmed string on both sides (finding #7)", async () => {
+  for (const body of ["7.5\n", "  2.3.4 \r\n", "9.9.9"]) {
+    const r = await parity(["version"], (t) => new DdbClient({ transport: t }).version(), () => rawResponse(body, "text/plain"));
+    assertSameRequests(r, JSON.stringify(body));
+    assert.equal(r.lib.ok && r.lib.value, body.trim(), JSON.stringify(body));
+    assert.equal(r.cli.out, body.trim());
+    const file = await parity(["-o", "v.txt", "version"], (t) => new DdbClient({ transport: t }).version(), () => rawResponse(body, "text/plain"));
+    assert.equal(file.cli.files.get("v.txt")?.toString("utf8"), `${file.lib.ok ? String(file.lib.value) : "?"}\n`);
+  }
+});

@@ -140,7 +140,7 @@ test("item forwards lang for view, rejects it for parents; children takes rows/o
 test("version reads the plain-text /version endpoint", async () => {
   const mt = makeMockTransport(() => rawResponse("7.5\n", "text/plain"));
   const c = new DdbClient({ transport: mt.transport });
-  assert.equal(await c.version(), "7.5\n");
+  assert.equal(await c.version(), "7.5");
   assert.equal(pathOf(mt.last().url), "/2/version");
 });
 
