@@ -6,6 +6,7 @@
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, redactUrl } from "./errors.js";
+import { assertValid, headerNameProblem, headerValueProblem } from "./validate.js";
 
 // The v2 API is versioned in the path: every resource lives under `/2`. The
 // read routes this client targets (search, items, version) are public — no key.
@@ -28,14 +29,19 @@ export interface EngineOptions {
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
   transport?: Transport;
-  /** Value of the User-Agent header. */
+  /**
+   * Value of the User-Agent header. Must be non-blank, without control characters
+   * (tab allowed) and Latin-1 only (`headerValueProblem`), or the constructor
+   * throws a DdbValidationError.
+   */
   userAgent?: string;
   /**
    * Extra headers sent on every request to the configured origin. When a redirect
    * crosses to a different origin, all of them are dropped (only the engine's own
    * Accept and User-Agent go along), so no credential — Authorization,
    * Proxy-Authorization, Cookie, X-API-Key, X-Auth-Token or any other — leaks to an
-   * arbitrary host named in Location.
+   * arbitrary host named in Location. Names must be HTTP tokens and values pass
+   * the same check as `userAgent`, or the constructor throws a DdbValidationError.
    */
   defaultHeaders?: Record<string, string>;
   /** Per-request timeout in milliseconds (0 disables; at most `MAX_TIMEOUT_MS`, 2^31 - 1 ms). */
@@ -254,8 +260,17 @@ export class RequestEngine {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     assertHttpScheme(this.baseUrl);
     this.transport = options.transport ?? nodeHttpTransport;
-    this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
-    this.defaultHeaders = options.defaultHeaders ?? {};
+    // Only `undefined` selects the default; a blank or otherwise unsendable value
+    // is a DdbValidationError here rather than a network error at request time.
+    this.userAgent =
+      options.userAgent === undefined
+        ? DEFAULT_USER_AGENT
+        : assertValid("userAgent", options.userAgent, headerValueProblem);
+    this.defaultHeaders = { ...(options.defaultHeaders ?? {}) };
+    for (const [name, value] of Object.entries(this.defaultHeaders)) {
+      assertValid(`defaultHeaders name ${JSON.stringify(name)}`, name, headerNameProblem);
+      assertValid(`defaultHeaders[${JSON.stringify(name)}]`, value, headerValueProblem);
+    }
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, 30_000, MAX_TIMEOUT_MS);
     this.maxRetries = intOption("maxRetries", options.maxRetries, 2, MAX_RETRIES);
     this.retryDelayMs = intOption("retryDelayMs", options.retryDelayMs, 200, MAX_RETRY_AFTER_MS);

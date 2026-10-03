@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertValid, itemIdProblem, normalizeItemId, pathNameProblem, type Problem } from "../src/client/validate.js";
+import {
+  assertHeaderValue,
+  assertValid,
+  headerNameProblem,
+  headerValueProblem,
+  itemIdProblem,
+  normalizeItemId,
+  pathNameProblem,
+  type Problem,
+} from "../src/client/validate.js";
 import * as lib from "../src/index.js";
 import { DdbError, DdbUsageError, DdbValidationError } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
@@ -99,4 +108,48 @@ test("pathNameProblem: letters, digits, '.', '_' and '-', but not '.' or '..'", 
   }
   assert.equal(pathNameProblem(7), "Expected a string.");
   assert.equal(lib.pathNameProblem, pathNameProblem);
+});
+
+test("headerValueProblem: non-blank, no control characters, Latin-1 only; tab is allowed", () => {
+  const ctl = (c: number) => `a${String.fromCharCode(c)}b`;
+  assert.equal(headerValueProblem("müller-bot/1.0\t(test)"), undefined);
+  assert.equal(headerValueProblem(""), "Expected a non-empty value.");
+  assert.equal(headerValueProblem(" \t "), "Expected a non-empty value.");
+  for (const c of [0x00, 0x0a, 0x0d, 0x1b, 0x7f]) {
+    assert.equal(headerValueProblem(ctl(c)), "Value contains control characters.", String(c));
+  }
+  assert.equal(headerValueProblem("bot \u20ac"), "Value contains characters outside Latin-1 (above U+00FF).");
+  assert.equal(headerValueProblem(1), "Expected a string.");
+});
+
+test("headerNameProblem: an HTTP token", () => {
+  assert.equal(headerNameProblem("X-Api-Key"), undefined);
+  for (const bad of ["", "X Foo", "X:Foo", "Ü"]) {
+    assert.equal(headerNameProblem(bad), "Expected an HTTP header name (letters, digits and !#$%&'*+-.^_`|~).", bad);
+  }
+});
+
+test("assertHeaderValue returns the value or throws DdbValidationError naming the header", () => {
+  assert.equal(assertHeaderValue("User-Agent", "bot/1"), "bot/1");
+  assert.throws(
+    () => assertHeaderValue("User-Agent", ""),
+    (err: unknown) => err instanceof DdbValidationError && err.message === "Invalid User-Agent: Expected a non-empty value.",
+  );
+  assert.equal(lib.assertHeaderValue, assertHeaderValue);
+  assert.equal(lib.headerValueProblem, headerValueProblem);
+});
+
+test("the client checks userAgent and defaultHeaders at construction", () => {
+  const LF = String.fromCharCode(0x0a);
+  assert.throws(() => new DdbClient({ userAgent: "" }), /^DdbValidationError: Invalid userAgent: Expected a non-empty value\.$/);
+  assert.throws(
+    () => new DdbClient({ defaultHeaders: { "X-Foo": `a${LF}b` } }),
+    (err: unknown) =>
+      err instanceof DdbValidationError && err.message === 'Invalid defaultHeaders["X-Foo"]: Value contains control characters.',
+  );
+  assert.throws(
+    () => new DdbClient({ defaultHeaders: { "X Foo": "a" } }),
+    (err: unknown) => err instanceof DdbValidationError && err.message.startsWith('Invalid defaultHeaders name "X Foo": '),
+  );
+  assert.doesNotThrow(() => new DdbClient({ userAgent: "bot/1", defaultHeaders: { Authorization: "Bearer x" } }));
 });

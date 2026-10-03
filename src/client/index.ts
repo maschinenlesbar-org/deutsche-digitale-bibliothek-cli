@@ -17,7 +17,15 @@ export {
   DdbValidationError,
   redactUrl,
 } from "./errors.js";
-export { assertValid, itemIdProblem, normalizeItemId, pathNameProblem } from "./validate.js";
+export {
+  assertHeaderValue,
+  assertValid,
+  headerNameProblem,
+  headerValueProblem,
+  itemIdProblem,
+  normalizeItemId,
+  pathNameProblem,
+} from "./validate.js";
 export type { Problem } from "./validate.js";
 
 export * from "./types.js";

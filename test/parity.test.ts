@@ -8,7 +8,7 @@ import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
 import { DdbValidationError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import type { ItemOptions, ItemPart } from "../src/client/types.js";
-import { parity, jsonResponse, requestLines, type ParityResult } from "./helpers.js";
+import { parity, jsonResponse, rawResponse, requestLines, type ParityResult } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 const ID = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
@@ -137,4 +137,44 @@ test("parity: item lang/rows/offset for a part that ignores them are rejected on
     itemResponder,
   );
   assertSameRequests(edm, "edm lang");
+});
+
+test("parity: a User-Agent the CLI rejects is rejected by the library before any request (finding #4)", async () => {
+  const LF = String.fromCharCode(0x0a);
+  const CR = String.fromCharCode(0x0d);
+  const DEL = String.fromCharCode(0x7f);
+  const cases: [string, string][] = [
+    ["", "Expected a non-empty value."],
+    ["  ", "Expected a non-empty value."],
+    [`a${CR}${LF}X-Evil: 1`, "Value contains control characters."],
+    [`bot${DEL}`, "Value contains control characters."],
+    ["Ω-agent", "Value contains characters outside Latin-1 (above U+00FF)."],
+  ];
+  for (const [ua, reason] of cases) {
+    const r = await parity(
+      ["--user-agent", ua, "version"],
+      (t) => new DdbClient({ transport: t, userAgent: ua }).version(),
+      () => rawResponse("2.3.4", "text/plain"),
+    );
+    const label = JSON.stringify(ua);
+    assert.equal(r.cli.code, 2, label);
+    assert.equal(r.cli.requests.length, 0, label);
+    assert.match(r.cli.err, new RegExp(reason.replace(/[.()+]/g, "\\$&")), label);
+    assert.equal(r.lib.ok, false, label);
+    if (!r.lib.ok) {
+      assert.ok(r.lib.error instanceof DdbValidationError, `${label}: ${String(r.lib.error)}`);
+      assert.equal((r.lib.error as Error).message, `Invalid userAgent: ${reason}`, label);
+    }
+    assert.equal(r.lib.requests.length, 0, label);
+  }
+  for (const ua of ["a\tb", "café"]) {
+    const r = await parity(
+      ["--user-agent", ua, "version"],
+      (t) => new DdbClient({ transport: t, userAgent: ua }).version(),
+      () => rawResponse("2.3.4", "text/plain"),
+    );
+    assertSameRequests(r, JSON.stringify(ua));
+    assert.equal(r.cli.requests[0]!.headers?.["User-Agent"], ua);
+    assert.equal(r.lib.requests[0]!.headers?.["User-Agent"], ua);
+  }
 });

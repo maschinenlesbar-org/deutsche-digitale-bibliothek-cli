@@ -64,3 +64,35 @@ export const pathNameProblem: Problem = (value) => {
   if (value === "." || value === "..") return '"." and ".." are path navigation, not a name.';
   return undefined;
 };
+
+/**
+ * A value that goes into an HTTP header (`userAgent`, `defaultHeaders`): not blank,
+ * no C0 control character except tab, no DEL, and nothing above U+00FF. Node's
+ * HTTP layer would otherwise throw an opaque "Invalid character in header content"
+ * at request time (a CR/LF could split the header). Checked by char code so the
+ * source stays free of control bytes.
+ */
+export const headerValueProblem: Problem = (value) => {
+  if (typeof value !== "string") return "Expected a string.";
+  if (value.trim() === "") return "Expected a non-empty value.";
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if ((c < 0x20 && c !== 0x09) || c === 0x7f) return "Value contains control characters.";
+    if (c > 0xff) return "Value contains characters outside Latin-1 (above U+00FF).";
+  }
+  return undefined;
+};
+
+/** An HTTP header name: a token (RFC 9110 §5.6.2). */
+export const headerNameProblem: Problem = (name) =>
+  typeof name === "string" && /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)
+    ? undefined
+    : "Expected an HTTP header name (letters, digits and !#$%&'*+-.^_`|~).";
+
+/**
+ * Return `value` when it is a valid header value ({@link headerValueProblem}),
+ * else throw a DdbValidationError naming the header (`Invalid <name>: …`).
+ */
+export function assertHeaderValue(name: string, value: string): string {
+  return assertValid(name, value, headerValueProblem);
+}

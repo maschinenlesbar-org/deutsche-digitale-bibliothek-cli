@@ -6,6 +6,7 @@ import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
 import { DdbError, DdbUsageError } from "../client/errors.js";
+import { headerValueProblem } from "../client/validate.js";
 
 /**
  * commander value-parser: a plain base-10 non-negative integer.
@@ -100,24 +101,13 @@ export function parseBaseUrl(value: string): string {
 }
 
 /**
- * commander value-parser for a value that ends up in an HTTP header (`--user-agent`).
- * Node's HTTP layer throws an opaque "Invalid character in header content" at request
- * time for a CR/LF (or any other C0 control or DEL) and for any character above
- * U+00FF, which surfaced as "Unexpected error". Reject those here as a usage error,
- * along with a blank value. Tab is allowed, as in HTTP. Checked by char code so the
- * source stays free of control bytes.
+ * commander value-parser for a value that ends up in an HTTP header (`--user-agent`):
+ * the library's rule (headerValueProblem: non-blank, no control characters except
+ * tab, Latin-1 only), as a usage error.
  */
 export function parseHeaderValue(value: string): string {
-  parseNonEmpty(value);
-  for (let i = 0; i < value.length; i++) {
-    const c = value.charCodeAt(i);
-    if ((c < 0x20 && c !== 0x09) || c === 0x7f) {
-      throw new InvalidArgumentError("Value contains control characters.");
-    }
-    if (c > 0xff) {
-      throw new InvalidArgumentError("Value contains characters outside Latin-1 (above U+00FF).");
-    }
-  }
+  const problem = headerValueProblem(value);
+  if (problem !== undefined) throw new InvalidArgumentError(problem);
   return value;
 }
 
@@ -137,11 +127,7 @@ export function toEngineOptions(global: GlobalOptions): DdbClientOptions {
   const options: DdbClientOptions = {};
   if (global.baseUrl !== undefined) options.baseUrl = global.baseUrl;
   if (global.timeout !== undefined) options.timeoutMs = global.timeout;
-  // Likewise, a blank --user-agent falls back to the engine's default UA rather
-  // than sending an empty User-Agent header.
-  if (global.userAgent !== undefined && global.userAgent.trim().length > 0) {
-    options.userAgent = global.userAgent;
-  }
+  if (global.userAgent !== undefined) options.userAgent = global.userAgent;
   if (global.maxRetries !== undefined) options.maxRetries = global.maxRetries;
   if (global.maxResponseBytes !== undefined) options.maxResponseBytes = global.maxResponseBytes;
   return options;
