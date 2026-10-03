@@ -11,6 +11,7 @@
 //   rather than throw synchronously; constructors throw.
 
 import { DdbValidationError } from "./errors.js";
+import { ITEM_PARTS } from "./types.js";
 
 /** A validation rule: the reason `value` is invalid, or `undefined` when it is valid. */
 export type Problem<T = unknown> = (value: T) => string | undefined;
@@ -124,3 +125,13 @@ export const baseUrlProblem: Problem = (value) => {
   if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
   return undefined;
 };
+
+/**
+ * An item component (`item(id, part)`): one of {@link ITEM_PARTS}. Only the
+ * listed names count, so an inherited property name such as "toString" is
+ * rejected too.
+ */
+export const itemPartProblem: Problem = (part) =>
+  typeof part === "string" && (ITEM_PARTS as readonly string[]).includes(part)
+    ? undefined
+    : `Expected one of: ${ITEM_PARTS.join(", ")}.`;

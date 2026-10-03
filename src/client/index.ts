@@ -31,6 +31,7 @@ export {
   headerNameProblem,
   headerValueProblem,
   itemIdProblem,
+  itemPartProblem,
   normalizeItemId,
   pathNameProblem,
 } from "./validate.js";

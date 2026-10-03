@@ -7,6 +7,7 @@ import type { CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
 import { DdbError, DdbUsageError } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem } from "../client/validate.js";
+import { SOLR_MAX_INT } from "../client/types.js";
 
 /**
  * commander value-parser: a plain base-10 non-negative integer.
@@ -37,12 +38,9 @@ export function parseBoundedInt(min: number, max: number): (value: string) => nu
 }
 
 /**
- * The largest value Solr accepts for an int parameter (`rows`, `start`,
- * `facet.limit`): Java's Integer.MAX_VALUE. Beyond it Solr fails with HTTP 500.
+ * commander value-parser for a Solr int parameter: 0..SOLR_MAX_INT, the library's
+ * bound (Java's Integer.MAX_VALUE; beyond it Solr fails with HTTP 500).
  */
-export const SOLR_MAX_INT = 2_147_483_647;
-
-/** commander value-parser for a Solr int parameter: 0..SOLR_MAX_INT. */
 export const parseSolrInt = parseBoundedInt(0, SOLR_MAX_INT);
 
 /**

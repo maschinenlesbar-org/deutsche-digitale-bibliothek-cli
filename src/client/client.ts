@@ -15,13 +15,15 @@
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import { DdbError, DdbParseError, DdbValidationError } from "./errors.js";
 import type { QueryParams } from "./query.js";
-import { assertValid, normalizeItemId, pathNameProblem } from "./validate.js";
-import type {
-  ItemOptions,
-  ItemPart,
-  ItemResult,
-  SearchParams,
-  SolrResponse,
+import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
+import {
+  ITEM_LANG_PARTS,
+  SOLR_MAX_INT,
+  type ItemOptions,
+  type ItemPart,
+  type ItemResult,
+  type SearchParams,
+  type SolrResponse,
 } from "./types.js";
 
 const enc = encodeURIComponent;
@@ -29,7 +31,11 @@ const enc = encodeURIComponent;
 /** Options for the DDB client. v2 read routes need no auth, so this is just the engine options. */
 export type DdbClientOptions = EngineOptions;
 
-/** Map an item part to its `/items/{id}` path suffix (`aip` is the bare endpoint). */
+/**
+ * Map an item part to its `/items/{id}` path suffix (`aip` is the bare endpoint).
+ * Typed by `ItemPart`, which derives from `ITEM_PARTS`, so a part added there
+ * without a suffix here fails to compile.
+ */
 const PART_SUFFIX: Record<ItemPart, string> = {
   view: "/view",
   aip: "",
@@ -51,16 +57,6 @@ const PART_SUFFIX: Record<ItemPart, string> = {
  * configured default returns the same page.
  */
 export const DEFAULT_SEARCH_ROWS = 10;
-
-/** Item parts that accept a `lang` query parameter for localised labels. */
-export const ITEM_LANG_PARTS: readonly ItemPart[] = [
-  "view",
-  "aip",
-  "edm",
-  "binaries",
-  "source",
-  "source-description",
-];
 
 /**
  * Check which item options apply to `part`, before any request: `lang` only to the
@@ -87,9 +83,6 @@ export function validateItemOptions(part: ItemPart, opts: ItemOptions): ItemOpti
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-/** The largest value Solr accepts for an int parameter (Java's Integer.MAX_VALUE). */
-const SOLR_MAX_INT = 2_147_483_647;
 
 function invalid(name: string, expected: string, value: unknown): DdbError {
   const shown = typeof value === "string" ? JSON.stringify(value) : String(value);
@@ -189,16 +182,15 @@ export class DdbClient {
    * XML / file components (edm, source-record, citation) are returned as `text`
    * (plus the exact `bytes`). The id is trimmed and must then be exactly 32
    * upper-case letters and digits (`normalizeItemId`); anything else rejects with
-   * a DdbValidationError without a request. An unknown part, a blank `lang` or a
-   * non-integer / negative `rows`/`offset` throws DdbError without a request, and
+   * a DdbValidationError without a request. A part outside {@link ITEM_PARTS}
+   * (`itemPartProblem`) rejects with a DdbValidationError, a blank `lang` or a
+   * non-integer / negative `rows`/`offset` throws DdbError, both without a request, and
    * `lang` outside {@link ITEM_LANG_PARTS} or `rows`/`offset` for any part but
    * `children` rejects with a DdbValidationError (`validateItemOptions`).
    */
   async item(rawId: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
     const id = normalizeItemId(rawId);
-    if (!Object.hasOwn(PART_SUFFIX, part)) {
-      throw invalid("part", `one of ${Object.keys(PART_SUFFIX).join(", ")}`, part);
-    }
+    assertValid("part", part, itemPartProblem);
     if (opts.lang !== undefined) assertText("lang", opts.lang);
     assertInt("rows", opts.rows);
     assertInt("offset", opts.offset);

@@ -7,11 +7,13 @@ import {
   headerNameProblem,
   headerValueProblem,
   itemIdProblem,
+  itemPartProblem,
   normalizeItemId,
   pathNameProblem,
   type Problem,
 } from "../src/client/validate.js";
 import * as lib from "../src/index.js";
+import { ITEM_PARTS } from "../src/client/types.js";
 import { DdbError, DdbUsageError, DdbValidationError } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
 import { run } from "../src/cli/run.js";
@@ -166,4 +168,22 @@ test("baseUrlProblem: the CLI's --base-url reasons", () => {
   assert.equal(baseUrlProblem("https://h.example/2#f"), "A base URL cannot have a query (?) or fragment (#).");
   assert.equal(baseUrlProblem(3), "Expected a string.");
   assert.equal(lib.baseUrlProblem, baseUrlProblem);
+});
+
+test("itemPartProblem: one of ITEM_PARTS, nothing inherited", () => {
+  for (const part of ITEM_PARTS) assert.equal(itemPartProblem(part), undefined, part);
+  const reason = `Expected one of: ${ITEM_PARTS.join(", ")}.`;
+  for (const bad of ["bogus", "", "View", "toString", "__proto__", 1]) assert.equal(itemPartProblem(bad), reason, String(bad));
+  assert.equal(lib.itemPartProblem, itemPartProblem);
+});
+
+test("the item part lists and the Solr int bound are exported from the package root", () => {
+  assert.deepEqual(
+    [...lib.ITEM_PARTS],
+    ["view", "aip", "edm", "binaries", "children", "parents", "source", "source-description", "source-record", "iiif", "citation"],
+  );
+  assert.deepEqual([...lib.ITEM_LANG_PARTS], ["view", "aip", "edm", "binaries", "source", "source-description"]);
+  for (const part of lib.ITEM_LANG_PARTS) assert.ok(lib.ITEM_PARTS.includes(part), part);
+  assert.equal(lib.SOLR_MAX_INT, 2_147_483_647);
+  assert.ok(Object.isFrozen(lib.ITEM_PARTS) && Object.isFrozen(lib.ITEM_LANG_PARTS));
 });

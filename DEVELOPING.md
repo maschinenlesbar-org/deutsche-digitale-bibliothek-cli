@@ -89,8 +89,8 @@ The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxR
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
 `DdbError` naming the option. The client also checks its own parameters before any
-request: a blank `query`/`lang`/`sort`/filter, an unknown `part`, a non-integer
-or negative `rows`/`start`/`offset` (at most 2^31−1), a `facetLimit` below −1 or
+request: a blank `query`/`lang`/`sort`/filter, a non-integer
+or negative `rows`/`start`/`offset` (at most `SOLR_MAX_INT`, 2^31−1), a `facetLimit` below −1 or
 without `facetFields` throw a `DdbError` (`Invalid <name>: expected …, got …`).
 
 ### Library input validation
@@ -129,6 +129,15 @@ the older checks above still throw a plain `DdbError`):
   `validateItemOptions`): `lang` outside `ITEM_LANG_PARTS` and `rows`/`offset` for
   any part but `children` (`Invalid lang: applies only to part …`). The API would
   silently ignore them.
+- **Item part** (`item(id, part)`): one of `ITEM_PARTS` (`itemPartProblem`,
+  `Invalid part: Expected one of: view, aip, …`); an inherited name such as
+  `toString` is rejected too. `--part` uses the same rule.
+
+The domain constants behind these rules are exported from the package entry
+(`src/client/types.ts`), so callers can offer valid values and the CLI builds its
+parsers and help text from them instead of keeping copies: `ITEM_PARTS` (every
+item component, frozen; `ItemPart` derives from it), `ITEM_LANG_PARTS` (the parts
+that take `lang`) and `SOLR_MAX_INT` (2^31−1, the largest Solr int).
 
 ### Methods
 
@@ -138,7 +147,7 @@ the older checks above still throw a plain `DdbError`):
   `sort`, `fields`→`fl`, `filters`→`fq` (repeatable), `facetFields`→`facet.field`
   (sets `facet=true`), `facetLimit`→`facet.limit`. `wt=json` is forced.
 - `item(id, part?, opts?)` → an `ItemResult` (`GET /2/items/{id}...`). `part`
-  defaults to `view`; others: `aip`, `edm`, `binaries`, `children`, `parents`,
+  defaults to `view`; others (`ITEM_PARTS`): `aip`, `edm`, `binaries`, `children`, `parents`,
   `source`, `source-description`, `source-record`, `iiif`, `citation`. The result
   has `json` (for JSON components) **or** `text` (for `edm`/`source-record`/
   `citation`, which the API serves as XML or a file), plus the `contentType`.

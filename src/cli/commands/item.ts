@@ -6,28 +6,21 @@
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "../io.js";
-import type { ItemOptions, ItemPart } from "../../client/types.js";
+import {
+  ITEM_LANG_PARTS,
+  ITEM_PARTS,
+  itemPartProblem,
+  type ItemOptions,
+  type ItemPart,
+} from "../../client/index.js";
 import { sanitizeServerText } from "../../client/engine.js";
 import { action, parseNonEmpty, parseSolrInt, renderJson } from "../shared.js";
 
-const PARTS: readonly ItemPart[] = [
-  "view",
-  "aip",
-  "edm",
-  "binaries",
-  "children",
-  "parents",
-  "source",
-  "source-description",
-  "source-record",
-  "iiif",
-  "citation",
-];
-
-/** commander value-parser for --part: one of the item components. */
+/** commander value-parser for --part: the library's rule (itemPartProblem). */
 function parsePart(value: string): ItemPart {
-  if ((PARTS as readonly string[]).includes(value)) return value as ItemPart;
-  throw new InvalidArgumentError(`Expected one of: ${PARTS.join(", ")}.`);
+  const problem = itemPartProblem(value);
+  if (problem !== undefined) throw new InvalidArgumentError(problem);
+  return value as ItemPart;
 }
 
 export function registerItemCommand(program: Command, deps: CliDeps): void {
@@ -37,11 +30,11 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
     .argument("<id>", "the 32-character DDB item id (from a search result's `id`)")
     .option(
       "--part <component>",
-      `component to fetch: ${PARTS.join(" | ")} (default view)`,
+      `component to fetch: ${ITEM_PARTS.join(" | ")} (default view)`,
       parsePart,
       "view",
     )
-    .option("--lang <code>", "preferred language for labels (view/aip/edm/binaries/source*)", parseNonEmpty)
+    .option("--lang <code>", `preferred language for labels (${ITEM_LANG_PARTS.join("/")})`, parseNonEmpty)
     .option("--rows <n>", "page size for --part children", parseSolrInt)
     .option("--offset <n>", "offset for --part children", parseSolrInt)
     .action(

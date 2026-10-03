@@ -8,7 +8,7 @@ import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
 import { run } from "../src/cli/run.js";
 import { DdbError, DdbValidationError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
-import type { ItemOptions, ItemPart } from "../src/client/types.js";
+import { ITEM_LANG_PARTS, ITEM_PARTS, SOLR_MAX_INT, type ItemOptions, type ItemPart } from "../src/client/types.js";
 import { parity, jsonResponse, rawResponse, requestLines, type ParityResult } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -255,4 +255,68 @@ test("run() maps the library's base-URL rejection to exit 2, not the network exi
   });
   assert.equal(code, 2);
   assert.deepEqual(err, ["Error: Invalid baseUrl: Only http: and https: base URLs are supported."]);
+});
+
+test("parity: item parts and the Solr int bound come from the library's constants (finding #9)", async () => {
+  // Every part the library knows is accepted by the CLI and sends the same request.
+  for (const part of ITEM_PARTS) {
+    const r = await parity(
+      ["item", ID, "--part", part],
+      (t) => new DdbClient({ transport: t }).item(ID, part),
+      () => jsonResponse(fx.itemView),
+    );
+    assertSameRequests(r, part);
+  }
+  // An unknown part: the same rule and reason on both sides, no request.
+  for (const part of ["bogus", "toString", "View"]) {
+    const r = await parity(["item", ID, "--part", part], (t) => new DdbClient({ transport: t }).item(ID, part as ItemPart));
+    const reason = `Expected one of: ${ITEM_PARTS.join(", ")}.`;
+    assert.equal(r.cli.code, 2, part);
+    assert.equal(r.cli.requests.length, 0, part);
+    assert.ok(r.cli.err.includes(`argument '${part}' is invalid. ${reason}`), `${part}: ${r.cli.err}`);
+    assert.equal(r.lib.ok, false, part);
+    if (!r.lib.ok) {
+      assert.ok(r.lib.error instanceof DdbValidationError, `${part}: ${String(r.lib.error)}`);
+      assert.equal((r.lib.error as Error).message, `Invalid part: ${reason}`, part);
+    }
+    assert.equal(r.lib.requests.length, 0, part);
+  }
+  // --lang is accepted for exactly ITEM_LANG_PARTS on both sides.
+  for (const part of ITEM_PARTS) {
+    const r = await parity(
+      ["item", ID, "--part", part, "--lang", "en"],
+      (t) => new DdbClient({ transport: t }).item(ID, part, { lang: "en" }),
+      () => jsonResponse(fx.itemView),
+    );
+    if (ITEM_LANG_PARTS.includes(part)) assertSameRequests(r, `lang ${part}`);
+    else assertBothRejected(r, `lang ${part}`);
+  }
+  // SOLR_MAX_INT is the last value both sides accept; one more is rejected by both.
+  const max = await parity(
+    ["item", ID, "--part", "children", "--rows", String(SOLR_MAX_INT)],
+    (t) => new DdbClient({ transport: t }).item(ID, "children", { rows: SOLR_MAX_INT }),
+    () => jsonResponse(fx.itemView),
+  );
+  assertSameRequests(max, "rows SOLR_MAX_INT");
+  for (const argv of [
+    ["item", ID, "--part", "children", "--rows", String(SOLR_MAX_INT + 1)],
+    ["search", "Goethe", "--rows", String(SOLR_MAX_INT + 1)],
+  ]) {
+    const r = await parity(argv, (t) =>
+      argv[0] === "item"
+        ? new DdbClient({ transport: t }).item(ID, "children", { rows: SOLR_MAX_INT + 1 })
+        : new DdbClient({ transport: t }).search({ query: "Goethe", rows: SOLR_MAX_INT + 1 }),
+    );
+    assert.equal(r.cli.code, 2, argv.join(" "));
+    assert.ok(r.cli.err.includes(`Must be <= ${SOLR_MAX_INT}.`), r.cli.err);
+    assert.equal(r.lib.ok, false, argv.join(" "));
+    assert.equal(r.cli.requests.length + r.lib.requests.length, 0, argv.join(" "));
+  }
+});
+
+test("the CLI's --part help lists the library's ITEM_PARTS", async () => {
+  const r = await parity(["item", "--help"], () => undefined);
+  const help = r.cli.out.replace(/\s+/g, " ");
+  assert.ok(help.includes(ITEM_PARTS.join(" | ")), help);
+  assert.ok(help.includes(`(${ITEM_LANG_PARTS.join("/")})`), help);
 });

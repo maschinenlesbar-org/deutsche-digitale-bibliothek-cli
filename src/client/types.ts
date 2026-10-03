@@ -49,23 +49,48 @@ export interface SolrResponse {
 }
 
 /**
- * The item component to fetch, selecting one of the `/2/items/{id}` sub-paths.
- * `aip` is the bare item endpoint; the rest map to a suffix. `source-description`
- * and `source-record` map to `/source/description` and `/source/record`; `citation`
- * maps to the upstream (misspelled) `/citiation` path.
+ * Every item component `item()` can fetch, in the order the CLI lists them: one of
+ * the `/2/items/{id}` sub-paths. `aip` is the bare item endpoint; the rest map to
+ * a suffix. `source-description` and `source-record` map to `/source/description`
+ * and `/source/record`; `citation` maps to the upstream (misspelled) `/citiation`
+ * path. Frozen; `itemPartProblem` checks a value against it.
  */
-export type ItemPart =
-  | "view"
-  | "aip"
-  | "edm"
-  | "binaries"
-  | "children"
-  | "parents"
-  | "source"
-  | "source-description"
-  | "source-record"
-  | "iiif"
-  | "citation";
+export const ITEM_PARTS = Object.freeze([
+  "view",
+  "aip",
+  "edm",
+  "binaries",
+  "children",
+  "parents",
+  "source",
+  "source-description",
+  "source-record",
+  "iiif",
+  "citation",
+] as const);
+
+/** The item component to fetch: one of {@link ITEM_PARTS}. */
+export type ItemPart = (typeof ITEM_PARTS)[number];
+
+/**
+ * The item parts that accept a `lang` query parameter for localised labels. Any
+ * other part rejects `lang` (`validateItemOptions`). Frozen.
+ */
+export const ITEM_LANG_PARTS: readonly ItemPart[] = Object.freeze([
+  "view",
+  "aip",
+  "edm",
+  "binaries",
+  "source",
+  "source-description",
+] as const);
+
+/**
+ * The largest value Solr accepts for an int parameter (search `rows`/`start`/
+ * `facetLimit`, item `rows`/`offset`): Java's Integer.MAX_VALUE. Beyond it Solr
+ * fails with HTTP 500, so the client rejects a larger value before any request.
+ */
+export const SOLR_MAX_INT = 2_147_483_647;
 
 /**
  * The decoded body of an item component. Exactly one of `json` / `text` is set:
