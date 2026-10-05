@@ -94,6 +94,14 @@ rejected value as typed, and the unknown-command message for a URL typed where a
 command goes, included. Exact strings, not a pattern, so a password with spaces,
 quotes, `#`, `?` or `/` is covered too (`test/conformance-p1-cli-redaction.test.ts`).
 
+The library keeps them out of logged objects too: the engine holds the base URL and
+`defaultHeaders` in real `#private` fields, so `console.log(client)`,
+`util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
+userinfo (raw and percent-decoded) from error bodies and details, redirect targets,
+transport error text and the `cause` chain. Whatever a custom transport throws reaches
+the caller as a `DdbNetworkError` (`GET <url> failed: <reason>`, the original as
+`cause`), never as a raw `TypeError` (`test/conformance-p2-library-redaction.test.ts`).
+
 The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
