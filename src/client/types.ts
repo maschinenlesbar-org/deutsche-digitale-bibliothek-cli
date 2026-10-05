@@ -149,7 +149,10 @@ export interface SearchParams {
   filters?: string[];
   /** Facet fields to compute counts for (`facet.field`; enables `facet=true`). */
   facetFields?: string[];
-  /** Cap the number of values returned per facet (`facet.limit`). */
+  /**
+   * Cap the number of values returned per facet (`facet.limit`); `-1` = every value, still
+   * sorted by count (the client sends `facet.sort=count` for it).
+   */
   facetLimit?: number;
   /** Solr collection to query. Defaults to `search`. */
   collection?: string;

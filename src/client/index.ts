@@ -1,6 +1,6 @@
 // Public entry point for the API client library.
 
-export { DdbClient, DEFAULT_SEARCH_ROWS, validateItemOptions } from "./client.js";
+export { DdbClient, DEFAULT_SEARCH_ROWS, ITEM_OPTION_KEYS, SEARCH_PARAM_KEYS, validateItemOptions } from "./client.js";
 export type { DdbClientOptions } from "./client.js";
 export {
   RequestEngine,

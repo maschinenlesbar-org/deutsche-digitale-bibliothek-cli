@@ -523,6 +523,11 @@ test("--facet-limit -1 asks Solr for every facet value; other negatives are reje
   const cli = makeCli(() => jsonResponse(fx.solr));
   assert.equal(await run(["search", "x", "--facet", "type_fct", "--facet-limit", "-1"], cli.deps), 0);
   assert.equal(queryOf(cli.mt.last()).get("facet.limit"), "-1");
+  // -1 keeps Solr's count order: without facet.sort, Solr switches to index order (01#2).
+  assert.equal(queryOf(cli.mt.last()).get("facet.sort"), "count");
+  const capped = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["search", "x", "--facet", "type_fct", "--facet-limit", "3"], capped.deps), 0);
+  assert.equal(queryOf(capped.mt.last()).get("facet.sort"), null, "a positive limit is count-sorted already");
   const bad = makeCli(() => jsonResponse(fx.solr));
   assert.equal(await run(["search", "x", "--facet", "type_fct", "--facet-limit", "-2"], bad.deps), 2);
   assert.equal(bad.mt.calls.length, 0);

@@ -24,6 +24,10 @@ The v2 read routes are **public — no API key**. Just run the commands.
 | `--force` | overwrite the `--output` file if it already exists (needs `--output`) |
 | `-V, --version` / `-h, --help` | version / help |
 
+An option that takes one value may be given once: a second `--rows`, `--sort`,
+`--base-url` … is a usage error (exit 2) instead of silently replacing the first.
+`--filter` and `--facet` are the exceptions: they collect every value.
+
 ## `search` — find objects
 
 ```bash
@@ -49,7 +53,7 @@ ddb search 'title:Faust'                  # field-scoped query
 | `--fields <list>` | fields to return (Solr `fl`), e.g. `id,label,type` |
 | `--filter <fq>` | Solr filter query (repeatable), e.g. `type_fct:mediatype_002` |
 | `--facet <field>` | return counts for this facet field (repeatable) |
-| `--facet-limit <n>` | cap the number of values per facet (needs `--facet`; Solr's default is 100, `-1` = all) |
+| `--facet-limit <n>` | cap the number of values per facet (needs `--facet`; Solr's default is 100, `-1` = all, still sorted by count) |
 | `--collection <name>` | Solr collection (default `search`) |
 | `--handler <name>` | Solr request handler (default `select`) |
 

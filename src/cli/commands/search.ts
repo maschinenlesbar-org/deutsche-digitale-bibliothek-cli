@@ -48,7 +48,7 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
     .option("--facet <field>", "compute counts for this facet field (repeatable), e.g. type_fct", collect)
     .option(
       "--facet-limit <n>",
-      "cap the number of values returned per facet (Solr default 100; -1 = all)",
+      "cap the number of values returned per facet (Solr default 100; -1 = all, still sorted by count)",
       parseFacetLimit,
     )
     .option("--collection <name>", "Solr collection to query", parsePathSegment, "search")

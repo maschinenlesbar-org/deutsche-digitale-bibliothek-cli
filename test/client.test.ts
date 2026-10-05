@@ -292,3 +292,12 @@ test("a body is decoded by its declared charset; an unknown one is a parse error
   assert.ok(r.text?.includes("Müller"));
   assert.ok(r.bytes?.equals(xml));
 });
+
+test("item options with an unknown key are a validation error before any request (P10)", async () => {
+  const mt = makeMockTransport(() => jsonResponse({ item: {} }));
+  const c = new DdbClient({ transport: mt.transport });
+  for (const opts of [{ limit: 5 }, { Lang: "en" }, JSON.parse('{"__proto__": {"lang": "en"}}')]) {
+    await assert.rejects(c.item("A".repeat(32), "children", opts as never), DdbValidationError, JSON.stringify(opts));
+  }
+  assert.equal(mt.calls.length, 0);
+});

@@ -189,7 +189,13 @@ that take `lang`) and `SOLR_MAX_INT` (2^31−1, the largest Solr int).
   default `search`/`select`). Params map to Solr: `query`→`q`, `rows` (default
   `DEFAULT_SEARCH_ROWS`, 10, sent explicitly), `start`,
   `sort`, `fields`→`fl`, `filters`→`fq` (repeatable), `facetFields`→`facet.field`
-  (sets `facet=true`), `facetLimit`→`facet.limit`. `wt=json` is forced.
+  (sets `facet=true`), `facetLimit`→`facet.limit`. `wt=json` is forced. A
+  `facetLimit` of `-1` ("no limit") also sends `facet.sort=count`: Solr would otherwise
+  switch to index (alphabetical) order for it, and the top of the facet array would no
+  longer be the most frequent value. A key outside `SEARCH_PARAM_KEYS` (a misspelled
+  `filter`, `__proto__`) and a `filters`/`facetFields` that is not an array are a
+  `DdbValidationError`, and so is an `item()` option outside `ITEM_OPTION_KEYS`: the API
+  would ignore them and answer the unfiltered set (`test/conformance-p10-strict-filters.test.ts`).
 - `item(id, part?, opts?)` → an `ItemResult` (`GET /2/items/{id}...`). `part`
   defaults to `view`; others (`ITEM_PARTS`): `aip`, `edm`, `binaries`, `children`, `parents`,
   `source`, `source-description`, `source-record`, `iiif`, `citation`. The result

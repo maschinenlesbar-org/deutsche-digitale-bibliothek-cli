@@ -87,7 +87,7 @@ fields? The **[Glossary](GLOSSARY.md)** decodes every one.
 | `--fields <list>` | Comma-separated fields to return (Solr `fl`), e.g. `id,label` |
 | `--filter <fq>` | Solr filter query — repeatable, e.g. `type_fct:mediatype_002` |
 | `--facet <field>` | Return value counts for this facet field — repeatable, e.g. `type_fct` |
-| `--facet-limit <n>` | Cap the number of values returned per facet (needs `--facet`; Solr's default is 100, `-1` = all) |
+| `--facet-limit <n>` | Cap the number of values returned per facet (needs `--facet`; Solr's default is 100, `-1` = all, still sorted by count) |
 | `--collection <name>` | Solr collection (default `search`) |
 | `--handler <name>` | Solr request handler (default `select`) |
 
@@ -150,7 +150,10 @@ ddb search Goethe | jq '.response.numFound'
 ```
 
 Use `--compact` for single-line JSON and `-o <file>` to write to a file — both
-are **global options** that work before or after the command.
+are **global options** that work before or after the command. An option that takes one
+value (`--rows`, `--sort`, `--base-url`, …) may be given once; a second one is a usage
+error (exit `2`) rather than silently replacing the first. `--filter` and `--facet`
+collect every value.
 
 **Exit codes** make the CLI easy to use in scripts:
 

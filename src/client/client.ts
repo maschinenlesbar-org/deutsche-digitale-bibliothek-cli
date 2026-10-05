@@ -119,8 +119,40 @@ function assertInt(name: string, value: number | undefined, min = 0): void {
  * Validate search parameters before any request: the API reads a blank `q`/`fq` as
  * no filter, and a NaN or negative number would be sent as is.
  */
+/** The keys `search()` takes; anything else would be dropped without a word. */
+export const SEARCH_PARAM_KEYS = Object.freeze([
+  "query",
+  "rows",
+  "start",
+  "sort",
+  "fields",
+  "filters",
+  "facetFields",
+  "facetLimit",
+  "collection",
+  "requestHandler",
+] as const satisfies readonly (keyof SearchParams)[]);
+
+/** The keys `item()`'s options take. */
+export const ITEM_OPTION_KEYS = Object.freeze(["lang", "rows", "offset"] as const satisfies readonly (keyof ItemOptions)[]);
+
+/**
+ * Throw a DdbValidationError for any own key of `value` outside `allowed`: a misspelled
+ * key (`filter` for `filters`), a wrong case or a `__proto__`/`constructor` key from
+ * parsed JSON would otherwise be ignored, and the API answer the whole unfiltered set.
+ */
+function assertKnownKeys(name: string, value: object, allowed: readonly string[]): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) {
+      const shown = JSON.stringify(key.length > 50 ? `${key.slice(0, 50)}…` : key);
+      throw new DdbValidationError(`Invalid ${name}: unknown key ${shown}; expected one of ${allowed.join(", ")}.`);
+    }
+  }
+}
+
 function assertSearchParams(params: SearchParams): void {
   if (!isObject(params)) throw invalid("params", "an object such as { query: \"Goethe\" }", params);
+  assertKnownKeys("search params", params, SEARCH_PARAM_KEYS);
   assertText("query", params.query);
   assertInt("rows", params.rows);
   assertInt("start", params.start);
@@ -133,6 +165,9 @@ function assertSearchParams(params: SearchParams): void {
     if (params[key] !== undefined) assertValid(key, params[key], pathNameProblem);
   }
   for (const key of ["filters", "facetFields"] as const) {
+    const list: unknown = params[key];
+    // A string here would be read character by character; an object not at all.
+    if (list !== undefined && !Array.isArray(list)) throw invalid(key, "an array of strings", list);
     for (const value of params[key] ?? []) assertText(`${key} entry`, value);
   }
   if (params.facetLimit !== undefined && (params.facetFields ?? []).length === 0) {
@@ -233,6 +268,10 @@ export class DdbClient {
       query["facet"] = "true";
       query["facet.field"] = params.facetFields;
       if (params.facetLimit !== undefined) query["facet.limit"] = params.facetLimit;
+      // Solr sorts facet values by count, except when facet.limit is -1 ("no limit"): then
+      // its facet.sort default flips to index (alphabetical) order, and "the top of the
+      // array" became the alphabetically first value. Keep count order for -1 explicitly.
+      if (params.facetLimit === -1) query["facet.sort"] = "count";
     }
     const path = `/search/index/${enc(collection)}/${enc(handler)}`;
     const body = await this.engine.getJson<unknown>(path, query);
@@ -258,6 +297,7 @@ export class DdbClient {
     // A JavaScript caller may pass null for "no options".
     opts = opts ?? {};
     if (typeof opts !== "object" || Array.isArray(opts)) throw invalid("options", "an object", opts);
+    assertKnownKeys("item options", opts, ITEM_OPTION_KEYS);
     const id = normalizeItemId(rawId);
     assertValid("part", part, itemPartProblem);
     if (opts.lang !== undefined) assertText("lang", opts.lang);

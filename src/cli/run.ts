@@ -27,7 +27,35 @@ function configureTree(command: Command, deps: CliDeps): void {
     writeOut: (str) => deps.io.out(str.replace(/\n$/, "")),
     writeErr: (str) => deps.io.err(str.replace(/\n$/, "")),
   });
+  rejectRepeatedOptions(command);
   for (const child of command.commands) configureTree(child, deps);
+}
+
+/** The options that collect every value they are given (`--filter a --filter b`). */
+const REPEATABLE_OPTIONS = new Set(["filter", "facet"]);
+
+/**
+ * Make a second occurrence of a single-value option a usage error (exit 2). Commander
+ * keeps the last one silently, so `--rows 5 --rows 50` or two `--sort`s ran with only one
+ * of them and no sign the other was dropped. Boolean flags and the collecting options
+ * (`--filter`, `--facet`) may repeat. The message names the flag, never the values.
+ */
+function rejectRepeatedOptions(command: Command): void {
+  for (const option of command.options) {
+    if (!(option.required || option.optional) || option.variadic) continue;
+    const name = option.attributeName();
+    if (REPEATABLE_OPTIONS.has(name)) continue;
+    let seen = 0;
+    command.on(`option:${option.name()}`, () => {
+      seen += 1;
+      if (seen > 1) {
+        command.error(`error: option '${option.flags}' was given more than once; it takes one value.`, {
+          code: "ddb.repeatedOption",
+          exitCode: 2,
+        });
+      }
+    });
+  }
 }
 
 /**

@@ -135,7 +135,9 @@ ddb search Weimar --rows 10 --offset 10
   drop zeros (`map(select(.count > 0))`) before building a "top N"; a padded list can be
   all zeros.
 - **A facet lists at most 100 values unless told otherwise** (Solr's default
-  `facet.limit`). For a complete distribution pass `--facet-limit -1` (every value).
+  `facet.limit`). For a complete distribution pass `--facet-limit -1` (every value, still
+  sorted by count since 0.2.0; with 0.1.0 and older, `-1` returned them in alphabetical
+  order, so re-sort by count before reading a "top N" from such output).
 - **Facet values are raw, not normalised.** `place_fct` for "Oktoberfest" returns
   `München` next to `München, Oktoberfest`, `München M; Oktoberfest` and
   `München, Königliche Polizeidirektion`, and mixes places with regions (`Bayern`). For
