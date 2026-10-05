@@ -3,6 +3,7 @@
 // (429, 503), follows redirects (stripping credentials on cross-origin hops),
 // and decodes responses.
 
+import { TextDecoder } from "node:util";
 import {
   MAX_TIMEOUT_MS,
   nodeHttpTransport,
@@ -641,6 +642,7 @@ export class RequestEngine {
           url,
           status,
           body,
+          contentType,
           location,
           status === 401 || status === 403
             ? dropped
@@ -658,7 +660,7 @@ export class RequestEngine {
   /** Perform a GET expecting JSON and parse it into `T`. */
   async getJson<T>(path: string, query?: QueryParams): Promise<T> {
     const res = await this.request("GET", path, { query, accept: "application/json" });
-    const text = res.data.toString("utf8");
+    const text = decodeBody(res.data, res.contentType, path);
     // A successful response with an empty body (e.g. 204 No Content) is not a
     // parse failure — treat it as `null` rather than surfacing a DdbParseError.
     if (res.status === 204 || text.trim().length === 0) {
@@ -674,7 +676,7 @@ export class RequestEngine {
   /** Perform a GET returning the decoded response body as text (e.g. /version). */
   async getText(path: string, query?: QueryParams): Promise<string> {
     const res = await this.request("GET", path, { query, accept: "*/*" });
-    return res.data.toString("utf8");
+    return decodeBody(res.data, res.contentType, path);
   }
 
   /** Perform a GET returning the raw bytes (binary downloads). */
@@ -687,10 +689,11 @@ export class RequestEngine {
     url: string,
     status: number,
     body: Buffer,
+    contentType: string,
     locationHeader?: string,
     hint?: string,
   ): DdbApiError {
-    const text = this.scrub(body.toString("utf8"));
+    const text = this.scrub(decodeBody(body, contentType, url, "lenient"));
     let detail: string | undefined;
     let apiName: string | undefined;
     try {
@@ -728,6 +731,25 @@ export class RequestEngine {
       status >= 300 && status < 400 && locationHeader ? redirectTarget(url, this.scrub(locationHeader)) : undefined;
     return new DdbApiError({ status, url, method, body: text, detail, apiName, location });
   }
+}
+
+/**
+ * Decode a response body by the charset of its Content-Type (UTF-8 when none is given,
+ * as JSON requires). TextDecoder drops a leading byte order mark, which Buffer#toString
+ * keeps and JSON.parse then rejects. An unknown charset label is a DdbParseError naming
+ * it (`where` is the request path for the message), or, with `"lenient"` (raw XML parts,
+ * error bodies), decoded as UTF-8 — those callers keep the exact bytes anyway.
+ */
+export function decodeBody(body: Buffer, contentType: string, where: string, mode: "strict" | "lenient" = "strict"): string {
+  const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1] ?? "utf-8";
+  let decoder: TextDecoder;
+  try {
+    decoder = new TextDecoder(charset);
+  } catch {
+    if (mode === "lenient") return new TextDecoder("utf-8").decode(body);
+    throw new DdbParseError(`Unsupported response charset "${cleanDetail(charset)}" from ${redactUrl(where)}.`);
+  }
+  return decoder.decode(body);
 }
 
 /**

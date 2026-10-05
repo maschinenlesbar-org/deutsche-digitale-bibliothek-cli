@@ -271,7 +271,11 @@ src/
   `sort`/`fl`.
 - `item()` fetches raw via the engine and **branches on Content-Type**: JSON is
   parsed into `ItemResult.json`; anything else (RDF/XML, XML, BIB) is returned as
-  `ItemResult.text` (decoded as UTF-8) plus the exact upstream `ItemResult.bytes`.
+  `ItemResult.text` (decoded by the Content-Type's charset, UTF-8 when none is given or
+  the label is unknown) plus the exact upstream `ItemResult.bytes`. Every JSON body —
+  search, JSON item parts, `version` — is decoded by its declared charset too
+  (`decodeBody`, a leading BOM dropped); an unknown charset label there is a
+  `DdbParseError` naming it.
   The CLI writes those bytes unchanged with `-o` and to a non-terminal stdout
   (`CliIO.isTerminal()` false → `outBinary`); only a terminal gets the decoded text
   with control characters stripped.

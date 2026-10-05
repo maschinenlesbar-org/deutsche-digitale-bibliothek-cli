@@ -12,7 +12,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, type EngineOptions } from "./engine.js";
+import { RequestEngine, decodeBody, type EngineOptions } from "./engine.js";
 import { DdbError, DdbParseError, DdbValidationError } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
@@ -204,8 +204,11 @@ export class DdbClient {
       "application/json, application/xml;q=0.9, text/plain;q=0.8, */*;q=0.5",
       query,
     );
-    const text = res.data.toString("utf8");
-    if (/\bjson\b/i.test(res.contentType)) {
+    const json = /\bjson\b/i.test(res.contentType);
+    // JSON parts are decoded strictly by their charset; the raw XML/file parts keep their
+    // exact `bytes`, and `text` falls back to UTF-8 for a charset label Node doesn't know.
+    const text = decodeBody(res.data, res.contentType, `/items/${id}`, json ? "strict" : "lenient");
+    if (json) {
       if (text.trim().length === 0) return { part, contentType: res.contentType, json: null };
       try {
         return { part, contentType: res.contentType, json: JSON.parse(text) };

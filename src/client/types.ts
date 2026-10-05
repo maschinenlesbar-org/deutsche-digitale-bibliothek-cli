@@ -104,8 +104,8 @@ export interface ItemResult {
   /** Parsed JSON body, when the component returned JSON. */
   json?: JsonValue;
   /**
-   * Text body, when the component returned XML / a plain file: the bytes decoded as
-   * UTF-8 (a record in another charset, e.g. Latin-1, gets U+FFFD substitutions).
+   * Text body, when the component returned XML / a plain file: the bytes decoded by
+   * the Content-Type's charset (UTF-8 when none is given or the label is unknown).
    */
   text?: string;
   /**

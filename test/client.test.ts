@@ -269,3 +269,26 @@ test("the engine rejects out-of-range numeric options at construction", () => {
   }
   assert.doesNotThrow(() => new DdbClient({ timeoutMs: 0, maxRetries: 10, maxRedirects: 0, maxResponseBytes: 0 }));
 });
+
+test("a body is decoded by its declared charset; an unknown one is a parse error for JSON (P8)", async () => {
+  const text = "Müller µg/l";
+  for (const [charset, encoding] of [["iso-8859-1", "latin1"], ["utf-8", "utf8"]] as const) {
+    const body = Buffer.from(JSON.stringify({ response: { numFound: 1, start: 0, docs: [{ label: text }] } }), encoding);
+    const c = new DdbClient({ transport: async () => ({ status: 200, headers: { "content-type": `application/json; charset=${charset}` }, body }) });
+    const r = await c.search({ query: "x" });
+    assert.equal((r.response?.docs[0] as unknown as { label: string }).label, text, charset);
+  }
+  // A UTF-8 BOM is dropped rather than failing JSON.parse.
+  const bom = new DdbClient({
+    transport: async () => ({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from("﻿" + JSON.stringify({ response: { numFound: 0, start: 0, docs: [] } })) }),
+  });
+  await assert.doesNotReject(bom.search({ query: "x" }));
+  const bogus = new DdbClient({ transport: async () => ({ status: 200, headers: { "content-type": "application/json; charset=x-bogus" }, body: Buffer.from("{}") }) });
+  await assert.rejects(bogus.search({ query: "x" }), (e: unknown) => e instanceof DdbParseError && /x-bogus/.test(e.message));
+  // A raw XML part with a Latin-1 body: exact bytes kept, text decoded.
+  const xml = Buffer.from('<?xml version="1.0" encoding="ISO-8859-1"?><a>Müller</a>', "latin1");
+  const item = new DdbClient({ transport: async () => ({ status: 200, headers: { "content-type": "application/xml; charset=ISO-8859-1" }, body: xml }) });
+  const r = await item.item("A".repeat(32), "source-record");
+  assert.ok(r.text?.includes("Müller"));
+  assert.ok(r.bytes?.equals(xml));
+});
