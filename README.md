@@ -33,7 +33,7 @@ pipe straight into [`jq`](https://jqlang.github.io/jq/).
 npm i -g @maschinenlesbar.org/deutsche-digitale-bibliothek-cli
 ```
 
-This installs the **`ddb`** command. Requires **Node.js 20+**.
+This installs the **`ddb`** command. Requires **Node.js 22.12+**.
 
 Check it works:
 
@@ -168,7 +168,8 @@ collect every value.
 ## Troubleshooting
 
 - **`command not found: ddb`** — the global npm bin directory isn't on your
-  `PATH`. Run `npm bin -g` to find it and add it, or run via
+  `PATH`. Run `npm prefix -g` to find the prefix and add its `bin` directory
+  (`"$(npm prefix -g)/bin"`), or run via
   `npx @maschinenlesbar.org/deutsche-digitale-bibliothek-cli …`.
 - **Exit `4` / "not found"** — the id passed to `item` doesn't exist (or that
   component isn't available for it — e.g. `iiif`/`citation` only exist for some
