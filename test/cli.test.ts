@@ -583,3 +583,14 @@ test("--compact prints single-line JSON", async () => {
   await run(["search", "x", "--compact"], cli.deps);
   assert.equal(cli.out.length, 1);
 });
+
+test("an HTTP 414 prints a bounded line that says the URL is too long (01#3)", async () => {
+  const cli = makeCli(() => jsonResponse({}, 414));
+  const query = Array.from({ length: 1200 }, (_, i) => `w${i}`).join(" OR ");
+  const code = await run(["search", query], cli.deps);
+  assert.equal(code, 1);
+  const text = cli.err.join("\n");
+  assert.ok(text.length < 1000, `stderr is ${text.length} characters`);
+  assert.match(text, /HTTP 414 for GET https:\/\/api\.deutsche-digitale-bibliothek\.de\/2\/search\/index\/search\/select\?.*… \(\d+ characters\)/);
+  assert.match(text, /request URL is too long .*--filter/);
+});

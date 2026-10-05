@@ -23,7 +23,9 @@ export {
   DdbParseError,
   DdbUsageError,
   DdbValidationError,
+  MAX_MESSAGE_URL_LENGTH,
   credentialsIn,
+  messageUrl,
   redactCredentials,
   redactUrl,
 } from "./errors.js";

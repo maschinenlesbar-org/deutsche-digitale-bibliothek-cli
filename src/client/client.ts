@@ -13,7 +13,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
 import { RequestEngine, decodeBody, sanitizeServerText, type EngineOptions } from "./engine.js";
-import { DdbError, DdbParseError, DdbValidationError } from "./errors.js";
+import { DdbParseError, DdbValidationError } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
 import {
@@ -85,9 +85,19 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function invalid(name: string, expected: string, value: unknown): DdbError {
-  const shown = typeof value === "string" ? JSON.stringify(value) : String(value);
-  return new DdbError(`Invalid ${name}: expected ${expected}, got ${shown}.`);
+function invalid(name: string, expected: string, value: unknown): DdbValidationError {
+  // A string is quoted (cut at 50 characters), a number shown, anything else named by type.
+  const shown =
+    typeof value === "string"
+      ? JSON.stringify(value.length > 50 ? `${value.slice(0, 50)}…` : value)
+      : typeof value === "number"
+        ? String(value)
+        : value === null
+          ? "null"
+          : Array.isArray(value)
+            ? "an array"
+            : `a ${typeof value}`;
+  return new DdbValidationError(`Invalid ${name}: expected ${expected}, got ${shown}.`);
 }
 
 /** Throw unless `value` is a string with non-whitespace content. */
@@ -110,6 +120,7 @@ function assertInt(name: string, value: number | undefined, min = 0): void {
  * no filter, and a NaN or negative number would be sent as is.
  */
 function assertSearchParams(params: SearchParams): void {
+  if (!isObject(params)) throw invalid("params", "an object such as { query: \"Goethe\" }", params);
   assertText("query", params.query);
   assertInt("rows", params.rows);
   assertInt("start", params.start);
@@ -125,7 +136,7 @@ function assertSearchParams(params: SearchParams): void {
     for (const value of params[key] ?? []) assertText(`${key} entry`, value);
   }
   if (params.facetLimit !== undefined && (params.facetFields ?? []).length === 0) {
-    throw new DdbError("Invalid facetLimit: it needs facetFields (it caps the values returned per facet field).");
+    throw new DdbValidationError("Invalid facetLimit: it needs facetFields (it caps the values returned per facet field).");
   }
 }
 
@@ -244,6 +255,9 @@ export class DdbClient {
    * DdbParseError.
    */
   async item(rawId: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
+    // A JavaScript caller may pass null for "no options".
+    opts = opts ?? {};
+    if (typeof opts !== "object" || Array.isArray(opts)) throw invalid("options", "an object", opts);
     const id = normalizeItemId(rawId);
     assertValid("part", part, itemPartProblem);
     if (opts.lang !== undefined) assertText("lang", opts.lang);

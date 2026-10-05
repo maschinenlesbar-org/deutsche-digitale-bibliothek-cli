@@ -18,6 +18,7 @@ import {
   DdbError,
   DdbNetworkError,
   DdbParseError,
+  DdbValidationError,
   credentialsIn,
   redactCredentials,
   redactUrl,
@@ -38,7 +39,9 @@ export interface RawResponse {
 /**
  * Options for {@link RequestEngine} and the client. The numeric options must be
  * integers within their documented range; anything else (negative, fractional,
- * NaN, Infinity, too large) makes the constructor throw a DdbError.
+ * NaN, Infinity, too large, not a number) makes the constructor throw a
+ * DdbValidationError, and so does a `transport`, `sleep` or `warn` that is not a
+ * function.
  */
 export interface EngineOptions {
   /**
@@ -237,9 +240,22 @@ const MAX_REDIRECTS = 20;
 function intOption(name: string, value: number | undefined, fallback: number, max: number): number {
   if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || value < 0 || value > max) {
-    throw new DdbError(
-      `Invalid option ${name}: expected an integer from 0 to ${max}, got ${String(value)}.`,
-    );
+    // A string or object is echoed by type, not value: it may be long or carry anything.
+    const shown = typeof value === "number" ? String(value) : `a ${typeof value}`;
+    throw new DdbValidationError(`Invalid option ${name}: expected an integer from 0 to ${max}, got ${shown}.`);
+  }
+  return value;
+}
+
+/**
+ * Read a function-valued option (`transport`, `sleep`, `warn`): `undefined` gives the
+ * default, anything but a function throws a DdbValidationError here rather than a raw
+ * TypeError ("this.transport is not a function") at request time.
+ */
+function functionOption<F extends (...args: never[]) => unknown>(name: string, value: F | undefined, fallback: F): F {
+  if (value === undefined) return fallback;
+  if (typeof value !== "function") {
+    throw new DdbValidationError(`Invalid option ${name}: expected a function, got ${value === null ? "null" : typeof value}.`);
   }
   return value;
 }
@@ -354,6 +370,8 @@ export class RequestEngine {
   private readonly warn: (message: string) => void;
 
   constructor(options: EngineOptions = {}) {
+    // A JavaScript caller may pass null for "no options"; treat it like undefined.
+    options = options ?? {};
     // Checked raw, before the trailing-slash strip (see validateBaseUrl).
     this.#baseUrl = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
     this.#credentials = credentialsIn(this.#baseUrl).flatMap((raw) => {
@@ -363,14 +381,20 @@ export class RequestEngine {
         return [raw];
       }
     });
-    this.transport = options.transport ?? nodeHttpTransport;
+    this.transport = functionOption("transport", options.transport, nodeHttpTransport);
     // Only `undefined` selects the default; a blank or otherwise unsendable value
     // is a DdbValidationError here rather than a network error at request time.
     this.userAgent =
       options.userAgent === undefined
         ? DEFAULT_USER_AGENT
         : assertValid("userAgent", options.userAgent, headerValueProblem);
-    this.#defaultHeaders = { ...(options.defaultHeaders ?? {}) };
+    const defaultHeaders: unknown = options.defaultHeaders ?? {};
+    if (typeof defaultHeaders !== "object" || defaultHeaders === null || Array.isArray(defaultHeaders)) {
+      throw new DdbValidationError(
+        `Invalid option defaultHeaders: expected an object of header names and values, got ${defaultHeaders === null ? "null" : Array.isArray(defaultHeaders) ? "an array" : `a ${typeof defaultHeaders}`}.`,
+      );
+    }
+    this.#defaultHeaders = { ...(defaultHeaders as Record<string, string>) };
     for (const [name, value] of Object.entries(this.#defaultHeaders)) {
       assertValid(`defaultHeaders name ${JSON.stringify(name)}`, name, headerNameProblem);
       assertValid(`defaultHeaders[${JSON.stringify(name)}]`, value, headerValueProblem);
@@ -385,8 +409,8 @@ export class RequestEngine {
       DEFAULT_MAX_RESPONSE_BYTES,
       Number.MAX_SAFE_INTEGER,
     );
-    this.sleep = options.sleep ?? realSleep;
-    this.warn = options.warn ?? (() => {});
+    this.sleep = functionOption("sleep", options.sleep, realSleep);
+    this.warn = functionOption("warn", options.warn, () => {});
   }
 
   /**
@@ -432,7 +456,7 @@ export class RequestEngine {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const dotSegment = normalizedPath.split("/").find((s) => s === "." || s === "..");
     if (dotSegment !== undefined) {
-      throw new DdbError(
+      throw new DdbValidationError(
         `Invalid path segment "${dotSegment}" in ${normalizedPath}: "." and ".." cannot be used as an id.`,
       );
     }
@@ -646,6 +670,9 @@ export class RequestEngine {
           location,
           status === 401 || status === 403
             ? dropped
+            : status === 414
+              ? `the request URL is too long for the server (${url.length} characters); ` +
+                "shorten the query or the filter list (--filter), or split it into several searches"
             : retryAfter !== undefined && retryAfter > MAX_RETRY_AFTER_MS
               ? `the server asked to wait ${Math.ceil(retryAfter / 1000)} s (Retry-After), longer than the ` +
                 `${MAX_RETRY_AFTER_MS / 1000} s the client waits; retrying sooner won't help`

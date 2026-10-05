@@ -66,6 +66,20 @@ export function redactCredentials(text: string, credentials: readonly string[]):
   return out;
 }
 
+/** Longest request URL an error message shows (in characters); `DdbApiError.url` keeps it all. */
+export const MAX_MESSAGE_URL_LENGTH = 300;
+
+/**
+ * `url` as an error message shows it: cut at {@link MAX_MESSAGE_URL_LENGTH} characters,
+ * ending in "… (N characters)". A long query or filter list (the way to hit HTTP 414)
+ * otherwise put a 15 KB URL on one stderr line.
+ */
+export function messageUrl(url: string): string {
+  return url.length > MAX_MESSAGE_URL_LENGTH
+    ? `${url.slice(0, MAX_MESSAGE_URL_LENGTH)}… (${url.length} characters)`
+    : url;
+}
+
 /** Base class for every error originating from this client. */
 export class DdbError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -81,7 +95,7 @@ export class DdbError extends Error {
  * readable `message` when present. For a 3xx that was not followed (not a
  * followable status, a malformed Location, or past `maxRedirects`), `location`
  * holds the redirect target (absolute, sanitised, userinfo redacted) and the
- * message names it.
+ * message names it. The message cuts a long URL (`messageUrl`); `url` keeps it whole.
  */
 export class DdbApiError extends DdbError {
   readonly status: number;
@@ -113,7 +127,7 @@ export class DdbApiError extends DdbError {
       );
     }
     const detailPart = parts.length > 0 ? `: ${parts.join("; ")}` : "";
-    super(`HTTP ${args.status} for ${args.method} ${url}${detailPart}`);
+    super(`HTTP ${args.status} for ${args.method} ${messageUrl(url)}${detailPart}`);
     this.status = args.status;
     this.url = url;
     this.method = args.method;

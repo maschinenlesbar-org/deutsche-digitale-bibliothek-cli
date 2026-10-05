@@ -121,10 +121,20 @@ the caller as a `DdbNetworkError` (`GET <url> failed: <reason>`, the original as
 The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
-`DdbError` naming the option. The client also checks its own parameters before any
-request: a blank `query`/`lang`/`sort`/filter, a non-integer
+`DdbValidationError` naming the option; so does a `transport`, `sleep` or `warn` that
+is not a function and a `defaultHeaders` that is not an object. The client also checks
+its own parameters before any request: a `params`/`opts` that is not an object, a blank
+or non-string `query`/`lang`/`sort`/filter, a non-integer
 or negative `rows`/`start`/`offset` (at most `SOLR_MAX_INT`, 2^31−1), a `facetLimit` below −1 or
-without `facetFields` throw a `DdbError` (`Invalid <name>: expected …, got …`).
+without `facetFields` throw a `DdbValidationError` (`Invalid <name>: expected …, got …`;
+a value is quoted only when it is a short string, anything else is named by type).
+No rejected input ever surfaces as a raw `TypeError`
+(`test/conformance-p8-p9-p13-responses-and-errors.test.ts`).
+
+Server text in a message is cleaned of control characters and cut at 500 characters,
+and a request URL at 300 (`messageUrl`, ending in "… (N characters)"); `DdbApiError.url`
+and `.body` keep them whole. An HTTP `414` adds that the URL is too long and to shorten
+the query or the `--filter` list.
 
 ### Library input validation
 
@@ -139,8 +149,8 @@ promise, a constructor throws. `DdbValidationError` extends `DdbUsageError`, so
 parsers call the same functions and turn a reason into commander's
 `InvalidArgumentError` (exit 2 too).
 
-What the library rejects with `DdbValidationError` (rules move here one by one;
-the older checks above still throw a plain `DdbError`):
+What the library rejects with `DdbValidationError` (every rejected input, the checks
+above included):
 
 - **Item ids** (`item(id)`): the id is trimmed (`normalizeItemId`) and must then
   be exactly 32 upper-case letters and digits (`itemIdProblem`); a lower-case id

@@ -160,7 +160,7 @@ are **global options** that work before or after the command.
 | `2` | Bad usage / invalid argument (nothing was sent) |
 | `4` | Not found (`404` from the API) |
 | `6` | Network / transport failure (DNS, connection, timeout, size cap) |
-| `1` | Any other runtime error (including an unexpected `403`) |
+| `1` | Any other runtime error (including an unexpected `403`, or a `414` for a query or filter list too long for a URL) |
 
 ## Troubleshooting
 
