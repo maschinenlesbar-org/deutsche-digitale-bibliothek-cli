@@ -22,6 +22,8 @@ export {
   DdbParseError,
   DdbUsageError,
   DdbValidationError,
+  credentialsIn,
+  redactCredentials,
   redactUrl,
 } from "./errors.js";
 export {

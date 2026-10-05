@@ -85,6 +85,15 @@ constructor throw a `DdbValidationError` (`Invalid baseUrl: …`; userinfo is
 allowed). It is a configuration error, not a `DdbNetworkError`: that class is kept
 for the default transport's per-hop scheme check and real transport failures.
 
+Userinfo is never printed. Messages show URLs through `redactUrl` (`https://***@host/…`),
+which also cuts the userinfo out of a value that doesn't parse. The CLI goes further:
+`withRedactedOutput` in `run.ts` collects the exact userinfo of every argument (and of
+the value part of `--opt=value`) with the exported `credentialsIn` and redacts it from
+every line it prints with `redactCredentials` — commander's usage errors, which echo a
+rejected value as typed, and the unknown-command message for a URL typed where a
+command goes, included. Exact strings, not a pattern, so a password with spaces,
+quotes, `#`, `?` or `/` is covered too (`test/conformance-p1-cli-redaction.test.ts`).
+
 The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
