@@ -12,8 +12,8 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, decodeBody, sanitizeServerText, type EngineOptions } from "./engine.js";
-import { DdbParseError, DdbValidationError } from "./errors.js";
+import { RequestEngine, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
+import { DdbApiError, DdbParseError, DdbValidationError } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
 import {
@@ -119,6 +119,29 @@ function assertInt(name: string, value: number | undefined, min = 0): void {
  * Validate search parameters before any request: the API reads a blank `q`/`fq` as
  * no filter, and a NaN or negative number would be sent as is.
  */
+/**
+ * `err` (an error for an ancestor's component) restated for the item the caller asked
+ * for: same status (a 404 still exits 4: the component doesn't exist for this item), with
+ * the redirect chain in the message, so "not found" is never reported for another id
+ * without saying why.
+ */
+function withAncestry(err: DdbApiError, id: string, part: ItemPart, ancestors: string[]): DdbApiError {
+  const chain = [id, ...ancestors].join(" → ");
+  const note =
+    err.status === 404
+      ? `item ${id} has no ${part} of its own; the API points to its ancestor${ancestors.length > 1 ? "s" : ""} (${chain}), and the last has none either`
+      : `item ${id} has no ${part} of its own; the API points to its ancestor${ancestors.length > 1 ? "s" : ""} (${chain}), and fetching that failed`;
+  return new DdbApiError({
+    status: err.status,
+    url: err.url,
+    method: err.method,
+    body: err.body,
+    detail: err.detail === undefined ? note : `${err.detail}; ${note}`,
+    ...(err.apiName !== undefined ? { apiName: err.apiName } : {}),
+    ...(err.location !== undefined ? { location: err.location } : {}),
+  });
+}
+
 /** The keys `search()` takes; anything else would be dropped without a word. */
 export const SEARCH_PARAM_KEYS = Object.freeze([
   "query",
@@ -233,11 +256,27 @@ function assertSolrResponse(path: string, body: unknown): asserts body is SolrRe
  */
 const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/;
 
+/** The item id in an `/items/{id}…` URL path, with the rest of the path, or undefined. */
+function itemPath(url: URL | string): { id: string; rest: string } | undefined {
+  let path: string;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    return undefined;
+  }
+  const match = /\/items\/([A-Z0-9]{32})(\/.*)?$/.exec(path);
+  return match ? { id: match[1]!, rest: match[2] ?? "" } : undefined;
+}
+
 export class DdbClient {
   private readonly engine: RequestEngine;
+  /** How many ancestors `item()` follows when the API points a component at one. */
+  private readonly maxAncestors: number;
 
   constructor(options: DdbClientOptions = {}) {
     this.engine = new RequestEngine(options);
+    // The engine has validated maxRedirects (0..20); its limit bounds the ancestor walk too.
+    this.maxAncestors = options?.maxRedirects ?? 5;
   }
 
   /**
@@ -308,11 +347,49 @@ export class DdbClient {
     if (opts.lang !== undefined) query["lang"] = opts.lang;
     if (opts.rows !== undefined) query["rows"] = opts.rows;
     if (opts.offset !== undefined) query["offset"] = opts.offset;
-    const res = await this.engine.getRaw(
-      `/items/${enc(id)}${PART_SUFFIX[part]}`,
-      "application/json, application/xml;q=0.9, text/plain;q=0.8, */*;q=0.5",
-      query,
-    );
+    const suffix = PART_SUFFIX[part];
+    // A component held by an ancestor (a section of a digitised book, a unit of an archive
+    // finding aid) answers 303 with a Location naming the ancestor's same component — and
+    // without the API's /2 prefix, so following it as sent ends in a 404 for another id
+    // (result 01, bug 1). The engine is told not to follow a redirect that names another
+    // item; the client requests that item's component through the base URL instead, up to
+    // maxRedirects ancestors, and says so in `heldBy` (or in the error).
+    const ancestors: string[] = [];
+    let current = id;
+    let res: RawResponse;
+    for (;;) {
+      try {
+        res = await this.engine.getRaw(
+          `/items/${enc(current)}${suffix}`,
+          "application/json, application/xml;q=0.9, text/plain;q=0.8, */*;q=0.5",
+          query,
+          (target) => {
+            const named = itemPath(target);
+            return named === undefined || named.id === current;
+          },
+        );
+        break;
+      } catch (err) {
+        const named =
+          err instanceof DdbApiError && err.status >= 300 && err.status < 400 && err.location !== undefined
+            ? itemPath(err.location)
+            : undefined;
+        if (
+          named !== undefined &&
+          named.rest === suffix &&
+          named.id !== id &&
+          !ancestors.includes(named.id) &&
+          ancestors.length < this.maxAncestors
+        ) {
+          ancestors.push(named.id);
+          current = named.id;
+          continue;
+        }
+        if (ancestors.length > 0 && err instanceof DdbApiError) throw withAncestry(err, id, part, ancestors);
+        throw err;
+      }
+    }
+    const heldBy = ancestors.length > 0 ? { heldBy: current } : {};
     const json = /\bjson\b/i.test(res.contentType);
     // JSON parts are decoded strictly by their charset; the raw XML/file parts keep their
     // exact `bytes`, and `text` falls back to UTF-8 for a charset label Node doesn't know.
@@ -333,9 +410,9 @@ export class DdbClient {
       if (error !== undefined) {
         throw new DdbParseError(`Unexpected response for item ${id} (${part}): an error document with a success status: ${quoted(error)}`);
       }
-      return { part, contentType: res.contentType, json: json as JsonValue };
+      return { part, contentType: res.contentType, json: json as JsonValue, ...heldBy };
     }
-    return { part, contentType: res.contentType, text, bytes: res.data };
+    return { part, contentType: res.contentType, text, bytes: res.data, ...heldBy };
   }
 
   /**

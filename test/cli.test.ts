@@ -599,3 +599,16 @@ test("an HTTP 414 prints a bounded line that says the URL is too long (01#3)", a
   assert.match(text, /HTTP 414 for GET https:\/\/api\.deutsche-digitale-bibliothek\.de\/2\/search\/index\/search\/select\?.*… \(\d+ characters\)/);
   assert.match(text, /request URL is too long .*--filter/);
 });
+
+test("item prints an ancestor's component with a note naming it, exit 0 (01#1)", async () => {
+  const VOLUME = "JY7HJBJAUBYMG437RSIFJNUPMMSAHT26";
+  const cli = makeCli((req) =>
+    req.url.includes(VOLUME)
+      ? rawResponse("<mets/>", "application/xml")
+      : { status: 303, headers: { location: `https://api.deutsche-digitale-bibliothek.de/items/${VOLUME}/source/record` }, body: Buffer.alloc(0) },
+  );
+  const code = await run(["item", ID, "--part", "source-record"], cli.deps);
+  assert.equal(code, 0, cli.err.join("\n"));
+  assert.equal(cli.out.join("\n"), "<mets/>");
+  assert.equal(cli.err.join("\n"), `Note: item ${ID} has no source-record of its own; this is the source-record of its ancestor ${VOLUME}, which the API points to.`);
+});

@@ -99,6 +99,13 @@ ddb item "$ID"
   `.xml` file or pipe to an XML tool, not `jq`. Every other component is JSON.
 - **`iiif` and `citation` exist only for some objects** — a `404` (exit 4) there
   means "this object has no manifest / citation", not a bad id.
+- **A sub-item's `source-record` may be its ancestor's.** Sections of a digitised book
+  and units of an archive finding aid have no provider record of their own; the CLI then
+  prints the ancestor's whole record and says so on stderr (`Note: item … has no
+  source-record of its own; this is the source-record of its ancestor …`). Tell the user
+  the record is the parent's (e.g. the volume's METS), not one for the section. An exit 4
+  whose message says "the API points to its ancestors (…), and the last has none either"
+  means no record exists anywhere up the chain.
 - **Object media rights vary per object** (the DDB "Lizenzkorb"): the CC0 status
   of the metadata does *not* extend to the image/audio/video — check the object's
   own rights statement before reusing its media. `--part binaries` lists file URLs;

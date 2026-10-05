@@ -137,9 +137,20 @@ Latin-1 record shows its umlauts) and control characters removed first:
 | `parents` | the chain up the hierarchy: the object itself first, the institution last | JSON |
 | `source` | the ingest source metadata | JSON |
 | `source-description` | a description of the source record | JSON |
-| `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML) | **XML** |
+| `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML); see below for sub-items | **XML** |
 | `iiif` | the IIIF Presentation manifest (only where present → else `404`) | JSON |
 | `citation` | a newspaper-issue citation file (only where applicable) | BIB file |
+
+**A sub-item's `source-record` may belong to an ancestor.** Sections of a digitised
+book and units of an archive finding aid have no provider record of their own: the API
+answers `303` and points to an ancestor's record (in a `Location` without the `/2`
+prefix, which can't be followed as sent). `ddb` fetches that ancestor's record through
+the base URL — up to `maxRedirects` (5) levels — prints it, and notes on stderr whose it
+is: `Note: item JG3Y… has no source-record of its own; this is the source-record of its
+ancestor JY7H…`. That file is the whole parent record (the volume's METS), not one for
+the section. If no ancestor has one, the `404` (exit 4) names the chain:
+`… item N4N7… has no source-record of its own; the API points to its ancestors (N4N7… →
+NSNK… → RQBX…), and the last has none either`.
 
 `--lang <code>` sets the preferred label language for
 `view`/`aip`/`edm`/`binaries`/`source`/`source-description` (with any other part

@@ -49,6 +49,15 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
         // and --lang/--rows/--offset for a part that ignores them
         // (validateItemOptions), before any request; run.ts maps that to exit 2.
         const result = await client.item(id ?? "", part, itemOpts);
+        if (result.heldBy !== undefined) {
+          // The API pointed the component at an ancestor (a book section's or an archive
+          // unit's source record); say whose it is, so the whole parent record isn't
+          // mistaken for one of the requested item.
+          deps.io.err(
+            `Note: item ${(id ?? "").trim()} has no ${part} of its own; this is the ${part} of its ancestor ` +
+              `${result.heldBy}, which the API points to.`,
+          );
+        }
         if (result.text !== undefined) {
           // XML / BIB file component: emit the raw body (no JSON quoting).
           const bytes = result.bytes ?? Buffer.from(result.text, "utf8");

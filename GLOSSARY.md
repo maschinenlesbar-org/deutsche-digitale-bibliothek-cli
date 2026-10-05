@@ -119,7 +119,7 @@ object. Most are JSON; a few are served as XML or a plain file and are printed
 | `children` / `parents` | the direct children one level down / the whole chain up, starting with the object itself and ending with its institution (finding aids, multi-part works) | JSON |
 | `source` | the ingest source metadata | JSON |
 | `source-description` | a description of the source record | JSON |
-| `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML, …) | **XML** |
+| `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML, …); for a sub-item (a book section, an archive unit) often its ancestor's whole record, with a note naming it | **XML** |
 | `iiif` | the [IIIF](https://iiif.io) Presentation manifest (only where the object has one) | JSON |
 | `citation` | a citation/quote file for a newspaper issue (only where applicable) | BIB file |
 

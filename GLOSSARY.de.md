@@ -119,7 +119,7 @@ ausgegeben (damit sie bei `> file.xml` und in Pipes unverändert bleiben):
 | `children` / `parents` | die direkten Kind-Objekte eine Ebene tiefer / die ganze Kette nach oben, beginnend mit dem Objekt selbst und endend mit seiner Einrichtung (Findmittel, mehrteilige Werke) | JSON |
 | `source` | die Metadaten der Ingest-Quelle | JSON |
 | `source-description` | eine Beschreibung des Quelldatensatzes | JSON |
-| `source-record` | der rohe Datensatz der liefernden Einrichtung (METS/MODS, LIDO, MARCXML, …) | **XML** |
+| `source-record` | der rohe Datensatz der liefernden Einrichtung (METS/MODS, LIDO, MARCXML, …); bei einem Teilobjekt (Abschnitt eines Buchs, Verzeichnungseinheit eines Findbuchs) oft der ganze Datensatz eines übergeordneten Objekts, mit einem Hinweis, der es nennt | **XML** |
 | `iiif` | das [IIIF](https://iiif.io)-Presentation-Manifest (nur wenn das Objekt eines hat) | JSON |
 | `citation` | eine Zitier-/Zitatdatei für eine Zeitungsausgabe (nur wo zutreffend) | BIB-Datei |
 

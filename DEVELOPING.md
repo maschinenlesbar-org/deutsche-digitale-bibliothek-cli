@@ -202,7 +202,13 @@ that take `lang`) and `SOLR_MAX_INT` (2^31−1, the largest Solr int).
   has `json` (for JSON components) **or** `text` (for `edm`/`source-record`/
   `citation`, which the API serves as XML or a file), plus the `contentType`.
   `opts`: `lang` (localised labels), and `rows`/`offset` for `part: "children"`;
-  passed for any other part they reject (`validateItemOptions`).
+  passed for any other part they reject (`validateItemOptions`). When the API points
+  a component at another item's same component (a `303` for a sub-item's
+  `source-record`, whose `Location` lacks the `/2` prefix), the engine is told not to
+  follow it (`RequestOptions.followRedirect`) and the client requests that ancestor's
+  component through the base URL instead, up to `maxRedirects` ancestors; the result's
+  `heldBy` names the item it belongs to (the CLI prints a stderr note), and an error at
+  the end of the chain keeps its status and names the chain in its message.
 - `version()` → the backend version string (`GET /2/version`), trimmed of
   surrounding whitespace (the body ends in a newline). A body that is not one short
   version token (letters, digits, `.`, `_`, `+`, `-`; an HTML page, JSON, an empty

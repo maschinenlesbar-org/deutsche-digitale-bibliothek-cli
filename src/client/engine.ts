@@ -30,6 +30,18 @@ import { assertValid, baseUrlProblem, headerNameProblem, headerValueProblem } fr
 export const DEFAULT_BASE_URL = "https://api.deutsche-digitale-bibliothek.de/2";
 const DEFAULT_USER_AGENT = "deutsche-digitale-bibliothek-cli";
 
+/** Per-request options for {@link RequestEngine.request}. */
+export interface RequestOptions {
+  query?: QueryParams;
+  accept: string;
+  /**
+   * Called for each redirect the engine would follow, with its resolved target. Returning
+   * `false` stops there: the 3xx surfaces as a DdbApiError whose `location` names the target,
+   * so the caller can decide (the client uses it for item redirects to another item).
+   */
+  followRedirect?: (target: URL) => boolean;
+}
+
 export interface RawResponse {
   data: Buffer;
   contentType: string;
@@ -506,7 +518,7 @@ export class RequestEngine {
   async request(
     method: string,
     path: string,
-    options: { query?: QueryParams; accept: string } = { accept: "application/json" },
+    options: RequestOptions = { accept: "application/json" },
   ): Promise<RawResponse> {
     // The transport never sees the base URL's userinfo: the engine sends it as an
     // Authorization header, per hop, so a redirect to the same origin (relative or
@@ -611,10 +623,14 @@ export class RequestEngine {
 
       // Follow redirects, resolving the Location relative to the current URL.
       const location = headerValue(responseHeaders["location"]);
-      const next =
+      const candidate =
         FOLLOWED_REDIRECTS.has(status) && redirects < this.maxRedirects
           ? resolveLocation(location, url)
           : undefined;
+      const next =
+        candidate !== undefined && options.followRedirect !== undefined && !options.followRedirect(candidate)
+          ? undefined
+          : candidate;
       if (next !== undefined) {
         const prev = new URL(url);
         // Only http(s) is followed: a `file:`, `javascript:` or `data:` target is refused here,
@@ -707,8 +723,13 @@ export class RequestEngine {
   }
 
   /** Perform a GET returning the raw bytes (binary downloads). */
-  async getRaw(path: string, accept: string, query?: QueryParams): Promise<RawResponse> {
-    return this.request("GET", path, { query, accept });
+  async getRaw(
+    path: string,
+    accept: string,
+    query?: QueryParams,
+    followRedirect?: (target: URL) => boolean,
+  ): Promise<RawResponse> {
+    return this.request("GET", path, { query, accept, ...(followRedirect ? { followRedirect } : {}) });
   }
 
   private toApiError(

@@ -113,6 +113,13 @@ export interface ItemResult {
    * the record unchanged (any charset, CRs and control bytes intact).
    */
   bytes?: Buffer;
+  /**
+   * Set when the item has no such component of its own and the API pointed to an
+   * ancestor's (a section of a digitised book, a unit of an archive finding aid; seen for
+   * `source-record`): the id of the item whose component this is. The record is then the
+   * ancestor's whole record (e.g. the volume's METS), not one for the requested item.
+   */
+  heldBy?: string;
 }
 
 /** Options for an item-component request. */

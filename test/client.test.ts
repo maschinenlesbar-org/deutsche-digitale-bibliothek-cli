@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient, DEFAULT_SEARCH_ROWS } from "../src/client/client.js";
 import * as lib from "../src/index.js";
-import { DdbError, DdbParseError, DdbValidationError } from "../src/client/errors.js";
+import { DdbApiError, DdbError, DdbParseError, DdbValidationError } from "../src/client/errors.js";
 import type { ItemPart, SearchParams } from "../src/client/types.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
@@ -300,4 +300,46 @@ test("item options with an unknown key are a validation error before any request
     await assert.rejects(c.item("A".repeat(32), "children", opts as never), DdbValidationError, JSON.stringify(opts));
   }
   assert.equal(mt.calls.length, 0);
+});
+
+test("item follows a component the API points at an ancestor through the base URL (01#1)", async () => {
+  const SECTION = "JG3YAM7VLFJPVGMAWK4IBCJVFHNFZ5NP";
+  const VOLUME = "JY7HJBJAUBYMG437RSIFJNUPMMSAHT26";
+  // The live answer: 303 with an absolute Location that lacks the /2 prefix.
+  const mt = makeMockTransport((req) =>
+    req.url.includes(SECTION)
+      ? { status: 303, headers: { location: `https://api.deutsche-digitale-bibliothek.de/items/${VOLUME}/source/record`, "content-type": "application/xml" }, body: Buffer.from("<x/>") }
+      : rawResponse("<mets/>", "application/xml"),
+  );
+  const r = await new DdbClient({ transport: mt.transport }).item(SECTION, "source-record");
+  assert.equal(r.text, "<mets/>");
+  assert.equal(r.heldBy, VOLUME);
+  assert.deepEqual(mt.calls.map((c) => c.url), [
+    `https://api.deutsche-digitale-bibliothek.de/2/items/${SECTION}/source/record`,
+    `https://api.deutsche-digitale-bibliothek.de/2/items/${VOLUME}/source/record`,
+  ]);
+});
+
+test("an ancestor chain that ends in a 404 says so instead of naming another id alone (06)", async () => {
+  const [UNIT, PARENT, TOP] = ["N4N7TIGNXOHU6IW5L64Z3RPYARCTWNEL", "NSNKITEB5XPCOXWSRHPQSCWSAKRLO2JH", "RQBX".padEnd(32, "A")];
+  const next: Record<string, string> = { [UNIT]: PARENT, [PARENT]: TOP };
+  const mt = makeMockTransport((req) => {
+    const id = /items\/([A-Z0-9]{32})/.exec(req.url)![1]!;
+    return next[id]
+      ? { status: 303, headers: { location: `https://api.deutsche-digitale-bibliothek.de/items/${next[id]}/source/record` }, body: Buffer.alloc(0) }
+      : jsonResponse({ name: "ItemNotFoundException", message: "No data row is available (size=0)." }, 404);
+  });
+  await assert.rejects(new DdbClient({ transport: mt.transport }).item(UNIT, "source-record"), (e: unknown) => {
+    assert.ok(e instanceof DdbApiError && e.status === 404, String(e));
+    assert.match(e.message, /No data row is available/);
+    assert.match(e.message, new RegExp(`item ${UNIT} has no source-record of its own; the API points to its ancestors \\(${UNIT} → ${PARENT} → ${TOP}\\), and the last has none either`));
+    return true;
+  });
+  assert.equal(mt.calls.length, 3);
+  // maxRedirects bounds the walk: 0 reports the redirect instead of following it.
+  const once = makeMockTransport(() => ({ status: 303, headers: { location: `https://x.example/items/${PARENT}/source/record` }, body: Buffer.alloc(0) }));
+  await assert.rejects(new DdbClient({ transport: once.transport, maxRedirects: 0 }).item(UNIT, "source-record"), (e: unknown) =>
+    e instanceof DdbApiError && e.status === 303 && /redirect to https:\/\/x\.example\/items\/NSNK.* not followed/.test(e.message),
+  );
+  assert.equal(once.calls.length, 1);
 });
