@@ -101,7 +101,8 @@ export function assertHeaderValue(name: string, value: string): string {
 /**
  * A configured base URL (`baseUrl`, `--base-url`): not blank, no surrounding
  * whitespace, a parseable `http:`/`https:` URL without a query or fragment.
- * Userinfo (`https://user:pw@host/`) is allowed; it is redacted from messages.
+ * Userinfo (`https://user:pw@host/`) is allowed; it is redacted from messages and sent
+ * as Basic auth, so a `%` in it must start a valid escape (`%25` for a literal one).
  *
  * Surrounding whitespace is checked on the raw value: `new URL()` trims it
  * silently, but request paths are appended to the raw string, so
@@ -123,6 +124,15 @@ export const baseUrlProblem: Problem = (value) => {
     return "Only http: and https: base URLs are supported.";
   }
   if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
+  // The userinfo is percent-decoded for the Authorization header; a "%" that isn't an
+  // escape would fail there ("URI malformed") at request time. Reject it here.
+  for (const part of [url.username, url.password]) {
+    try {
+      decodeURIComponent(part);
+    } catch {
+      return 'The user name or password has a "%" that is not followed by two hex digits; write a literal "%" as %25.';
+    }
+  }
   return undefined;
 };
 

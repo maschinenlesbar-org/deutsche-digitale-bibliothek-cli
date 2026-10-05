@@ -135,8 +135,9 @@ the older checks above still throw a plain `DdbError`):
   The CLI's `--collection`/`--handler` parsers use the same rule. The engine's
   dot-segment guard in `buildUrl` stays as a backstop for any other path.
 - **Base URL** (`baseUrl`), at construction (`validateBaseUrl`, `baseUrlProblem`):
-  blank, surrounding whitespace, unparseable, not `http:`/`https:`, or with a
-  query or fragment. `--base-url` uses the same rule, so its messages match.
+  blank, surrounding whitespace, unparseable, not `http:`/`https:`, with a
+  query or fragment, or with a `%` in the user name or password that doesn't start
+  an escape (write a literal `%` as `%25`). `--base-url` uses the same rule, so its messages match.
 - **Header values** (`userAgent`, `defaultHeaders`), at construction: a blank
   value, a C0 control character other than tab, DEL or anything above U+00FF
   (`headerValueProblem`, `assertHeaderValue`), and a `defaultHeaders` name that is
