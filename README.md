@@ -177,9 +177,9 @@ are **global options** that work before or after the command.
   `--base-url` targets an authenticated endpoint, or the item component is
   access-restricted.
 - **Rate-limited** — the client retries `429`/`503` (and a reset connection) automatically up to
-  `--max-retries` times, each after the server's `Retry-After` (a wait of more than
-  30 s is not retried: the error is reported at once) or else a short linear
-  backoff; if it persists, slow down.
+  `--max-retries` times, each after a short linear backoff or the server's longer
+  `Retry-After` (a wait of more than 30 s is not retried: the error is reported at
+  once and names the wait the server asked for); if it persists, slow down.
 
 ## Global options
 

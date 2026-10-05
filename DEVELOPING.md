@@ -307,10 +307,13 @@ document's `error.msg`. Every `detail` is stripped of control characters, folded
 line and capped at 500 characters (`…`); the full body stays on `DdbApiError.body`.
 
 **Retry / backoff.** Transient `429` and `503` responses are retried
-automatically, up to `--max-retries`. Each retry waits the response's `Retry-After`
-(delay-seconds or an IMF-fixdate, parsed strictly by the exported `parseRetryAfter`),
-or else `retryDelayMs * attempt`. A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is
-not retried at all: the error surfaces at once. `DdbApiError` exposes
+automatically, up to `--max-retries`. Each retry waits `retryDelayMs * attempt` (200 ms,
+400 ms, …), or longer when the response's `Retry-After` asks for it (delay-seconds or an
+IMF-fixdate, parsed strictly by the exported `parseRetryAfter`); `Retry-After: 0` or a
+date in the past never makes a zero-delay burst. A `Retry-After` above
+`MAX_RETRY_AFTER_MS` (30 s) is not retried at all: the error surfaces at once and names
+the requested wait ("the server asked to wait 31 s (Retry-After), longer than the 30 s
+the client waits; retrying sooner won't help"; `test/conformance-p6-retry-policy.test.ts`). `DdbApiError` exposes
 `isRetryable` (true for `429`/`503`). A connection reset mid-request (`ECONNRESET`,
 `EPIPE`, `ECONNABORTED`, undici's `UND_ERR_SOCKET`, anywhere in the `cause` chain) is
 retried the same way for a GET, whichever transport reported it

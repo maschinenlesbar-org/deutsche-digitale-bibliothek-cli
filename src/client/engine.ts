@@ -70,10 +70,10 @@ export interface EngineOptions {
    */
   timeoutMs?: number;
   /**
-   * Number of automatic retries for transient (429/503) responses, 0..`MAX_RETRIES`
-   * (10). Each waits the
-   * response's `Retry-After` (up to `MAX_RETRY_AFTER_MS`; a longer one is not
-   * retried), or else `retryDelayMs * attempt`.
+   * Number of automatic retries for transient (429/503) responses and reset
+   * connections, 0..`MAX_RETRIES` (10). Each waits `retryDelayMs * attempt`, or longer
+   * if the response's `Retry-After` asks (up to `MAX_RETRY_AFTER_MS`; a longer one is
+   * not retried, and the error names the requested wait).
    */
   maxRetries?: number;
   /**
@@ -570,13 +570,16 @@ export class RequestEngine {
         throw new DdbNetworkError(`${method} ${redactUrl(url)} failed: ${sizeLimitMessage(this.maxResponseBytes)}`);
       }
       const retryable = status === 429 || status === 503;
+      const retryAfter = retryable ? parseRetryAfter(responseHeaders["retry-after"]) : undefined;
       if (retryable && attempt < this.maxRetries) {
-        // Honour Retry-After; without a usable one, back off linearly. A Retry-After
-        // beyond MAX_RETRY_AFTER_MS is not retried: the error below surfaces at once.
-        const retryAfter = parseRetryAfter(responseHeaders["retry-after"]);
+        // Back off linearly (retryDelayMs * attempt). A Retry-After can ask for longer, never
+        // for less: `Retry-After: 0` or a date in the past made a zero-delay burst against a
+        // server that had just asked for less load. A Retry-After beyond MAX_RETRY_AFTER_MS
+        // is not retried: the error below surfaces at once and names the requested wait.
         if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
           attempt += 1;
-          await this.sleep(retryAfter ?? this.retryDelayMs * attempt);
+          const backoff = this.retryDelayMs * attempt;
+          await this.sleep(retryAfter === undefined ? backoff : Math.max(retryAfter, backoff));
           continue;
         }
       }
@@ -639,7 +642,12 @@ export class RequestEngine {
           status,
           body,
           location,
-          status === 401 || status === 403 ? dropped : undefined,
+          status === 401 || status === 403
+            ? dropped
+            : retryAfter !== undefined && retryAfter > MAX_RETRY_AFTER_MS
+              ? `the server asked to wait ${Math.ceil(retryAfter / 1000)} s (Retry-After), longer than the ` +
+                `${MAX_RETRY_AFTER_MS / 1000} s the client waits; retrying sooner won't help`
+              : undefined,
         );
       }
 
