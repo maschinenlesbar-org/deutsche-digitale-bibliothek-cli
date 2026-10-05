@@ -356,9 +356,12 @@ test("a redirect loop stops after maxRedirects and names the target", async () =
     () => e.getJson("/x"),
     (err) =>
       err instanceof DdbApiError &&
-      err.message === "HTTP 302 for GET http://***@127.0.0.1:18109/2/x: redirect to http://***@127.0.0.1:18109/2/x not followed",
+      // The base URL's userinfo travels as the Authorization header, never in a URL.
+      err.message === "HTTP 302 for GET http://127.0.0.1:18109/2/x: redirect to http://127.0.0.1:18109/2/x not followed",
   );
   assert.equal(mt.calls.length, 6); // initial + 5 redirects
+  // Same origin on every hop: the credentials go along each time.
+  assert.ok(mt.calls.every((c) => c.headers?.["Authorization"] === `Basic ${Buffer.from("u:p").toString("base64")}`));
 });
 
 test("only 301/302/303/307/308 are followed; 300/304/305 surface as errors", async () => {
@@ -391,4 +394,23 @@ test("redactUrl hides userinfo and leaves other URLs alone", () => {
   const err = new DdbApiError({ status: 500, url: "https://u:p@example.test/x", method: "GET", body: "" });
   assert.equal(err.url, "https://***@example.test/x");
   assert.ok(!err.message.includes("u:p"));
+});
+
+test("defaultHeaders never reach another origin, even through a transport that follows redirects itself (04#10)", async () => {
+  // A fetch-style transport that ignores `redirect: "manual"` and reports where it ended up.
+  const mt = makeMockTransport(() => ({ ...jsonResponse({ response: {} }), url: "http://localhost:20160/elsewhere" }));
+  const e = new RequestEngine({ baseUrl: "http://127.0.0.1:20160/2", transport: mt.transport, defaultHeaders: { "X-Auth-Token": "tok" } });
+  await assert.rejects(
+    () => e.getJson("/x"),
+    (err) => err instanceof DdbNetworkError && /followed a redirect to another origin/.test(err.message),
+  );
+  assert.equal(mt.last().redirect, "manual", "the transport is told not to follow");
+  // The engine's own following drops them on the cross-origin hop and keeps them on the same origin.
+  let n = 0;
+  const hops = makeMockTransport(() =>
+    ++n === 1 ? redirectResponse("http://127.0.0.1:20160/2/same") : n === 2 ? redirectResponse("http://localhost:20160/2/other") : jsonResponse({ ok: 1 }),
+  );
+  const e2 = new RequestEngine({ baseUrl: "http://127.0.0.1:20160/2", transport: hops.transport, defaultHeaders: { "X-Auth-Token": "tok" } });
+  await e2.getJson("/x");
+  assert.deepEqual(hops.calls.map((c) => c.headers?.["X-Auth-Token"]), ["tok", "tok", undefined]);
 });

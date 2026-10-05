@@ -160,4 +160,7 @@ not found · `6` network failure · `1` other API/runtime error. See
 you inject one via a header and the API ever redirects to a different host, the
 client drops every header you added (`Authorization`, `Proxy-Authorization`,
 `Cookie`, `X-API-Key`, any token header) before following, so none is leaked to
-another origin.
+another origin. A redirect to the same origin (scheme, host and port), with a relative or
+an absolute `Location`, keeps them. A `user:password@` in `--base-url` is sent as an
+`Authorization` header that follows the same rule, never inside the URL, and userinfo in
+a `Location` is ignored.

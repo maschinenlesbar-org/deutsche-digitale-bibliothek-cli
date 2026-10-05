@@ -188,7 +188,9 @@ component is access-restricted.
 
 **Redirect safety.** Before following a redirect that crosses an origin boundary the
 engine drops every caller-supplied header (`Authorization`, `Proxy-Authorization`,
-`X-API-Key`, `Cookie`, any token header); only its own `Accept` and `User-Agent` go along.
+`X-API-Key`, `Cookie`, any token header) and a base URL's credentials; only its own
+`Accept` and `User-Agent` go along. A custom transport must not follow redirects itself
+(see "Transports must not follow redirects" below).
 Nothing carries credentials by default, but this keeps the seam safe if a caller
 injects one via `defaultHeaders`.
 
@@ -307,7 +309,24 @@ crosses an origin boundary (scheme, host **or** port), the engine keeps only its
 `Proxy-Authorization` or a custom token header too) before following it — this
 includes a same-host `https:`->`http:` downgrade. A followed `https:`->`http:`
 downgrade additionally emits a one-line warning through the `warn` hook (wired to
-stderr by the CLI), because the remaining hops travel in cleartext.
+stderr by the CLI), because the remaining hops travel in cleartext. A redirect to the
+same origin keeps every header, whether its `Location` is relative or absolute.
+
+**Base-URL credentials per hop.** The userinfo of a base URL (`https://user:pw@mirror/2`,
+for a proxy or mirror behind a login) never reaches a transport inside the URL: the
+engine sends it as an `Authorization: Basic` header (unless `defaultHeaders` sets its own
+`Authorization`), so the cross-origin rule above applies to it too. Userinfo in a
+`Location` is never used. When a cross-origin hop dropped credentials and the target then
+answers `401`/`403`, the error says so ("the server redirected http→https, which dropped
+the base URL's credentials; use an https base URL").
+
+**Transports must not follow redirects.** The engine passes `redirect: "manual"`
+(`HttpRequest.redirect`) and follows redirects itself, because only it can drop headers
+per hop; `fetch` follows by default and strips only `Authorization`, not `X-Auth-Token`
+or `X-API-Key`. A fetch transport passes it on (`fetch(url, { redirect: req.redirect })`)
+and reports `HttpResponse.url = response.url`; a response whose `url` lies on another
+origin than the request is rejected as a `DdbNetworkError` ("the transport followed a
+redirect to another origin"). Checked by `test/conformance-p3-redirect-credentials.test.ts`.
 
 **maxResponseBytes.** A cap on the response body size in bytes (`0` = unlimited;
 default 100 MiB), guarding against unbounded responses.

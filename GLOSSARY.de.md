@@ -160,4 +160,7 @@ nicht gefunden · `6` Netzwerkfehler · `1` sonstiger API- oder Laufzeitfehler. 
 Zugangsdaten. Falls Sie aber über einen Header welche mitgeben und die API jemals auf einen
 anderen Host umleitet, entfernt der Client vor dem Folgen jeden Header, den Sie hinzugefügt haben
 (`Authorization`, `Proxy-Authorization`, `Cookie`, `X-API-Key`, jeden Token-Header), sodass keiner
-an einen anderen Origin gelangt.
+an einen anderen Origin gelangt. Eine Weiterleitung auf denselben Origin (Schema, Host und
+Port), mit relativer oder absoluter `Location`, behält sie. Ein `user:passwort@` in
+`--base-url` wird als `Authorization`-Header gesendet, der derselben Regel folgt, nie in der
+URL selbst, und Zugangsdaten in einer `Location` werden ignoriert.

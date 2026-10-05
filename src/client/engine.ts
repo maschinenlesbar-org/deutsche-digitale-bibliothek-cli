@@ -352,18 +352,41 @@ export class RequestEngine {
     return `${this.#baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
   }
 
+  /**
+   * The base URL without its userinfo, for the URLs a transport sees: the engine sends
+   * the userinfo as an `Authorization` header instead (see {@link basicAuthorization}).
+   */
+  private requestBase(): string {
+    const parsed = new URL(this.#baseUrl);
+    if (parsed.username === "" && parsed.password === "") return this.#baseUrl;
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.href.replace(/\/+$/, "");
+  }
+
   /** Perform a request with Accept negotiation and transient-error retries. */
   async request(
     method: string,
     path: string,
     options: { query?: QueryParams; accept: string } = { accept: "application/json" },
   ): Promise<RawResponse> {
-    let url = this.buildUrl(path, options.query);
+    // The transport never sees the base URL's userinfo: the engine sends it as an
+    // Authorization header, per hop, so a redirect to the same origin (relative or
+    // absolute) keeps it and one to another origin or scheme drops it. A transport such
+    // as fetch also refuses a URL with credentials outright.
+    let url = this.requestBase() + this.buildUrl(path, options.query).slice(this.#baseUrl.length);
     let headers: Record<string, string> = {
       Accept: options.accept,
       "User-Agent": this.userAgent,
       ...this.#defaultHeaders,
     };
+    const authorization = basicAuthorization(this.#baseUrl);
+    // A caller's own Authorization header (defaultHeaders) wins over the userinfo.
+    if (authorization !== undefined && !Object.keys(headers).some((k) => k.toLowerCase() === "authorization")) {
+      headers["Authorization"] = authorization;
+    }
+    /** Why a redirect dropped the base URL's credentials, for a 401/403 message. */
+    let dropped: string | undefined;
 
     let attempt = 0;
     let redirects = 0;
@@ -376,6 +399,7 @@ export class RequestEngine {
           url,
           headers,
           timeoutMs: this.timeoutMs,
+          redirect: "manual",
           ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
         });
       } catch (cause) {
@@ -388,6 +412,19 @@ export class RequestEngine {
         throw new DdbNetworkError(
           `${method} ${redactUrl(url)} failed: ${cleanDetail(this.scrub(reason))}`,
           { cause: this.scrubCause(cause) },
+        );
+      }
+
+      // A transport must not follow redirects itself (`redirect: "manual"`): one that did
+      // (fetch's default) may have carried a credential header to another host — fetch
+      // strips only Authorization, not X-Auth-Token or X-API-Key — and the answer is not
+      // the one asked for. Reject it when it says so (`url`).
+      const finalUrl = (response as { url?: unknown }).url;
+      if (typeof finalUrl === "string" && finalUrl !== "" && originOf(finalUrl) !== originOf(url)) {
+        throw new DdbNetworkError(
+          `${method} ${redactUrl(url)} failed: the transport followed a redirect to another origin ` +
+            `(${cleanDetail(redactUrl(this.scrub(finalUrl)))}); a transport must not follow redirects ` +
+            `(HttpRequest.redirect is "manual").`,
         );
       }
 
@@ -412,12 +449,22 @@ export class RequestEngine {
           : undefined;
       if (next !== undefined) {
         const prev = new URL(url);
-        // SECURITY: the v2 read routes need no credentials, but a caller may still
-        // inject one (Authorization, Proxy-Authorization, a token header ...) via
-        // defaultHeaders. When a redirect crosses origins, drop every caller header
-        // so none is ever sent to a foreign host (the classic credential-leak-on-
-        // redirect that fetch/curl guard against).
+        // Userinfo in a Location is not used: credentials come from the base URL only,
+        // as the Authorization header, never from a server.
+        next.username = "";
+        next.password = "";
+        // SECURITY: when a redirect crosses origins — scheme, host or port — drop every
+        // caller header and the base URL's Authorization, so none is ever sent to a
+        // foreign host (the classic credential-leak-on-redirect that fetch/curl guard
+        // against). The same origin keeps them, whether the Location is relative or
+        // absolute.
         if (next.origin !== prev.origin) {
+          if (dropped === undefined && Object.keys(headers).some((k) => !ENGINE_HEADERS.has(k))) {
+            dropped =
+              prev.protocol === "http:" && next.protocol === "https:" && prev.hostname === next.hostname
+                ? "the server redirected http→https, which dropped the base URL's credentials; use an https base URL"
+                : `the redirect to ${next.origin} dropped the credentials (they are sent to their own origin only)`;
+          }
           headers = engineHeadersOnly(headers);
         }
         // A same-scheme change from https: to http: is a transport downgrade: the
@@ -439,7 +486,14 @@ export class RequestEngine {
 
       const contentType = String(response.headers["content-type"] ?? "");
       if (status < 200 || status >= 300) {
-        throw this.toApiError(method, url, status, response.body, location);
+        throw this.toApiError(
+          method,
+          url,
+          status,
+          response.body,
+          location,
+          status === 401 || status === 403 ? dropped : undefined,
+        );
       }
 
       return { data: response.body, contentType, status };
@@ -479,6 +533,7 @@ export class RequestEngine {
     status: number,
     body: Buffer,
     locationHeader?: string,
+    hint?: string,
   ): DdbApiError {
     const text = this.scrub(body.toString("utf8"));
     let detail: string | undefined;
@@ -512,10 +567,31 @@ export class RequestEngine {
     // sequences into stderr when this message is printed (DDB-01), and keep it to
     // one bounded line.
     if (detail !== undefined) detail = cleanDetail(detail);
+    if (hint !== undefined) detail = detail === undefined ? hint : `${detail}; ${hint}`;
     // Name the target of a redirect that was not followed.
     const location =
       status >= 300 && status < 400 && locationHeader ? redirectTarget(url, this.scrub(locationHeader)) : undefined;
     return new DdbApiError({ status, url, method, body: text, detail, apiName, location });
+  }
+}
+
+/**
+ * The `Authorization` header for a URL's userinfo (`Basic base64(user:password)`, both
+ * percent-decoded, as Node's own http client builds it), or undefined without userinfo.
+ */
+function basicAuthorization(url: string): string | undefined {
+  const parsed = new URL(url);
+  if (parsed.username === "" && parsed.password === "") return undefined;
+  const pair = `${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`;
+  return `Basic ${Buffer.from(pair, "utf8").toString("base64")}`;
+}
+
+/** The origin (scheme, host, port) of a URL, or the value itself if it doesn't parse. */
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
   }
 }
 
