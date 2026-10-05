@@ -3,8 +3,7 @@
 Echte Beispiele für die Claude-Code-Skills des Plugins `ddb`, eines pro Skill: eine
 Anfrage, die `ddb`-Befehle, die der Skill ausgeführt hat, und Claudes Antwort.
 
-Jedes Beispiel lief am 15. September 2026 mit `ddb` 0.0.4 gegen die Live-API, außer
-ddb-item, das am 26. September 2026 mit 0.0.8 neu lief.
+Jedes Beispiel lief am 6. Oktober 2026 mit `ddb` 0.2.0 gegen die Live-API.
 Die Daten ändern sich, Ihre Ergebnisse werden also abweichen; mit den gezeigten IDs und
 Schlüsseln können Sie die Anfragen selbst ausprobieren. Lange Listen sind gekürzt.
 
@@ -73,10 +72,10 @@ liefern auch Werte mit Anzahl 0 (`mediatype_001`, `sec_03`), diese wurden weggel
 enthält mehrere Schreibweisen von München; sie stehen getrennt, weil ein Objekt mehrere tragen kann.
 
 ```
-„Oktoberfest" in der DDB: 1.614 Objekte
+„Oktoberfest" in der DDB: 1.609 Objekte
 
-Medien:   ohne Digitalisat 1.029 · Bilder 477 · Text 105 · Video 2
-Sparten:  Archive 967 · Museen 347 · Bibliotheken 226 · Mediatheken 52 · Forschung 22
+Medien:   ohne Digitalisat 1.029 · Bilder 477 · Text 100 · Video 2
+Sparten:  Archive 967 · Museen 347 · Bibliotheken 221 · Mediatheken 52 · Forschung 22
 
 Top-Einrichtungen                                                      gesamt   Bilder
   Stiftung Deutsches Historisches Museum                                  286      257
@@ -86,20 +85,24 @@ Top-Einrichtungen                                                      gesamt   
   Deutsche Nationalbibliothek                                             123
   Landesarchiv Berlin                                                      97
   Landesarchiv Baden-Württemberg                                           73       44
-  … 3 weitere in den Top 10; weitere Bildbestände: DFF - Deutsches Filminstitut & Filmmuseum e.V. 33,
-    filmportal.de 33, Stiftung Stadtmuseum Berlin 22
+  Bayerische Staatsbibliothek                                              62
+  Bayerisches Hauptstaatsarchiv                                            60
+  Stadtarchiv München                                                      48
+  Weitere Bildbestände: DFF - Deutsches Filminstitut & Filmmuseum e.V. 33, filmportal.de 33,
+    Stiftung Stadtmuseum Berlin 22
 
-Orte:     München 420 (dazu „München, Oktoberfest" 27, „München M; Oktoberfest" 9, „München M" 7)
-          · Berlin 328 · Frankfurt am Main 134 · Heidelberg 19 · Bayern 16 · Dresden 8
-Typen:    Archivale 332 · Akten 308 · Fotografie 196 · Negativ (Fotografie) 69 · Bild 62 · Text 46
+Orte:     München 421 (dazu „München, Oktoberfest" 27, „München M; Oktoberfest" 9, „München M" 7,
+          „München, Königliche Polizeidirektion" 7) · Berlin 328 · Frankfurt am Main 134
+          · Heidelberg 19 · Bayern 16 · Dresden 8
+Typen:    Archivale 332 · Akten 308 · Fotografie 196 · Negativ (Fotografie) 69 · Bild 66 · Text 46
           · Standfotografie 30 · Plakat 28 · Zeitungsausschnitt 26 · Akte 25
 
 DHM-Bilder: 257; erste Seite (alle CC BY-NC-ND 4.0):
-  YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ  Oktoberfest 1810
   4L65B6SDQPBJXGCVRFMSNZAVWCFXZBCK  München, Oktoberfest          Fotografie
   ACOXBGXRZTVKSZZVTY7IYCUYQOT7KWKO  Münchener Oktoberfest         Fotografie
   MLPAM6ODR2NJ4LFBWUB6BKLQALKW4RO5  Münchener Oktoberfest         Stereofotografie
-  … 253 weitere (weiterblättern mit --offset 8)
+  MDMAP3VGNE62QTDJJMXTQVB2UJ7CRE2A  München, Oktoberfest          Fotografie
+  … 253 weitere, darunter Oktoberfest 1810 (YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ) (weiterblättern mit --offset 8)
 Metadaten sind CC0; die Medienrechte legt jedes Objekt selbst fest.
 ```
 

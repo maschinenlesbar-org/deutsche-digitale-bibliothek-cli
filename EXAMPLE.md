@@ -3,8 +3,7 @@
 Real examples for the Claude Code skills of the `ddb` plugin, one per skill: a request,
 the `ddb` commands the skill ran, and the answer Claude gave.
 
-Every example ran against the live API on 15 September 2026 with `ddb` 0.0.4, except
-ddb-item, re-run on 26 September 2026 with 0.0.8.
+Every example ran against the live API on 6 October 2026 with `ddb` 0.2.0.
 The data changes, so your results will differ; the ids and keys shown work for trying the
 requests yourself. Long lists are shortened.
 
@@ -72,10 +71,10 @@ Sector names come from the repo glossary. Facets also return zero-count values (
 because one object can carry more than one of them.
 
 ```
-"Oktoberfest" in the DDB: 1 614 objects
+"Oktoberfest" in the DDB: 1 609 objects
 
-Media:    no digitised media 1 029 · images 477 · text 105 · video 2
-Sectors:  archives 967 · museums 347 · libraries 226 · media 52 · research 22
+Media:    no digitised media 1 029 · images 477 · text 100 · video 2
+Sectors:  archives 967 · museums 347 · libraries 221 · media 52 · research 22
 
 Top institutions                                                          all   images
   Stiftung Deutsches Historisches Museum                                  286      257
@@ -85,20 +84,24 @@ Top institutions                                                          all   
   Deutsche Nationalbibliothek                                             123
   Landesarchiv Berlin                                                      97
   Landesarchiv Baden-Württemberg                                           73       44
-  … 3 more in the top 10; other image holders: DFF - Deutsches Filminstitut & Filmmuseum e.V. 33,
-    filmportal.de 33, Stiftung Stadtmuseum Berlin 22
+  Bayerische Staatsbibliothek                                              62
+  Bayerisches Hauptstaatsarchiv                                            60
+  Stadtarchiv München                                                      48
+  Other image holders: DFF - Deutsches Filminstitut & Filmmuseum e.V. 33, filmportal.de 33,
+    Stiftung Stadtmuseum Berlin 22
 
-Places:   München 420 (also "München, Oktoberfest" 27, "München M; Oktoberfest" 9, "München M" 7)
-          · Berlin 328 · Frankfurt am Main 134 · Heidelberg 19 · Bayern 16 · Dresden 8
-Types:    Archivale 332 · Akten 308 · Fotografie 196 · Negativ (Fotografie) 69 · Bild 62 · Text 46
+Places:   München 421 (also "München, Oktoberfest" 27, "München M; Oktoberfest" 9, "München M" 7,
+          "München, Königliche Polizeidirektion" 7) · Berlin 328 · Frankfurt am Main 134
+          · Heidelberg 19 · Bayern 16 · Dresden 8
+Types:    Archivale 332 · Akten 308 · Fotografie 196 · Negativ (Fotografie) 69 · Bild 66 · Text 46
           · Standfotografie 30 · Plakat 28 · Zeitungsausschnitt 26 · Akte 25
 
 DHM images: 257; first page (all CC BY-NC-ND 4.0):
-  YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ  Oktoberfest 1810
   4L65B6SDQPBJXGCVRFMSNZAVWCFXZBCK  München, Oktoberfest          Fotografie
   ACOXBGXRZTVKSZZVTY7IYCUYQOT7KWKO  Münchener Oktoberfest         Fotografie
   MLPAM6ODR2NJ4LFBWUB6BKLQALKW4RO5  Münchener Oktoberfest         Stereofotografie
-  … 253 more (page with --offset 8)
+  MDMAP3VGNE62QTDJJMXTQVB2UJ7CRE2A  München, Oktoberfest          Fotografie
+  … 253 more, Oktoberfest 1810 (YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ) among them (page with --offset 8)
 Metadata is CC0; media rights are set per object.
 ```
 
