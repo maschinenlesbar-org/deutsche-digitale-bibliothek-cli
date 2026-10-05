@@ -186,6 +186,9 @@ ddb --output goethe.json search Goethe --rows 100
 | `4` | HTTP 404 (not found) |
 | `6` | network / transport failure (DNS, connection, timeout, response size-cap) |
 
+A reader that stops early (`ddb search … | head`) ends the run quietly with exit `0`.
+If stderr's reader is gone (`2>&1 | true`), a failed run still exits with its own code.
+
 ## Notes
 
 - **No API key.** The read routes are public; a `403` means a custom `--base-url`

@@ -256,6 +256,8 @@ src/
     commands/    # search, item, catalog (version)
     program.ts   # assembles the commander program from injectable deps
     run.ts       # parses argv -> exit code (no process.exit; testable)
+                 # (io.ts handleOutputErrors: EPIPE on stdout exits 0 quietly; on
+                 #  stderr it is ignored so the run keeps its code)
     index.ts     # #! bin shim
 ```
 
