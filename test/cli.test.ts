@@ -392,11 +392,34 @@ test("version prints the plain-text backend version", async () => {
   assert.equal(cli.out.join("\n"), "7.5");
 });
 
-test("version to the terminal is stripped of control bytes (DDB-01)", async () => {
+test("a version with control bytes is rejected, and none reach the terminal (DDB-01)", async () => {
   const cli = makeCli(() => rawResponse(`7.5${ESC}]0;pwned${BEL}\n`, "text/plain"));
   const code = await run(["version"], cli.deps);
-  assert.equal(code, 0);
-  assert.equal(cli.out.join("\n"), "7.5]0;pwned");
+  assert.equal(code, 1);
+  assert.deepEqual(cli.out, []);
+  assert.ok(!cli.err.join("\n").includes(ESC) && !cli.err.join("\n").includes(BEL), cli.err.join("\n"));
+});
+
+test("version fails on a 2xx body that is not a version string (03#6)", async () => {
+  for (const [body, type] of [["<html>maintenance</html>", "text/html"], ['{"version":"7.5"}', "application/json"], ["", "text/plain"]] as const) {
+    const cli = makeCli(() => rawResponse(body, type));
+    const code = await run(["version"], cli.deps);
+    assert.equal(code, 1, body);
+    assert.deepEqual(cli.out, [], body);
+    assert.match(cli.err.join("\n"), /expected a version string such as "7\.5"/, body);
+  }
+  const ok = makeCli(() => rawResponse("7.5\n", "text/plain"));
+  assert.equal(await run(["version"], ok.deps), 0);
+  assert.deepEqual(ok.out, ["7.5"]);
+});
+
+test("item fails on a JSON part that is null, a scalar or an error document", async () => {
+  for (const body of ["null", "5", '{"name":"ItemNotFoundException","message":"gone","stacktrace":[]}']) {
+    const cli = makeCli(() => rawResponse(body, "application/json"));
+    const code = await run(["item", ID], cli.deps);
+    assert.equal(code, 1, body);
+    assert.deepEqual(cli.out, [], body);
+  }
 });
 
 test("a 404 exits 4", async () => {

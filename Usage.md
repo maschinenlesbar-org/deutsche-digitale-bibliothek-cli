@@ -158,7 +158,10 @@ ddb item "$ID" --part children --rows 20         # first 20 children
 ddb version        # e.g. 7.5
 ```
 
-Useful to confirm the API is reachable and the CLI is wired up.
+Useful to confirm the API is reachable and the CLI is wired up. Anything but a short
+version token — an HTML page from a captive portal or proxy login, JSON, an empty body —
+fails with exit `1` ("expected a version string such as "7.5""), so a wrong `--base-url`
+that answers `200` doesn't pass the check.
 
 ## Scripting recipes
 

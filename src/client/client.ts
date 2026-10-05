@@ -12,7 +12,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, decodeBody, type EngineOptions } from "./engine.js";
+import { RequestEngine, decodeBody, sanitizeServerText, type EngineOptions } from "./engine.js";
 import { DdbError, DdbParseError, DdbValidationError } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
@@ -22,6 +22,7 @@ import {
   type ItemOptions,
   type ItemPart,
   type ItemResult,
+  type JsonValue,
   type SearchParams,
   type SolrResponse,
 } from "./types.js";
@@ -132,6 +133,60 @@ function shapeError(path: string, expected: string): DdbParseError {
   return new DdbParseError(`Unexpected response shape from ${path}: expected ${expected}.`);
 }
 
+/** Longest stretch of a server's error text a message quotes. */
+const MAX_QUOTED = 200;
+
+/** `text` cleaned of control characters, on one line, cut at MAX_QUOTED characters. */
+function quoted(text: string): string {
+  const clean = sanitizeServerText(text).replace(/\s+/g, " ").trim();
+  return clean.length > MAX_QUOTED ? `${clean.slice(0, MAX_QUOTED)}…` : clean;
+}
+
+/**
+ * The message of an error document sent with a 2xx status, or undefined for any other
+ * body: Solr's `{ error: { msg } }` (or a bare `error` string) and the DDB envelope
+ * `{ name: "…Exception", message, stacktrace }`.
+ */
+function errorEnvelope(body: Record<string, unknown>): string | undefined {
+  const error = body["error"];
+  if (typeof error === "string") return error;
+  if (isObject(error)) return typeof error["msg"] === "string" ? error["msg"] : "(no message)";
+  const name = body["name"];
+  if ((typeof name === "string" && /Exception$/.test(name)) || body["stacktrace"] !== undefined) {
+    const message = body["message"];
+    return `${typeof name === "string" ? `${name}: ` : ""}${typeof message === "string" ? message : "(no message)"}`;
+  }
+  return undefined;
+}
+
+/**
+ * Check a search answer against the documented Solr shape (`SolrResponse`): a JSON object
+ * with a `response` object holding an integer `numFound` and a `docs` array. An error
+ * document, `null`, `{}`, an array or a scalar is a DdbParseError, never data: printed as
+ * a result it read as "nothing found" or as hits.
+ */
+function assertSolrResponse(path: string, body: unknown): asserts body is SolrResponse {
+  if (!isObject(body)) throw shapeError(path, "a JSON object");
+  const error = errorEnvelope(body);
+  if (error !== undefined) {
+    throw new DdbParseError(`Unexpected response from ${path}: an error document with a success status: ${quoted(error)}`);
+  }
+  const response = body["response"];
+  if (!isObject(response)) throw shapeError(path, "a response object");
+  const numFound = response["numFound"];
+  if (typeof numFound !== "number" || !Number.isSafeInteger(numFound) || numFound < 0) {
+    throw shapeError(path, "an integer response.numFound");
+  }
+  if (!Array.isArray(response["docs"])) throw shapeError(path, "a response.docs array");
+}
+
+/**
+ * A backend version as `/version` sends it: one short token of letters, digits, `.`, `_`,
+ * `+` and `-` ("7.5"). An HTML page (a captive portal, a proxy login, a wrong --base-url),
+ * a JSON document or anything long is not a version.
+ */
+const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/;
+
 export class DdbClient {
   private readonly engine: RequestEngine;
 
@@ -149,8 +204,9 @@ export class DdbClient {
    * throws DdbError without a request. `collection` and `requestHandler` must be
    * letters, digits, `.`, `_` and `-` (not "." or ".."; `pathNameProblem`), or the
    * call rejects with a DdbValidationError without a request. A 2xx
-   * body that is not a JSON object (empty, `null`, an array, a scalar) or whose
-   * `response` is not an object raises DdbParseError.
+   * body without the documented shape — not a JSON object, an error document, no
+   * `response` object with an integer `numFound` and a `docs` array — raises
+   * DdbParseError.
    */
   async search(params: SearchParams): Promise<SolrResponse> {
     assertSearchParams(params);
@@ -169,11 +225,8 @@ export class DdbClient {
     }
     const path = `/search/index/${enc(collection)}/${enc(handler)}`;
     const body = await this.engine.getJson<unknown>(path, query);
-    if (!isObject(body)) throw shapeError(path, "a JSON object");
-    if (body["response"] !== undefined && !isObject(body["response"])) {
-      throw shapeError(path, "a response object");
-    }
-    return body as SolrResponse;
+    assertSolrResponse(path, body);
+    return body;
   }
 
   /**
@@ -186,7 +239,9 @@ export class DdbClient {
    * (`itemPartProblem`) rejects with a DdbValidationError, a blank `lang` or a
    * non-integer / negative `rows`/`offset` throws DdbError, both without a request, and
    * `lang` outside {@link ITEM_LANG_PARTS} or `rows`/`offset` for any part but
-   * `children` rejects with a DdbValidationError (`validateItemOptions`).
+   * `children` rejects with a DdbValidationError (`validateItemOptions`). A JSON part whose
+   * body is not an object or array (`null`, empty, a scalar) or is an error document is a
+   * DdbParseError.
    */
   async item(rawId: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
     const id = normalizeItemId(rawId);
@@ -209,21 +264,41 @@ export class DdbClient {
     // exact `bytes`, and `text` falls back to UTF-8 for a charset label Node doesn't know.
     const text = decodeBody(res.data, res.contentType, `/items/${id}`, json ? "strict" : "lenient");
     if (json) {
-      if (text.trim().length === 0) return { part, contentType: res.contentType, json: null };
+      let json: unknown;
       try {
-        return { part, contentType: res.contentType, json: JSON.parse(text) };
+        json = text.trim().length === 0 ? null : JSON.parse(text);
       } catch (cause) {
         throw new DdbParseError(`Failed to parse JSON for item ${id} (${part})`, { cause });
       }
+      // Every JSON part is an object or an array; `null`, an empty body or a scalar is not
+      // data, and neither is an error document sent with a 2xx status.
+      if (typeof json !== "object" || json === null) {
+        throw new DdbParseError(`Unexpected response shape for item ${id} (${part}): expected a JSON object or array.`);
+      }
+      const error = isObject(json) ? errorEnvelope(json) : undefined;
+      if (error !== undefined) {
+        throw new DdbParseError(`Unexpected response for item ${id} (${part}): an error document with a success status: ${quoted(error)}`);
+      }
+      return { part, contentType: res.contentType, json: json as JsonValue };
     }
     return { part, contentType: res.contentType, text, bytes: res.data };
   }
 
   /**
    * The version string of the DDB backend, with surrounding whitespace (the body's
-   * trailing newline, CRs) trimmed. Public — works without a key.
+   * trailing newline, CRs) trimmed. Public — works without a key. A 2xx body that is not
+   * one short version token ("7.5": letters, digits, `.`, `_`, `+`, `-`) — an HTML page,
+   * JSON, an empty body — is a DdbParseError, so the call works as a connectivity check.
    */
   async version(): Promise<string> {
-    return (await this.engine.getText("/version")).trim();
+    const version = (await this.engine.getText("/version")).trim();
+    if (!VERSION_PATTERN.test(version)) {
+      throw new DdbParseError(
+        `Unexpected response from /version: expected a version string such as "7.5", got ${
+          version === "" ? "an empty body" : `"${quoted(version)}"`
+        }.`,
+      );
+    }
+    return version;
   }
 }

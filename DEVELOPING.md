@@ -188,7 +188,16 @@ that take `lang`) and `SOLR_MAX_INT` (2^31−1, the largest Solr int).
   `opts`: `lang` (localised labels), and `rows`/`offset` for `part: "children"`;
   passed for any other part they reject (`validateItemOptions`).
 - `version()` → the backend version string (`GET /2/version`), trimmed of
-  surrounding whitespace (the body ends in a newline). The CLI prints it as is.
+  surrounding whitespace (the body ends in a newline). A body that is not one short
+  version token (letters, digits, `.`, `_`, `+`, `-`; an HTML page, JSON, an empty
+  body) is a `DdbParseError`. The CLI prints it as is.
+
+**2xx bodies are checked, never printed as data when they aren't** (`DdbParseError`,
+exit 1): `search` needs the documented Solr shape — a JSON object with a `response`
+object holding an integer `numFound` and a `docs` array; a JSON item part must be an
+object or an array (not `null`, an empty body or a scalar); and an error document sent
+with a 2xx status (Solr's `{ error: { msg } }`, the DDB `{ name: "…Exception", message }`
+envelope) is reported with its message.
 
 ## No authentication
 
