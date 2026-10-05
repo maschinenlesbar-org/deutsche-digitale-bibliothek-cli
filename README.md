@@ -176,7 +176,7 @@ are **global options** that work before or after the command.
 - **Unexpected `403`** — the read routes are public, so this usually means a custom
   `--base-url` targets an authenticated endpoint, or the item component is
   access-restricted.
-- **Rate-limited** — the client retries `429`/`503` automatically up to
+- **Rate-limited** — the client retries `429`/`503` (and a reset connection) automatically up to
   `--max-retries` times, each after the server's `Retry-After` (a wait of more than
   30 s is not retried: the error is reported at once) or else a short linear
   backoff; if it persists, slow down.
@@ -196,7 +196,7 @@ These may be given **before or after** the command, e.g.
 | `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`). A `user:password@` in it is sent as Basic auth and never printed: every message, usage errors included, shows `***@`; write a literal `%` in it as `%25` |
 | `--timeout <ms>` | Per-request timeout (default `30000`; at most `2147483647`) |
 | `--user-agent <ua>` | `User-Agent` header value |
-| `--max-retries <n>` | Retries for transient `429`/`503` responses (0..10, default `2`; each waits the server's `Retry-After`, up to 30 s) |
+| `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (0..10, default `2`; each waits the server's `Retry-After`, up to 30 s) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 
 ## Learn more

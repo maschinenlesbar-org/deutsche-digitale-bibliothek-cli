@@ -73,6 +73,22 @@ new DdbClient({
 });
 ```
 
+`timeoutMs` and `maxResponseBytes` hold for every transport, a custom one included: the
+engine races each transport call against the deadline (and passes an `AbortSignal` as
+`HttpRequest.signal`, which a fetch transport hands on: `fetch(url, { signal })`), and
+checks the size of the body it gets back. A custom transport may return the body as a
+`Buffer`, any `ArrayBuffer` view (`Uint8Array`) or an `ArrayBuffer`, and the headers as a
+plain object in any case, a `Headers` object or a `Map`. It must not follow redirects
+(`redirect: "manual"`, below). Whatever it throws, and a malformed response, becomes a
+`DdbNetworkError`. A minimal fetch transport:
+
+```ts
+const fetchTransport: Transport = async (req) => {
+  const r = await fetch(req.url, { method: req.method, headers: req.headers, signal: req.signal, redirect: req.redirect });
+  return { status: r.status, headers: r.headers as never, body: new Uint8Array(await r.arrayBuffer()) as Buffer, url: r.url };
+};
+```
+
 `DdbClientOptions` is just the engine options — there is no `apiKey` field, since
 the read routes are unauthenticated. (If you ever need to reach an authenticated
 endpoint, inject an `Authorization` header via the engine's `defaultHeaders`; it
@@ -295,7 +311,10 @@ automatically, up to `--max-retries`. Each retry waits the response's `Retry-Aft
 (delay-seconds or an IMF-fixdate, parsed strictly by the exported `parseRetryAfter`),
 or else `retryDelayMs * attempt`. A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is
 not retried at all: the error surfaces at once. `DdbApiError` exposes
-`isRetryable` (true for `429`/`503`).
+`isRetryable` (true for `429`/`503`). A connection reset mid-request (`ECONNRESET`,
+`EPIPE`, `ECONNABORTED`, undici's `UND_ERR_SOCKET`, anywhere in the `cause` chain) is
+retried the same way for a GET, whichever transport reported it
+(`isTransientNetworkError`); a refused connection, a DNS failure or a timeout is not.
 
 **Redirects.** Only `301`/`302`/`303`/`307`/`308` with a parseable `Location` are
 followed, up to `maxRedirects` (5). Any other 3xx, a missing or malformed
@@ -330,7 +349,9 @@ origin than the request is rejected as a `DdbNetworkError` ("the transport follo
 redirect to another origin"). Checked by `test/conformance-p3-redirect-credentials.test.ts`.
 
 **maxResponseBytes.** A cap on the response body size in bytes (`0` = unlimited;
-default 100 MiB), guarding against unbounded responses.
+default 100 MiB), guarding against unbounded responses. The built-in transport aborts
+as soon as it is passed; for any transport the engine checks the body it gets back, and
+the message names both the option and the flag (`sizeLimitMessage`).
 
 **Timeout (`--timeout`).** Enforced two ways so a hostile/slow server cannot hang
 the CLI: an idle-socket timeout (no bytes for `timeoutMs`) **and** a total
@@ -339,7 +360,8 @@ drips one byte per interval — below both the idle timeout and `maxResponseByte
 could keep the request alive indefinitely. A breach of either surfaces as a
 `DdbNetworkError`. Both timers are capped at `MAX_TIMEOUT_MS` (2^31 - 1 ms, the
 longest delay Node's timers support; a longer one would fire after 1 ms), and the
-CLI rejects a larger `--timeout` as a usage error.
+CLI rejects a larger `--timeout` as a usage error. The engine enforces the deadline
+itself too, for every transport (`test/conformance-p5-transport-contract.test.ts`).
 
 **Query builder.** [`buildQueryString`](src/client/query.ts) — a dependency-free
 serialiser: omits `undefined`/`null`, repeats keys for arrays, renders booleans

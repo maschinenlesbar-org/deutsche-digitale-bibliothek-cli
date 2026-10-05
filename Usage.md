@@ -17,7 +17,7 @@ The v2 read routes are **public — no API key**. Just run the commands.
 | `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted) |
 | `--timeout <ms>` | per-request timeout in ms (0 = no timeout) |
 | `--user-agent <ua>` | User-Agent header value |
-| `--max-retries <n>` | retries for transient 429/503 responses (0..10; each waits the server's Retry-After, up to 30 s) |
+| `--max-retries <n>` | retries for transient 429/503 responses and reset connections (0..10; each waits the server's Retry-After, up to 30 s) |
 | `--max-response-bytes <n>` | cap the response body size in bytes (0 = unlimited; default 100 MiB) |
 | `--compact` | print JSON on a single line (for piping to `jq`) |
 | `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; refuses to overwrite an existing file unless `--force`) |

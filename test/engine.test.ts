@@ -414,3 +414,40 @@ test("defaultHeaders never reach another origin, even through a transport that f
   await e2.getJson("/x");
   assert.deepEqual(hops.calls.map((c) => c.headers?.["X-Auth-Token"]), ["tok", "tok", undefined]);
 });
+
+test("headers in any case or a Headers object are read (04#7)", async () => {
+  for (const headers of [{ "Content-Type": "application/json" }, new Headers({ "content-type": "application/json" })]) {
+    const c = new DdbClient({
+      transport: async () => ({ status: 200, headers: headers as unknown as HttpResponse["headers"], body: Buffer.from('{"item":{"label":"x"}}') }),
+    });
+    const r = await c.item("A".repeat(32));
+    assert.equal(r.contentType, "application/json");
+    assert.deepEqual(r.json, { item: { label: "x" } });
+  }
+  // A 302 whose Location sits in a Headers object is followed.
+  let n = 0;
+  const e = new RequestEngine({
+    baseUrl: "https://api.test/2",
+    transport: async () =>
+      ++n === 1
+        ? { status: 302, headers: new Headers({ Location: "/2/moved" }) as unknown as HttpResponse["headers"], body: Buffer.alloc(0) }
+        : jsonResponse({ ok: 1 }),
+  });
+  assert.deepEqual(await e.getJson("/x"), { ok: 1 });
+});
+
+test("a Uint8Array or ArrayBuffer body decodes to its text (04#8)", async () => {
+  for (const body of [new TextEncoder().encode("7.5"), new TextEncoder().encode("7.5").buffer]) {
+    const c = new DdbClient({ transport: async () => ({ status: 200, headers: { "content-type": "text/plain" }, body: body as Buffer }) });
+    assert.equal(await c.version(), "7.5");
+  }
+});
+
+test("a redirect to a non-http(s) scheme is refused before the transport sees it", async () => {
+  for (const target of ["file:///etc/passwd", "javascript:alert(1)", "data:text/plain,x"]) {
+    const mt = makeMockTransport(() => redirectResponse(target));
+    const e = new RequestEngine({ baseUrl: "https://api.test/2", transport: mt.transport });
+    await assert.rejects(() => e.getJson("/x"), (err) => err instanceof DdbNetworkError && /unsupported protocol/.test(err.message), target);
+    assert.equal(mt.calls.length, 1, target);
+  }
+});
