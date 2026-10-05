@@ -439,6 +439,14 @@ npm test          # builds, then runs `node --test` over dist/test
   through `run()` and through the library on one recording mock transport.
 - **`cli.test.ts`** — command parsing, `--filter`/`--facet`/`--sort`/`--fields`,
   the paging note, raw-XML item output, id validation, and exit codes — mocked client.
+- **`conformance-p*.test.ts`** — the checks shared across the `*-cli` repos (fix plan
+  `.reviews/2026-10-05-exploratory/fix-plan.md` in the workspace), one file per pattern, the same
+  code in every repo apart from an adapter block at the top: P1 credential redaction in CLI output,
+  P2 in library objects and errors, P3 credentials across redirects, P4/P19 base-URL validation
+  (P19 skipped: `ddb` reads no environment variable), P5 the transport contract (timeout, size
+  cap, body types, header shapes, resets), P6 the retry floor, P7 pipes and exit codes (spawns
+  the built bin), P8/P9/P13 charset, 2xx body shapes and error classes, P10 strict search keys
+  and repeated options, P12 `-o -` as stdout (also through the built bin).
 
 ## Continuous integration
 
