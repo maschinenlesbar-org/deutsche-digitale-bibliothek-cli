@@ -393,7 +393,11 @@ engine sends it as an `Authorization: Basic` header (unless `defaultHeaders` set
 answers `401`/`403`, the error says so ("the server redirected http→https, which dropped
 the base URL's credentials; use an https base URL").
 
-**Transports must not follow redirects.** The engine passes `redirect: "manual"`
+**Transports must not follow redirects.** A custom transport must honour
+`HttpRequest.redirect` (`"manual"`) and return a 3xx as is, never follow it: one that
+follows it sends `defaultHeaders` and the base URL's `Authorization` to the redirect target
+before the engine sees the answer, and the library cannot prevent that hop — a documented
+limitation of the `transport` option, not something the engine can enforce. The engine passes `redirect: "manual"`
 (`HttpRequest.redirect`) and follows redirects itself, because only it can drop headers
 per hop; `fetch` follows by default and strips only `Authorization`, not `X-Auth-Token`
 or `X-API-Key`. A fetch transport passes it on (`fetch(url, { redirect: req.redirect })`)

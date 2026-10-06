@@ -102,7 +102,16 @@ export interface EngineOptions {
    * DdbValidationError.
    */
   baseUrl?: string;
-  /** Swappable transport. Defaults to the built-in node http/https transport. */
+  /**
+   * Swappable transport. Defaults to the built-in node http/https transport.
+   *
+   * Contract: a custom transport must not follow redirects — it honours
+   * `HttpRequest.redirect` (`"manual"`, e.g. `fetch(url, { redirect: req.redirect })`) and
+   * returns the 3xx as is, because one that follows them sends every header
+   * (`defaultHeaders`, the base URL's `Authorization`) to the redirect target before the
+   * engine sees the answer, which the library cannot prevent; it can only reject the
+   * response afterwards (a `HttpResponse.url` on another origin is a DdbNetworkError).
+   */
   transport?: Transport;
   /**
    * Value of the User-Agent header. Must be non-blank, without control characters

@@ -168,4 +168,7 @@ anderen Host umleitet, entfernt der Client vor dem Folgen jeden Header, den Sie 
 an einen anderen Origin gelangt. Eine Weiterleitung auf denselben Origin (Schema, Host und
 Port), mit relativer oder absoluter `Location`, behält sie. Ein `user:passwort@` in
 `--base-url` wird als `Authorization`-Header gesendet, der derselben Regel folgt, nie in der
-URL selbst, und Zugangsdaten in einer `Location` werden ignoriert.
+URL selbst, und Zugangsdaten in einer `Location` werden ignoriert. Ein eigener Transport in der
+Bibliothek darf Weiterleitungen nicht selbst folgen (`HttpRequest.redirect` ist `"manual"`);
+einer, der es tut, schickt diese Header an den anderen Host, bevor der Client eingreifen kann –
+das kann die Bibliothek nicht verhindern.

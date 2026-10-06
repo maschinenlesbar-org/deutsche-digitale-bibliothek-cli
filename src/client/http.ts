@@ -31,7 +31,9 @@ export interface HttpRequest {
    * Always `"manual"` from the engine: a transport must not follow redirects. The engine
    * follows them itself and decides per hop which headers go along (the base URL's
    * `Authorization` and every `defaultHeaders` entry: same origin only). A fetch-based
-   * transport passes it on: `fetch(url, { redirect })`.
+   * transport passes it on: `fetch(url, { redirect })`. One that ignores it sends those
+   * headers to the redirect target before the engine can see the redirect — a documented
+   * limitation the library cannot enforce; the engine only rejects the response afterwards.
    */
   redirect?: "manual";
 }

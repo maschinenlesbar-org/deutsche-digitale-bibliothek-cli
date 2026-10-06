@@ -168,4 +168,6 @@ client drops every header you added (`Authorization`, `Proxy-Authorization`,
 another origin. A redirect to the same origin (scheme, host and port), with a relative or
 an absolute `Location`, keeps them. A `user:password@` in `--base-url` is sent as an
 `Authorization` header that follows the same rule, never inside the URL, and userinfo in
-a `Location` is ignored.
+a `Location` is ignored. A library user's own transport must not follow redirects itself
+(`HttpRequest.redirect` is `"manual"`); one that does sends those headers to the other host
+before the client can intervene, which it cannot prevent.
