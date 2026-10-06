@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import { DdbClient } from "../src/client/client.js";
-import type { CliDeps } from "../src/cli/io.js";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { defaultIO, type CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
@@ -359,6 +362,51 @@ test("-o - writes to stdout, not to a file named -", async () => {
   assert.equal(cli.files.length, 0);
   assert.equal(JSON.parse(cli.out.join("\n")).response.numFound, 2);
   assert.ok(!cli.err.some((line) => line.startsWith("Wrote")));
+});
+
+test("an existing -o file or a directory is refused before any request, for every command", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ddb-cli-o-"));
+  try {
+    const existing = join(dir, "exists.json");
+    writeFileSync(existing, "original");
+    const cases: [string[], string][] = [
+      [["search", "x", "-o", existing], `Error: Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["item", ID, "-o", existing], `Error: Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["version", "-o", existing], `Error: Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["search", "x", "-o", dir], `Error: "${dir}" is a directory; give a file path to --output.`],
+      [["search", "x", "-o", dir, "--force"], `Error: "${dir}" is a directory; give a file path to --output.`],
+    ];
+    for (const [args, message] of cases) {
+      const cli = makeCli(() => jsonResponse(fx.solr));
+      cli.deps.io.checkOutput = defaultIO.checkOutput;
+      assert.equal(await run(args, cli.deps), 1, args.join(" "));
+      assert.equal(cli.mt.calls.length, 0, args.join(" "));
+      assert.equal(cli.files.length, 0);
+      assert.deepEqual(cli.out, []);
+      assert.equal(cli.err.join("\n"), message);
+    }
+    assert.equal(readFileSync(existing, "utf8"), "original");
+
+    // --force lets the request go ahead; a new path is fine without it.
+    for (const args of [["search", "x", "-o", existing, "--force"], ["search", "x", "-o", join(dir, "new.json")]]) {
+      const cli = makeCli(() => jsonResponse(fx.solr));
+      cli.deps.io.checkOutput = defaultIO.checkOutput;
+      assert.equal(await run(args, cli.deps), 0, args.join(" "));
+      assert.equal(cli.mt.calls.length, 1);
+      assert.equal(cli.files.length, 1);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("-o - skips the existing-file check", async () => {
+  const checked: string[] = [];
+  const cli = makeCli(() => jsonResponse(fx.solrExact));
+  cli.deps.io.checkOutput = (path) => checked.push(path);
+  assert.equal(await run(["-o", "-", "search", "x"], cli.deps), 0);
+  assert.deepEqual(checked, []);
+  assert.equal(cli.mt.calls.length, 1);
 });
 
 test("--force without --output is a usage error, before any request", async () => {

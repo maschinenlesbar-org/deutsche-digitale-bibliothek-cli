@@ -422,8 +422,12 @@ as `true`/`false`, and encodes spaces as `%20` (not `+`).
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
 ([`io.ts`](src/cli/io.ts)): a client factory plus an I/O object
-(`out`/`err`/`writeFile`/`outBinary`). Lets the whole CLI run in tests with a
-mocked client and captured output — no subprocess.
+(`out`/`err`/`writeFile`/`outBinary`, optional `checkOutput`/`isTerminal`). Lets the
+whole CLI run in tests with a mocked client and captured output — no subprocess.
+`checkOutput` runs in `action()` before the client is built: an existing `-o` file
+(without `--force`) or a directory fails there with the same `DdbError` (exit 1) that
+`writeFile` raises, so a refused write costs no request. `writeFile` keeps its own
+`wx` check for a file that appears meanwhile; `-o -` (stdout) skips both.
 
 **Error types.** [`errors.ts`](src/client/errors.ts): `DdbApiError` (non-2xx,
 carries `status`/`apiName`/`detail`/`url`/`method`/`body`, with `isRetryable`),

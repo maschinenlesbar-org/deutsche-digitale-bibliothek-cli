@@ -20,7 +20,7 @@ The v2 read routes are **public — no API key**. Just run the commands.
 | `--max-retries <n>` | retries for transient 429/503 responses and reset connections (0..10; each waits the server's Retry-After, up to 30 s) |
 | `--max-response-bytes <n>` | cap the response body size in bytes (0 = unlimited; default 100 MiB) |
 | `--compact` | print JSON on a single line (for piping to `jq`) |
-| `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; refuses to overwrite an existing file unless `--force`) |
+| `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; refuses to overwrite an existing file unless `--force`, and a directory always — checked before any request, exit 1) |
 | `--force` | overwrite the `--output` file if it already exists (needs `--output`) |
 | `-V, --version` / `-h, --help` | version / help |
 

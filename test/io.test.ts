@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
@@ -108,5 +108,34 @@ test("writeFile to a directory says so, with or without force", () => {
         String(force),
       );
     }
+  });
+});
+
+test("checkOutput passes a new path, and an existing file only with force", () => {
+  withTempDir((dir) => {
+    defaultIO.checkOutput!(join(dir, "new.txt"));
+    const path = join(dir, "exists.txt");
+    writeFileSync(path, "original");
+    assert.throws(
+      () => defaultIO.checkOutput!(path),
+      (err) => err instanceof DdbError && err.message === `Refusing to overwrite existing file "${path}"; pass --force to overwrite.`,
+    );
+    defaultIO.checkOutput!(path, true);
+    assert.equal(readFileSync(path, "utf8"), "original");
+  });
+});
+
+test("checkOutput refuses a directory with or without force, and a dangling symlink without it", () => {
+  withTempDir((dir) => {
+    for (const force of [false, true]) {
+      assert.throws(
+        () => defaultIO.checkOutput!(dir, force),
+        (err) => err instanceof DdbError && err.message === `"${dir}" is a directory; give a file path to --output.`,
+      );
+    }
+    const link = join(dir, "dangling");
+    symlinkSync(join(dir, "missing"), link);
+    // writeFile's `wx` would fail on it too (EEXIST).
+    assert.throws(() => defaultIO.checkOutput!(link), /Refusing to overwrite existing file/);
   });
 });

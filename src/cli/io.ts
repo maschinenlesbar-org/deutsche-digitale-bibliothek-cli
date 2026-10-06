@@ -1,7 +1,7 @@
 // I/O seam for the CLI. Everything the CLI writes goes through a CliIO object so
 // tests can capture output instead of hitting the real stdout/stderr/filesystem.
 
-import { statSync, writeFileSync } from "node:fs";
+import { lstatSync, statSync, writeFileSync } from "node:fs";
 import type { DdbClient, DdbClientOptions } from "../client/client.js";
 import { DdbError } from "../client/errors.js";
 
@@ -14,6 +14,13 @@ export interface CliIO {
    * with a clean message rather than a bare Node fs error.
    */
   writeFile(path: string, data: Buffer, force?: boolean): void;
+  /**
+   * Check an `-o` path before any request, with the same errors `writeFile` raises:
+   * a directory, or an existing file without `force`. Throws a `DdbError`; returns
+   * when the write may go ahead. `writeFile` still refuses to clobber (the file may
+   * appear meanwhile). Optional: an I/O object without it skips the early check.
+   */
+  checkOutput?(path: string, force?: boolean): void;
   /** Write raw bytes to stdout (binary-safe). */
   outBinary(data: Buffer): void;
   /**
@@ -85,6 +92,24 @@ function isDirectory(path: string): boolean {
   }
 }
 
+/** True when something — a file, a directory, a symlink (even a dangling one) — is at `path`. */
+function exists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function directoryError(path: string, cause?: unknown): DdbError {
+  return new DdbError(`"${path}" is a directory; give a file path to --output.`, { cause });
+}
+
+function existingFileError(path: string, cause?: unknown): DdbError {
+  return new DdbError(`Refusing to overwrite existing file "${path}"; pass --force to overwrite.`, { cause });
+}
+
 export const defaultIO: CliIO = {
   out: (text) => process.stdout.write(text + "\n"),
   err: (text) => process.stderr.write(text + "\n"),
@@ -96,18 +121,16 @@ export const defaultIO: CliIO = {
     } catch (cause) {
       const code = (cause as NodeJS.ErrnoException | undefined)?.code;
       // `wx` answers EEXIST and `w` EISDIR for a directory; --force cannot help there.
-      if ((code === "EEXIST" || code === "EISDIR") && isDirectory(path)) {
-        throw new DdbError(`"${path}" is a directory; give a file path to --output.`, { cause });
-      }
-      if (code === "EEXIST") {
-        throw new DdbError(
-          `Refusing to overwrite existing file "${path}"; pass --force to overwrite.`,
-          { cause },
-        );
-      }
+      if ((code === "EEXIST" || code === "EISDIR") && isDirectory(path)) throw directoryError(path, cause);
+      if (code === "EEXIST") throw existingFileError(path, cause);
       const reason = cause instanceof Error ? cause.message : String(cause);
       throw new DdbError(`Could not write to "${path}": ${reason}`, { cause });
     }
+  },
+  checkOutput: (path, force = false) => {
+    // The same refusals as writeFile, before the request rather than after it.
+    if (isDirectory(path)) throw directoryError(path);
+    if (!force && exists(path)) throw existingFileError(path);
   },
   outBinary: (data) => process.stdout.write(data),
   isTerminal: () => process.stdout.isTTY === true,

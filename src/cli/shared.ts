@@ -202,6 +202,9 @@ export function action(
     }
     // `-o -` means stdout: from here on it is the same as no -o.
     if (global.output === "-") delete global.output;
+    // An -o file that exists (without --force), or a directory, is refused before any
+    // request, with the error the write would raise afterwards — no traffic for nothing.
+    if (global.output !== undefined) deps.io.checkOutput?.(global.output, global.force);
     // One warning per run, before the first request, when the base URL is plain http:
     // to a host other than loopback. Help, version and usage errors never get here.
     const cleartext = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL);
