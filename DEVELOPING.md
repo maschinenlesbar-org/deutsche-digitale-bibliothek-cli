@@ -456,7 +456,9 @@ npm test          # builds, then runs `node --test` over dist/test
   the built bin), P8/P9/P13 charset, 2xx body shapes and error classes, P10 strict search keys
   and repeated options, P12 `-o -` as stdout (also through the built bin), P20 the stderr warning
   for a plain-`http:` base URL (follow-up round `.reviews/2026-10-06-followup/round.md`; the
-  environment and API-key cases skipped: `ddb` reads neither).
+  environment and API-key cases skipped: `ddb` reads neither), P21 README links (a relative
+  link must point at a file `files` ships — npmjs.com shows the README; anything else is an
+  absolute GitHub URL).
 
 ## Continuous integration
 

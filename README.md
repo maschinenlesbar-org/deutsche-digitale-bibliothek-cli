@@ -25,7 +25,7 @@ pipe straight into [`jq`](https://jqlang.github.io/jq/).
   `-o <file>` to write to disk; XML components (`edm`, `source-record`) stream out raw.
 
 > Want to use this as a TypeScript library or understand how it's built?
-> See **[DEVELOPING.md](DEVELOPING.md)**.
+> See **[DEVELOPING.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/DEVELOPING.md)**.
 
 ## Install
 
@@ -75,7 +75,7 @@ ddb item TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK
 | `version` | Print the DDB backend version — a quick connectivity check |
 
 New to terms like *facet*, *AIP*, *EDM*, *sector*, Solr `fq` or the `*_fct`
-fields? The **[Glossary](GLOSSARY.md)** decodes every one.
+fields? The **[Glossary](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/GLOSSARY.md)** decodes every one.
 
 ### `search` options
 
@@ -101,7 +101,7 @@ stderr (not for `--rows 0`, which asks for counts and facets only).
 
 | Facet | Narrows by |
 | --- | --- |
-| `type_fct` | Media type (`mediatype_*` codes; see the [Glossary](GLOSSARY.md)) |
+| `type_fct` | Media type (`mediatype_*` codes; see the [Glossary](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/GLOSSARY.md)) |
 | `objecttype_fct` | Object type (Druckgraphik, …) |
 | `place_fct` | Place |
 | `provider_fct` | Contributing institution |
@@ -117,7 +117,7 @@ dates live in `begin_time` / `end_time` as day numbers, not years.
 
 ## Common tasks
 
-A few recipes to get going — see **[Usage.md](Usage.md)** for the full,
+A few recipes to get going — see **[Usage.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/Usage.md)** for the full,
 use-case-driven set.
 
 ```bash
@@ -206,10 +206,10 @@ These may be given **before or after** the command, e.g.
 
 ## Learn more
 
-- **[SKILLS.md](SKILLS.md)** — Claude Code Agent Skills that drive this CLI.
-- **[Usage.md](Usage.md)** — full use-case-driven cookbook.
-- **[GLOSSARY.md](GLOSSARY.md)** — every domain term and facet explained.
-- **[DEVELOPING.md](DEVELOPING.md)** — TypeScript library usage, architecture, testing, CI.
+- **[SKILLS.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/SKILLS.md)** — Claude Code Agent Skills that drive this CLI.
+- **[Usage.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/Usage.md)** — full use-case-driven cookbook.
+- **[GLOSSARY.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/GLOSSARY.md)** — every domain term and facet explained.
+- **[DEVELOPING.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/DEVELOPING.md)** — TypeScript library usage, architecture, testing, CI.
 
 ## Data license
 
