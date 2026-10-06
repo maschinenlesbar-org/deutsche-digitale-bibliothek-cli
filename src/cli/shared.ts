@@ -7,6 +7,7 @@ import type { CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
 import { DdbError, DdbUsageError } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem } from "../client/validate.js";
+import { DEFAULT_BASE_URL, cleartextProblem } from "../client/engine.js";
 import { SOLR_MAX_INT } from "../client/types.js";
 
 /**
@@ -201,6 +202,10 @@ export function action(
     }
     // `-o -` means stdout: from here on it is the same as no -o.
     if (global.output === "-") delete global.output;
+    // One warning per run, before the first request, when the base URL is plain http:
+    // to a host other than loopback. Help, version and usage errors never get here.
+    const cleartext = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL);
+    if (cleartext !== undefined) deps.io.err(`warning: ${cleartext}`);
     // Route engine warnings (e.g. an https->http redirect downgrade) to stderr so
     // stdout stays clean for piping.
     const client = deps.createClient({

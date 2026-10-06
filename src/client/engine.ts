@@ -30,6 +30,45 @@ import { assertValid, baseUrlProblem, headerNameProblem, headerValueProblem } fr
 export const DEFAULT_BASE_URL = "https://api.deutsche-digitale-bibliothek.de/2";
 const DEFAULT_USER_AGENT = "deutsche-digitale-bibliothek-cli";
 
+/** The phrase `cleartextProblem` uses for a base URL's `user:password@`. */
+const USERINFO_PHRASE = "the base URL's credentials";
+
+/**
+ * Why requests to `baseUrl` would cross the network unencrypted, or `undefined`.
+ *
+ * Returns `undefined` for an `https:` URL, for one that does not parse, and for the
+ * loopback interface (`localhost`, `127.0.0.0/8`, `::1`). For any other plain `http:`
+ * URL it returns one sentence (no `warning: ` prefix) naming the host (`url.host`: host
+ * and port, never the userinfo) and what secret travels with the requests: `secrets`
+ * are noun phrases such as `"the API key"`, and a `user:password@` in the URL adds
+ * "the base URL's credentials". The secrets themselves are never in the sentence. Not
+ * an error (a mirror on a trusted network is a legitimate setup), so the CLI prints it
+ * as a warning on stderr, once per run.
+ *
+ * - `requests to <host> are sent unencrypted (http:, not https:)`
+ * - `the base URL's credentials are sent unencrypted to <host> (http:, not https:)`
+ * - `the API key and the base URL's credentials are sent unencrypted to <host> (http:, not https:)`
+ */
+export function cleartextProblem(baseUrl: string, secrets: readonly string[] = []): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:") return undefined;
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  // The WHATWG parser normalises IPv4 (`127.1`, `0x7f.0.0.1`) to dotted decimal.
+  if (host === "localhost" || host === "::1" || /^127\.\d+\.\d+\.\d+$/.test(host)) return undefined;
+  const named = [...secrets];
+  if (url.username !== "" || url.password !== "") named.push(USERINFO_PHRASE);
+  if (named.length === 0) return `requests to ${url.host} are sent unencrypted (http:, not https:)`;
+  const subject =
+    named.length === 1 ? named[0]! : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]!}`;
+  const verb = named.length === 1 && named[0] !== USERINFO_PHRASE ? "is" : "are";
+  return `${subject} ${verb} sent unencrypted to ${url.host} (http:, not https:)`;
+}
+
 /** Per-request options for {@link RequestEngine.request}. */
 export interface RequestOptions {
   query?: QueryParams;

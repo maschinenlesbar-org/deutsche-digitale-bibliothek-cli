@@ -198,7 +198,7 @@ These may be given **before or after** the command, e.g.
 | `--compact` | Print JSON on a single line instead of pretty-printed |
 | `-o, --output <file>` | Write output to this file instead of stdout (`-` = stdout; refuses to overwrite an existing file unless `--force`) |
 | `--force` | Overwrite the `--output` file if it already exists (needs `--output`) |
-| `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`). A `user:password@` in it is sent as Basic auth and never printed: every message, usage errors included, shows `***@`; write a literal `%` in it as `%25` |
+| `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`). A `user:password@` in it is sent as Basic auth and never printed: every message, usage errors included, shows `***@`; write a literal `%` in it as `%25`. A plain `http:` URL to a host other than loopback (`localhost`, `127.0.0.0/8`, `::1`) prints one `warning: … sent unencrypted to <host> (http:, not https:)` line on stderr per run, naming the credentials when the URL carries some (never their value); stdout and the exit code are unchanged |
 | `--timeout <ms>` | Per-request timeout (default `30000`; at most `2147483647`) |
 | `--user-agent <ua>` | `User-Agent` header value |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (0..10, default `2`; each waits the server's `Retry-After`, up to 30 s) |

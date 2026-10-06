@@ -14,7 +14,7 @@ The v2 read routes are **public — no API key**. Just run the commands.
 
 | Option | Description |
 |---|---|
-| `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted) |
+| `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted; plain `http:` to a non-loopback host prints one `warning: … unencrypted …` line on stderr) |
 | `--timeout <ms>` | per-request timeout in ms (0 = no timeout) |
 | `--user-agent <ua>` | User-Agent header value |
 | `--max-retries <n>` | retries for transient 429/503 responses and reset connections (0..10; each waits the server's Retry-After, up to 30 s) |
@@ -27,6 +27,12 @@ The v2 read routes are **public — no API key**. Just run the commands.
 An option that takes one value may be given once: a second `--rows`, `--sort`,
 `--base-url` … is a usage error (exit 2) instead of silently replacing the first.
 `--filter` and `--facet` are the exceptions: they collect every value.
+
+A `--base-url` on plain `http:` to a host other than the loopback interface gets one warning
+on stderr before the first request, e.g. `warning: requests to mirror.example are sent
+unencrypted (http:, not https:)`, or `warning: the base URL's credentials are sent unencrypted
+to mirror.example (http:, not https:)` when it carries a `user:password@` (never printed).
+stdout and the exit code are unchanged; `--help`, `--version` and usage errors never warn.
 
 ## `search` — find objects
 

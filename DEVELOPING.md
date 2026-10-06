@@ -372,6 +372,14 @@ downgrade additionally emits a one-line warning through the `warn` hook (wired t
 stderr by the CLI), because the remaining hops travel in cleartext. A redirect to the
 same origin keeps every header, whether its `Location` is relative or absolute.
 
+**Plain-http base URL.** `cleartextProblem(baseUrl, secrets?)` (exported) returns one
+sentence when the base URL is `http:` to a host other than loopback (`localhost`,
+`127.0.0.0/8`, `::1`) — `requests to <host> are sent unencrypted (http:, not https:)`, or
+naming the base URL's `user:password@` as "the base URL's credentials" (never the value) —
+and `undefined` otherwise. The CLI prints it as `warning: <sentence>` on stderr once per run,
+before the first request (`action()` in `src/cli/shared.ts`); help, version and usage errors
+never warn, and stdout and the exit code are untouched.
+
 **Base-URL credentials per hop.** The userinfo of a base URL (`https://user:pw@mirror/2`,
 for a proxy or mirror behind a login) never reaches a transport inside the URL: the
 engine sends it as an `Authorization: Basic` header (unless `defaultHeaders` sets its own
@@ -446,7 +454,9 @@ npm test          # builds, then runs `node --test` over dist/test
   (P19 skipped: `ddb` reads no environment variable), P5 the transport contract (timeout, size
   cap, body types, header shapes, resets), P6 the retry floor, P7 pipes and exit codes (spawns
   the built bin), P8/P9/P13 charset, 2xx body shapes and error classes, P10 strict search keys
-  and repeated options, P12 `-o -` as stdout (also through the built bin).
+  and repeated options, P12 `-o -` as stdout (also through the built bin), P20 the stderr warning
+  for a plain-`http:` base URL (follow-up round `.reviews/2026-10-06-followup/round.md`; the
+  environment and API-key cases skipped: `ddb` reads neither).
 
 ## Continuous integration
 
