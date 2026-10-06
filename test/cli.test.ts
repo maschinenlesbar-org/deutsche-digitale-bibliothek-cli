@@ -93,6 +93,33 @@ test("the paging note ignores a non-numeric start", async () => {
   assert.match(cli.err.join("\n"), /^Note: 10 documents match; 2 shown\. /);
 });
 
+test("paging past the end prints a note naming the total and the requested offset", async () => {
+  const past = { response: { numFound: 754, start: 100000, docs: [] } };
+  const cli = makeCli(() => jsonResponse(past));
+  const code = await run(["search", "x", "--offset", "100000"], cli.deps);
+  assert.equal(code, 0);
+  assert.deepEqual(JSON.parse(cli.out.join("\n")), past);
+  assert.equal(cli.err.join("\n"), "Note: 754 documents match; --offset 100000 is past the end, so none are shown.");
+});
+
+test("the past-the-end note covers an offset equal to the total, and one match", async () => {
+  const cli = makeCli(() => jsonResponse({ response: { numFound: 1, start: 1, docs: [] } }));
+  await run(["search", "x", "--offset", "1"], cli.deps);
+  assert.equal(cli.err.join("\n"), "Note: 1 document matches; --offset 1 is past the end, so none are shown.");
+});
+
+test("no past-the-end note without --offset, with --rows 0, or when the page has documents", async () => {
+  for (const [args, body] of [
+    [["search", "x"], { response: { numFound: 0, start: 0, docs: [] } }],
+    [["search", "x", "--rows", "0", "--offset", "50"], { response: { numFound: 10, start: 50, docs: [] } }],
+    [["search", "x", "--offset", "8"], { response: { numFound: 10, start: 8, docs: [{ id: "a" }, { id: "b" }] } }],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(body));
+    assert.equal(await run([...args], cli.deps), 0);
+    assert.equal(cli.err.join("\n"), "", args.join(" "));
+  }
+});
+
 test("--facet-limit without --facet is a usage error, before any request", async () => {
   const cli = makeCli(() => jsonResponse(fx.solr));
   const code = await run(["search", "Goethe", "--rows", "0", "--facet-limit", "3"], cli.deps);

@@ -446,7 +446,9 @@ npm test          # builds, then runs `node --test` over dist/test
   mapping and the `parity()` helper (`test/helpers.ts`), which sends one input
   through `run()` and through the library on one recording mock transport.
 - **`cli.test.ts`** — command parsing, `--filter`/`--facet`/`--sort`/`--fields`,
-  the paging note, raw-XML item output, id validation, and exit codes — mocked client.
+  the paging note and the past-the-end note (an `--offset` at or beyond `numFound`, CLI only:
+  the library returns Solr's answer as is), raw-XML item output, id validation, and exit
+  codes — mocked client.
 - **`conformance-p*.test.ts`** — the checks shared across the `*-cli` repos (fix plan
   `.reviews/2026-10-05-exploratory/fix-plan.md` in the workspace), one file per pattern, the same
   code in every repo apart from an adapter block at the top: P1 credential redaction in CLI output,

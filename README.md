@@ -95,7 +95,10 @@ Query strings and `--filter` use **Solr syntax**; pass `'*:*'` to match
 everything. `--filter` restricts the set (repeat to AND; OR inside one fq like
 `'place_fct:("Berlin" OR "Dessau")'`), while `--facet` only *counts* values.
 When more documents match than were returned, `ddb` prints a short paging hint to
-stderr (not for `--rows 0`, which asks for counts and facets only).
+stderr (not for `--rows 0`, which asks for counts and facets only). An `--offset` at or
+past the total gets a stderr note naming both instead (`Note: 754 documents match;
+--offset 100000 is past the end, so none are shown.`); stdout keeps Solr's answer with an
+empty `docs` and the exit code stays 0.
 
 ### Common facet fields
 

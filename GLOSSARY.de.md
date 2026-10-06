@@ -45,7 +45,8 @@ Objekte zu durchstöbern. `ddb search` begrenzt die Treffer standardmäßig auf 
 
 **rows / start.** `--rows` ist die Seitengröße (Solr `rows`); `--offset` gibt an, wie viele
 Dokumente am Anfang übersprungen werden (Solr `start`). Zusammen blättern sie durch eine
-Ergebnismenge.
+Ergebnismenge. Ein Offset ab `numFound` ist upstream kein Fehler (leeres `docs`); die CLI
+weist auf stderr darauf hin.
 
 **Antwortstruktur.** Eine Solr-Antwort hat vier Teile, die für Sie relevant sind:
 

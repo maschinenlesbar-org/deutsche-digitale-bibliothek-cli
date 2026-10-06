@@ -45,7 +45,8 @@ objects. `ddb search` caps results at `--rows 10` by default; the library's
 `search()` sends the same default (`DEFAULT_SEARCH_ROWS`).
 
 **rows / start.** `--rows` is the page size (Solr `rows`); `--offset` is how many
-leading documents to skip (Solr `start`). Together they page a result set.
+leading documents to skip (Solr `start`). Together they page a result set. An offset at
+or past `numFound` is not an error upstream (an empty `docs`); the CLI notes it on stderr.
 
 **Response shape.** A Solr response has four parts you care about:
 

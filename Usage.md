@@ -119,6 +119,18 @@ positions, e.g. `10 shown (11–20)`) — page with `--offset` or
 narrow with `--filter`. Read `response.numFound` for the true total. A `--rows 0`
 facet query gets no note.
 
+Paging past the end — an `--offset` at or beyond the total — is not an error: Solr
+answers with an empty `docs` and `ddb` exits 0, but stderr says so, naming the total
+and the offset asked for:
+
+```bash
+ddb search 'Goethe Faust' --offset 1000000 --rows 2 --fields id
+# stderr: Note: 6584 documents match; --offset 1000000 is past the end, so none are shown.
+```
+
+A paging loop can stop when `response.docs` is empty or `--offset` reaches
+`response.numFound`.
+
 ## `item` — object detail
 
 ```bash
