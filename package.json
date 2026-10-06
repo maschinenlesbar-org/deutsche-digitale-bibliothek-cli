@@ -1,6 +1,6 @@
 {
   "name": "@maschinenlesbar.org/deutsche-digitale-bibliothek-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript API client and CLI for the Deutsche Digitale Bibliothek (DDB) API — search German cultural-heritage objects",
   "type": "module",
   "bin": {
