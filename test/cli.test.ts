@@ -93,6 +93,27 @@ test("the paging note ignores a non-numeric start", async () => {
   assert.match(cli.err.join("\n"), /^Note: 10 documents match; 2 shown\. /);
 });
 
+test("--handler whose answer is not Solr's response envelope fails naming the handler and the rule", async () => {
+  // e.g. a real-time-get style answer: { doc: … } with no `response` object.
+  const cli = makeCli(() => jsonResponse({ responseHeader: { status: 0 }, doc: { id: "a" } }));
+  const code = await run(["search", "x", "--handler", "get"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.out.length, 0);
+  assert.equal(new URL(cli.mt.last().url).pathname, "/2/search/index/search/get");
+  assert.equal(
+    cli.err.join("\n"),
+    "Error: Unexpected response shape from /search/index/search/get: expected a response object. " +
+      "Only request handlers that return Solr's standard response envelope " +
+      '(a "response" object with "numFound" and "docs") are supported; handler "get" did not.',
+  );
+});
+
+test("search --help says which handlers are supported", async () => {
+  const cli = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["search", "--help"], cli.deps), 0);
+  assert.match(cli.out.join("\n").replace(/\s+/g, " "), /only handlers returning Solr's standard response envelope/);
+});
+
 test("paging past the end prints a note naming the total and the requested offset", async () => {
   const past = { response: { numFound: 754, start: 100000, docs: [] } };
   const cli = makeCli(() => jsonResponse(past));
@@ -133,7 +154,10 @@ test("an empty 200 body from search is a clean parse error (exit 1), not a TypeE
   const code = await run(["search", "x"], cli.deps);
   assert.equal(code, 1);
   assert.equal(cli.out.length, 0);
-  assert.match(cli.err.join("\n"), /^Error: Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\.$/);
+  assert.match(
+    cli.err.join("\n"),
+    /^Error: Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\. Only request handlers that return Solr's standard response envelope .* are supported; handler "select" did not\.$/,
+  );
 });
 
 test("search prints no paging note when the whole result set is returned", async () => {

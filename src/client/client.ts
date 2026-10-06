@@ -229,24 +229,39 @@ function errorEnvelope(body: Record<string, unknown>): string | undefined {
 }
 
 /**
+ * The shape error of a search answer: {@link shapeError} plus the rule it breaks, naming
+ * the request handler — only handlers that return Solr's standard `response` envelope are
+ * supported (`select`, the default, does; a real-time `get`, for one, answers differently).
+ */
+function searchShapeError(path: string, handler: string, expected: string): DdbParseError {
+  return new DdbParseError(
+    `Unexpected response shape from ${path}: expected ${expected}. Only request handlers that ` +
+      `return Solr's standard response envelope (a "response" object with "numFound" and "docs") ` +
+      `are supported; handler "${handler}" did not.`,
+  );
+}
+
+/**
  * Check a search answer against the documented Solr shape (`SolrResponse`): a JSON object
  * with a `response` object holding an integer `numFound` and a `docs` array. An error
  * document, `null`, `{}`, an array or a scalar is a DdbParseError, never data: printed as
- * a result it read as "nothing found" or as hits.
+ * a result it read as "nothing found" or as hits. A shape error names `handler` and the
+ * rule (only handlers returning that envelope are supported); there is no fallback for
+ * other shapes.
  */
-function assertSolrResponse(path: string, body: unknown): asserts body is SolrResponse {
-  if (!isObject(body)) throw shapeError(path, "a JSON object");
+function assertSolrResponse(path: string, handler: string, body: unknown): asserts body is SolrResponse {
+  if (!isObject(body)) throw searchShapeError(path, handler, "a JSON object");
   const error = errorEnvelope(body);
   if (error !== undefined) {
     throw new DdbParseError(`Unexpected response from ${path}: an error document with a success status: ${quoted(error)}`);
   }
   const response = body["response"];
-  if (!isObject(response)) throw shapeError(path, "a response object");
+  if (!isObject(response)) throw searchShapeError(path, handler, "a response object");
   const numFound = response["numFound"];
   if (typeof numFound !== "number" || !Number.isSafeInteger(numFound) || numFound < 0) {
-    throw shapeError(path, "an integer response.numFound");
+    throw searchShapeError(path, handler, "an integer response.numFound");
   }
-  if (!Array.isArray(response["docs"])) throw shapeError(path, "a response.docs array");
+  if (!Array.isArray(response["docs"])) throw searchShapeError(path, handler, "a response.docs array");
 }
 
 /**
@@ -291,7 +306,9 @@ export class DdbClient {
    * call rejects with a DdbValidationError without a request. A 2xx
    * body without the documented shape — not a JSON object, an error document, no
    * `response` object with an integer `numFound` and a `docs` array — raises
-   * DdbParseError.
+   * DdbParseError. Only request handlers that return Solr's standard `response`
+   * envelope (such as the default `select`) are supported; for any other the
+   * DdbParseError names the handler and that rule (there is no fallback).
    */
   async search(params: SearchParams): Promise<SolrResponse> {
     assertSearchParams(params);
@@ -314,7 +331,7 @@ export class DdbClient {
     }
     const path = `/search/index/${enc(collection)}/${enc(handler)}`;
     const body = await this.engine.getJson<unknown>(path, query);
-    assertSolrResponse(path, body);
+    assertSolrResponse(path, handler, body);
     return body;
   }
 

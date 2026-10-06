@@ -34,7 +34,11 @@ Monument protection, Research, Media, Museum, Other.
 **v2 = Solr passthrough.** In v2, `ddb search` is a thin wrapper over the DDB's
 Apache **Solr** index (`GET /2/search/index/{collection}/{requestHandler}`, by
 default `search`/`select`). Your options map onto native Solr query parameters and
-the response is **native Solr JSON**, not a DDB-curated envelope.
+the response is **native Solr JSON**, not a DDB-curated envelope. `--handler` picks
+another request handler, but only handlers that return Solr's standard `response`
+envelope (`numFound`, `docs`) are supported — `select` does; one that answers in another
+shape (a real-time `get`, say) fails with an error naming the handler.
+There is no fallback for other shapes.
 
 **Solr / Lucene query syntax.** `search` queries use bare keywords, `"quoted
 phrases"`, boolean `AND`/`OR`/`NOT`, field-scoped terms (`title:Faust`), ranges,

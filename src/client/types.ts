@@ -163,6 +163,10 @@ export interface SearchParams {
   facetLimit?: number;
   /** Solr collection to query. Defaults to `search`. */
   collection?: string;
-  /** Solr request handler. Defaults to `select`. */
+  /**
+   * Solr request handler. Defaults to `select`. Only handlers that return Solr's
+   * standard `response` envelope (`numFound` and `docs`) are supported; any other
+   * answer makes `search()` reject with a DdbParseError naming the handler.
+   */
   requestHandler?: string;
 }

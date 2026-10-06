@@ -52,7 +52,12 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
       parseFacetLimit,
     )
     .option("--collection <name>", "Solr collection to query", parsePathSegment, "search")
-    .option("--handler <name>", "Solr request handler", parsePathSegment, "select")
+    .option(
+      "--handler <name>",
+      "Solr request handler; only handlers returning Solr's standard response envelope (numFound, docs) are supported",
+      parsePathSegment,
+      "select",
+    )
     .action(
       action(deps, async ({ client, global, opts }, [query]) => {
         // An empty/whitespace-only query would hit Solr with `q=` and 400 (or

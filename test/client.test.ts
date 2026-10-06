@@ -173,7 +173,10 @@ test("search rejects a 2xx body that is not a Solr JSON object", async () => {
       () => c.search({ query: "x" }),
       (err) =>
         err instanceof DdbParseError &&
-        err.message === `Unexpected response shape from /search/index/search/select: expected ${expected}.`,
+        err.message ===
+          `Unexpected response shape from /search/index/search/select: expected ${expected}. Only request ` +
+            `handlers that return Solr's standard response envelope (a "response" object with "numFound" ` +
+            `and "docs") are supported; handler "select" did not.`,
       body,
     );
   }

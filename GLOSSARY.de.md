@@ -33,7 +33,11 @@ Denkmalpflege, Forschung, Mediathek, Museum, Sonstige.
 **v2 = Solr-Passthrough.** In v2 ist `ddb search` ein dünner Wrapper um den Apache-**Solr**-Index
 der DDB (`GET /2/search/index/{collection}/{requestHandler}`, standardmäßig
 `search`/`select`). Ihre Optionen werden auf native Solr-Abfrageparameter abgebildet, und die
-Antwort ist **natives Solr-JSON**, keine von der DDB aufbereitete Antwortstruktur.
+Antwort ist **natives Solr-JSON**, keine von der DDB aufbereitete Antwortstruktur. `--handler`
+wählt einen anderen Request-Handler, unterstützt werden aber nur Handler, die Solrs
+Standard-Antwortstruktur `response` (`numFound`, `docs`) liefern – `select` tut das; einer, der
+anders antwortet (etwa ein Echtzeit-`get`), scheitert mit einer Fehlermeldung, die
+den Handler nennt. Für andere Formen gibt es keinen Ausweichweg.
 
 **Solr-/Lucene-Abfragesyntax.** `search`-Abfragen verwenden einfache Suchbegriffe, Phrasen in
 Anführungszeichen (`"quoted phrases"`), die booleschen Operatoren `AND`/`OR`/`NOT`, feldbezogene

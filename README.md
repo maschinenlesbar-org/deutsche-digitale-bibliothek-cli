@@ -89,7 +89,7 @@ fields? The **[Glossary](https://github.com/maschinenlesbar-org/deutsche-digital
 | `--facet <field>` | Return value counts for this facet field — repeatable, e.g. `type_fct` |
 | `--facet-limit <n>` | Cap the number of values returned per facet (needs `--facet`; Solr's default is 100, `-1` = all, still sorted by count) |
 | `--collection <name>` | Solr collection (default `search`) |
-| `--handler <name>` | Solr request handler (default `select`) |
+| `--handler <name>` | Solr request handler (default `select`). Only handlers that return Solr's standard `response` envelope (`numFound`, `docs`) are supported; any other answer fails (exit 1) with an error naming the handler |
 
 Query strings and `--filter` use **Solr syntax**; pass `'*:*'` to match
 everything. `--filter` restricts the set (repeat to AND; OR inside one fq like

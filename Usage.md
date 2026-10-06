@@ -61,7 +61,7 @@ ddb search 'title:Faust'                  # field-scoped query
 | `--facet <field>` | return counts for this facet field (repeatable) |
 | `--facet-limit <n>` | cap the number of values per facet (needs `--facet`; Solr's default is 100, `-1` = all, still sorted by count) |
 | `--collection <name>` | Solr collection (default `search`) |
-| `--handler <name>` | Solr request handler (default `select`) |
+| `--handler <name>` | Solr request handler (default `select`). Only handlers that return Solr's standard `response` envelope (`numFound`, `docs`) are supported; any other answer fails (exit 1) with an error naming the handler |
 
 The result shape is native Solr:
 

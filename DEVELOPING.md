@@ -159,7 +159,12 @@ above included):
 - **Solr collection and request handler** (`search({ collection, requestHandler })`):
   letters, digits, `.`, `_` and `-` only, and not `.` or `..` (`pathNameProblem`).
   The CLI's `--collection`/`--handler` parsers use the same rule. The engine's
-  dot-segment guard in `buildUrl` stays as a backstop for any other path.
+  dot-segment guard in `buildUrl` stays as a backstop for any other path. Only
+  handlers that return Solr's standard `response` envelope are supported: the P9
+  shape check (`assertSolrResponse`) raises a `DdbParseError` that names the handler
+  and that rule (`… are supported; handler "get" did not.`). There is no fallback
+  for other shapes — the option is kept for collections whose `select`-style
+  handler has another name.
 - **Base URL** (`baseUrl`), at construction (`validateBaseUrl`, `baseUrlProblem`):
   blank, surrounding whitespace, unparseable, not `http:`/`https:`, with a
   query or fragment, or with a `%` in the user name or password that doesn't start
