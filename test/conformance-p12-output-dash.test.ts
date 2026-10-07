@@ -110,7 +110,12 @@ function runBin(cwd: string, argv: string[]): Promise<{ code: number | null; std
   });
 }
 
-test("P12: the built bin creates no file named '-' in its working directory", async () => {
+// These tests start the built CLI as a process. Process start-up is the one slow part of the
+// suite (a cold disk, a virus scanner, a busy CI runner), so they get 30 s instead of the 5 s
+// default the `test` script sets.
+const STARTS_A_PROCESS = { timeout: 30_000 };
+
+test("P12: the built bin creates no file named '-' in its working directory", STARTS_A_PROCESS, async () => {
   for (const { argv, response, marker } of COMMANDS) {
     const server = http.createServer((_req, res) => {
       const r = response();
