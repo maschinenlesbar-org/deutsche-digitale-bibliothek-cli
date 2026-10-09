@@ -482,7 +482,8 @@ npm test          # builds, then runs `node --test` over dist/test
   has gone (EPIPE, ENOTCONN), and any other stdout write error as an ERROR record of
   `ddb.output`.
 - **`log.test.ts`** — the record helpers of `src/cli/log.ts` on their own
-  (`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
+  (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are
+  P23's.
 - **`conformance-p*.test.ts`** — the checks shared across the `*-cli` repos (fix plan
   `.reviews/2026-10-05-exploratory/fix-plan.md` in the workspace), one file per pattern, the same
   code in every repo apart from an adapter block at the top: P1 credential redaction in CLI output,
@@ -573,5 +574,7 @@ of the log in either format. `CliDeps.now` makes the timestamps testable. stdout
 happens outside `run()`, in the bin shim, is logged too, through `processLogger(argv)`
 (the format argv asks for, the run's redaction): a stdout write error
 (`handleOutputErrors`, e.g. EBADF) is an ERROR of `ddb.output`, `Could not write to
-stdout: …`, and exits 1. Conformance test P23
+stdout: …`, and exits 1; Node's own process warnings (`NODE_TLS_REJECT_UNAUTHORIZED=0`)
+are WARN records of `ddb.cli`: the bin shim installs `installWarningLog`, which removes
+Node's default `warning` listener and logs `(node) <name>: <message>`. Conformance test P23
 checks all of this, and its body is shared across the *-cli repos.
