@@ -5,7 +5,7 @@
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import { logOf, type CliDeps } from "./io.js";
-import { createLogger, logFormatFromArgv } from "./log.js";
+import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat } from "./log.js";
 import {
   DdbApiError,
   DdbError,
@@ -64,6 +64,17 @@ function writeCommanderErr(command: Command, deps: CliDeps, state: { errorLogged
     log.error("cli", `missing command: \`${commandPath(command)} <subcommand>\``);
   }
   for (const line of text.split("\n")) if (line.trim() !== "") log.info("cli", line.trimEnd());
+}
+
+/** The names (long and short) of every option in the tree that requires a value. */
+function valueOptionsOf(command: Command, names: Set<string> = new Set()): Set<string> {
+  for (const option of command.options) {
+    if (!option.required) continue;
+    if (option.long !== undefined) names.add(option.long);
+    if (option.short !== undefined) names.add(option.short);
+  }
+  for (const child of command.commands) valueOptionsOf(child, names);
+  return names;
 }
 
 /** The options that collect every value they are given (`--filter a --filter b`). */
@@ -197,6 +208,18 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
   deps = withRedactedOutput(deps, argv);
   const program = buildProgram(deps);
   configureTree(program, deps);
+  // For the records of a parse error: the scan of argv, now knowing which options take
+  // a value, as commander reads them.
+  if (deps.log !== undefined) deps.log.format = logFormatFromArgv(argv, valueOptionsOf(program));
+  // One source for the format once commander has parsed argv: its value, not the scan
+  // of argv (an option's value can look like --log-format; `--` ends the scan, not
+  // commander's parse of a value). Ancestors' hooks run first, so this precedes every
+  // other preAction check.
+  const log = deps.log;
+  program.hook("preAction", (_program, actionCommand) => {
+    const format = (actionCommand.optsWithGlobals() as { logFormat?: LogFormat }).logFormat;
+    if (log !== undefined) log.format = format ?? DEFAULT_LOG_FORMAT;
+  });
 
   // A bare invocation (no command) is a help request, not an error: print help
   // to stdout and exit 0, matching `--help`.

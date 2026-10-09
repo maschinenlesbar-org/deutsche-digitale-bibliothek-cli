@@ -820,3 +820,29 @@ test("commander's output is one record per line, and a run without a command has
   assert.equal(await run(["help", "nope"], help.deps), 2);
   assert.match(untimed(help.err[0] ?? ""), /^ERROR \[ddb\.cli\] /);
 });
+
+test("the log format is the one commander parsed, where an option's value looks like --log-format (L6, results/01)", async () => {
+  const isJsonl = (line: string): boolean => line.startsWith("{");
+  const notFound = () => jsonResponse({ name: "ItemNotFoundException", message: "Not Found" }, 404);
+  // commander takes "--log-format=jsonl" as the User-Agent: the record is text.
+  const ua = makeCli(notFound);
+  assert.equal(await run(["--user-agent", "--log-format=jsonl", "version"], ua.deps), 4);
+  assert.ok(ua.err.length === 1 && !isJsonl(ua.err[0] as string), ua.err.join("\n"));
+  // commander takes "--" as the User-Agent, then parses --log-format jsonl: jsonl.
+  const dashes = makeCli(notFound);
+  assert.equal(await run(["--user-agent", "--", "--log-format", "jsonl", "version"], dashes.deps), 4);
+  assert.ok(dashes.err.length === 1 && isJsonl(dashes.err[0] as string), dashes.err.join("\n"));
+  // jsonl asked for, then "--log-format" as the value of --user-agent and of -o: jsonl.
+  const back = makeCli(notFound);
+  assert.equal(await run(["--log-format", "jsonl", "--user-agent", "--log-format", "version"], back.deps), 4);
+  assert.ok(back.err.length === 1 && isJsonl(back.err[0] as string), back.err.join("\n"));
+  const output = makeCli(() => rawResponse("7.5", "text/plain"));
+  assert.equal(await run(["--log-format", "jsonl", "-o", "--log-format", "version"], output.deps), 0);
+  assert.ok(output.err.length === 1 && isJsonl(output.err[0] as string), output.err.join("\n"));
+  // A parse error after such a value is logged in the format commander would have used:
+  // -o takes --log-format as its path, so jsonl is the unknown command (text record).
+  const parse = makeCli(() => rawResponse("7.5", "text/plain"));
+  assert.equal(await run(["-o", "--log-format", "jsonl", "version"], parse.deps), 2);
+  assert.ok(parse.err.length > 0 && !parse.err.some(isJsonl), parse.err.join("\n"));
+  assert.match(untimed(parse.err[0] ?? ""), /^ERROR \[ddb\.cli\] unknown command 'jsonl'/);
+});
