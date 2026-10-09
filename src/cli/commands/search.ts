@@ -5,7 +5,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import type { CliDeps } from "../io.js";
+import { logOf, type CliDeps } from "../io.js";
 import type { SearchParams } from "../../client/types.js";
 import { DdbUsageError } from "../../client/errors.js";
 import { pathNameProblem } from "../../client/validate.js";
@@ -98,15 +98,16 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
           const shown = Array.isArray(body.docs) ? body.docs.length : 0;
           if (body.numFound > start + shown) {
             const range = start > 0 && shown > 0 ? ` (${start + 1}–${start + shown})` : "";
-            deps.io.err(
-              `Note: ${body.numFound} documents match; ${shown} shown${range}. ` +
+            logOf(deps).info(
+              "api",
+              `${body.numFound} documents match; ${shown} shown${range}. ` +
                 "Page with --offset (Solr start), or narrow with --filter.",
             );
           } else if (params.start !== undefined && params.start > 0 && shown === 0 && params.start >= body.numFound) {
             // Paged past the end: Solr answers 200 with an empty `docs`, which on its
             // own reads like "nothing matches". Name the total and the offset asked for.
             const matches = body.numFound === 1 ? "1 document matches" : `${body.numFound} documents match`;
-            deps.io.err(`Note: ${matches}; --offset ${params.start} is past the end, so none are shown.`);
+            logOf(deps).info("api", `${matches}; --offset ${params.start} is past the end, so none are shown.`);
           }
         }
         renderJson(deps, global, result);

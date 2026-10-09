@@ -101,7 +101,7 @@ ddb item "$ID"
   means "this object has no manifest / citation", not a bad id.
 - **A sub-item's `source-record` may be its ancestor's.** Sections of a digitised book
   and units of an archive finding aid have no provider record of their own; the CLI then
-  prints the ancestor's whole record and says so on stderr (`Note: item … has no
+  prints the ancestor's whole record and says so on stderr (an `INFO` record: `… INFO  [ddb.api] item … has no
   source-record of its own; this is the source-record of its ancestor …`). Tell the user
   the record is the parent's (e.g. the volume's METS), not one for the section. An exit 4
   whose message says "the API points to its ancestors (…), and the last has none either"

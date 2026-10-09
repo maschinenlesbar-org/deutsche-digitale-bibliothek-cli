@@ -4,7 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { DdbClient } from "../client/client.js";
@@ -12,6 +12,7 @@ import { DEFAULT_BASE_URL, MAX_RETRIES } from "../client/engine.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
 import { parseBaseUrl, parseBoundedInt, parseHeaderValue, parseIntArg, parseOutputPath } from "./shared.js";
 import { registerCommands } from "./commands/index.js";
+import { DEFAULT_LOG_FORMAT, logFormatProblem } from "./log.js";
 
 /**
  * Single source of truth for the version: read from package.json at runtime
@@ -38,6 +39,13 @@ export const defaultDeps: CliDeps = {
   env: process.env,
 };
 
+/** commander value-parser for `--log-format`. */
+function parseLogFormat(value: string): string {
+  const problem = logFormatProblem(value);
+  if (problem !== undefined) throw new InvalidArgumentError(problem);
+  return value;
+}
+
 export function buildProgram(deps: CliDeps = defaultDeps): Command {
   const program = new Command();
 
@@ -62,6 +70,11 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       "--max-response-bytes <n>",
       "cap response body size in bytes (0 = unlimited; default 100 MiB)",
       parseIntArg,
+    )
+    .option(
+      "--log-format <format>",
+      `how errors, warnings and notes are written to stderr: text (log4j style: time, level, [topic], message) or jsonl (one JSON object per line: ts, level, topic, msg); default ${DEFAULT_LOG_FORMAT}`,
+      parseLogFormat,
     )
     .option("--compact", "print JSON on a single line instead of pretty-printed")
     .option("-o, --output <file>", "write output to this file instead of stdout (- = stdout)", parseOutputPath)

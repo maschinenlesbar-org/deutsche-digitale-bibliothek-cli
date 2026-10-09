@@ -3,7 +3,7 @@
 // separate facets endpoint), so this file holds only `version`.
 
 import type { Command } from "commander";
-import type { CliDeps } from "../io.js";
+import { logOf, type CliDeps } from "../io.js";
 import { sanitizeServerText } from "../../client/engine.js";
 import { action } from "../shared.js";
 
@@ -20,7 +20,7 @@ export function registerCatalogCommands(program: Command, deps: CliDeps): void {
           // version plus a trailing newline.
           const data = Buffer.from(version + "\n", "utf8");
           deps.io.writeFile(global.output, data, global.force);
-          deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
+          logOf(deps).info("output", `Wrote ${data.length} bytes to ${global.output}`);
         } else {
           // The version string is attacker-controlled under a hostile --base-url;
           // strip control bytes before it reaches the terminal (DDB-01).

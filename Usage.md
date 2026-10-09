@@ -14,12 +14,13 @@ The v2 read routes are **public — no API key**. Just run the commands.
 
 | Option | Description |
 |---|---|
-| `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted; plain `http:` to a non-loopback host prints one `warning: … unencrypted …` line on stderr) |
+| `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted; plain `http:` to a non-loopback host logs one `WARN` record of `ddb.http`, `… unencrypted …`, on stderr) |
 | `--timeout <ms>` | per-request timeout in ms (0 = no timeout) |
 | `--user-agent <ua>` | User-Agent header value |
 | `--max-retries <n>` | retries for transient 429/503 responses and reset connections (0..10; each waits the server's Retry-After, up to 30 s) |
 | `--max-response-bytes <n>` | cap the response body size in bytes (0 = unlimited; default 100 MiB) |
 | `--compact` | print JSON on a single line (for piping to `jq`) |
+| `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [ddb.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
 | `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; refuses to overwrite an existing file unless `--force`, and a directory always — checked before any request, exit 1) |
 | `--force` | overwrite the `--output` file if it already exists (needs `--output`) |
 | `-V, --version` / `-h, --help` | version / help |
@@ -29,8 +30,8 @@ An option that takes one value may be given once: a second `--rows`, `--sort`,
 `--filter` and `--facet` are the exceptions: they collect every value.
 
 A `--base-url` on plain `http:` to a host other than the loopback interface gets one warning
-on stderr before the first request, e.g. `warning: requests to mirror.example are sent
-unencrypted (http:, not https:)`, or `warning: the base URL's credentials are sent unencrypted
+on stderr before the first request, a `WARN` record of `ddb.http`, e.g. `… WARN  [ddb.http] requests to mirror.example are sent
+unencrypted (http:, not https:)`, or `… WARN  [ddb.http] the base URL's credentials are sent unencrypted
 to mirror.example (http:, not https:)` when it carries a `user:password@` (never printed).
 stdout and the exit code are unchanged; `--help`, `--version` and usage errors never warn.
 
@@ -113,8 +114,8 @@ ddb search Goethe --rows 10
 ddb search Goethe --rows 10 --offset 10
 ```
 
-When more documents match than were returned, `ddb` prints a note like
-`Note: 99866 documents match; 10 shown.` to **stderr** (past the first page with the
+When more documents match than were returned, `ddb` logs a note (an `INFO` record of `ddb.api`) like
+`… INFO  [ddb.api] 99866 documents match; 10 shown.` to **stderr** (past the first page with the
 positions, e.g. `10 shown (11–20)`) — page with `--offset` or
 narrow with `--filter`. Read `response.numFound` for the true total. A `--rows 0`
 facet query gets no note.
@@ -125,7 +126,7 @@ and the offset asked for:
 
 ```bash
 ddb search 'Goethe Faust' --offset 1000000 --rows 2 --fields id
-# stderr: Note: 6584 documents match; --offset 1000000 is past the end, so none are shown.
+# stderr: … INFO  [ddb.api] 6584 documents match; --offset 1000000 is past the end, so none are shown.
 ```
 
 A paging loop can stop when `response.docs` is empty or `--offset` reaches
@@ -164,7 +165,7 @@ book and units of an archive finding aid have no provider record of their own: t
 answers `303` and points to an ancestor's record (in a `Location` without the `/2`
 prefix, which can't be followed as sent). `ddb` fetches that ancestor's record through
 the base URL — up to `maxRedirects` (5) levels — prints it, and notes on stderr whose it
-is: `Note: item JG3Y… has no source-record of its own; this is the source-record of its
+is (an `INFO` record of `ddb.api`): `item JG3Y… has no source-record of its own; this is the source-record of its
 ancestor JY7H…`. That file is the whole parent record (the volume's METS), not one for
 the section. If no ancestor has one, the `404` (exit 4) names the chain:
 `… item N4N7… has no source-record of its own; the API points to its ancestors (N4N7… →

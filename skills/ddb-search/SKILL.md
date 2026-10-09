@@ -150,7 +150,7 @@ ddb search Weimar --rows 10 --offset 10
 - **`--filter` is a raw Solr `fq`**, e.g. `type_fct:mediatype_002` or
   `place_fct:"Berlin"` — not `facet=value`. Quote values with spaces.
 - **The query is required.** Use `'*:*'` to browse everything (still capped at `--rows`).
-- **A paging note on stderr** (`… documents match; N shown`) is informational, not
+- **A paging note on stderr** (an `INFO` record, `… INFO  [ddb.api] … documents match; N shown`) is informational, not
   an error — stdout stays clean JSON. It is not printed for `--rows 0`.
 - Fetching one object's detail → the **ddb-item** skill.
 - The API returns **only CC0 metadata**; cite the DDB as the source as a courtesy.

@@ -96,7 +96,7 @@ everything. `--filter` restricts the set (repeat to AND; OR inside one fq like
 `'place_fct:("Berlin" OR "Dessau")'`), while `--facet` only *counts* values.
 When more documents match than were returned, `ddb` prints a short paging hint to
 stderr (not for `--rows 0`, which asks for counts and facets only). An `--offset` at or
-past the total gets a stderr note naming both instead (`Note: 754 documents match;
+past the total gets a stderr note naming both instead (an `INFO` record of `ddb.api`: `754 documents match;
 --offset 100000 is past the end, so none are shown.`); stdout keeps Solr's answer with an
 empty `docs` and the exit code stays 0.
 
@@ -143,6 +143,21 @@ ddb search Bauhaus --rows 0 --facet place_fct --facet-limit 10 \
 `search` and JSON item components print **JSON to stdout**; `version` and the XML
 components (`edm`, `source-record`) print raw text. Errors and diagnostics
 (including the paging hint) go to stderr, so piping stdout into `jq` stays clean.
+
+Each line on stderr is a **log record**: a timestamp (UTC), a level (`ERROR`, `WARN`,
+`INFO`) and a topic, the program and the area it comes from (`ddb.cli` for usage
+errors, `ddb.api` for the API's answers and the paging notes, `ddb.http` for the
+connection, `ddb.output` for `-o`). By default it is written log4j style; `--log-format
+jsonl` writes one JSON object per line instead:
+
+```text
+2026-10-09T14:03:12.481Z WARN  [ddb.http] requests to mirror.test are sent unencrypted (http:, not https:)
+2026-10-09T14:03:12.902Z ERROR [ddb.api] HTTP 404 for GET https://api.deutsche-digitale-bibliothek.de/2/items/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/view: Not Found
+```
+
+```bash
+ddb --log-format jsonl search Goethe 2>log.jsonl   # {"ts":"…","level":"INFO","topic":"ddb.api","msg":"99866 documents match; …"}
+```
 
 ```bash
 # id + label for the current result page
@@ -199,9 +214,10 @@ These may be given **before or after** the command, e.g.
 | `-V, --version` | Print the CLI version number |
 | `-h, --help` | Show help for the program or a command |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
+| `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [ddb.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
 | `-o, --output <file>` | Write output to this file instead of stdout (`-` = stdout; refuses to overwrite an existing file unless `--force`, checked before any request is made) |
 | `--force` | Overwrite the `--output` file if it already exists (needs `--output`) |
-| `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`). A `user:password@` in it is sent as Basic auth and never printed: every message, usage errors included, shows `***@`; write a literal `%` in it as `%25`. A plain `http:` URL to a host other than loopback (`localhost`, `127.0.0.0/8`, `::1`) prints one `warning: … sent unencrypted to <host> (http:, not https:)` line on stderr per run, naming the credentials when the URL carries some (never their value); stdout and the exit code are unchanged |
+| `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`). A `user:password@` in it is sent as Basic auth and never printed: every message, usage errors included, shows `***@`; write a literal `%` in it as `%25`. A plain `http:` URL to a host other than loopback (`localhost`, `127.0.0.0/8`, `::1`) logs one warning per run on stderr (a `WARN` record of `ddb.http`: `… sent unencrypted to <host> (http:, not https:)`), naming the credentials when the URL carries some (never their value); stdout and the exit code are unchanged |
 | `--timeout <ms>` | Per-request timeout (default `30000`; at most `2147483647`) |
 | `--user-agent <ua>` | `User-Agent` header value |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (0..10, default `2`; each waits the server's `Retry-After`, up to 30 s) |

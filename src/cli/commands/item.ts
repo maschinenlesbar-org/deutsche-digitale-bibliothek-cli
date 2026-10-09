@@ -5,7 +5,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import type { CliDeps } from "../io.js";
+import { logOf, type CliDeps } from "../io.js";
 import {
   ITEM_LANG_PARTS,
   ITEM_PARTS,
@@ -53,8 +53,9 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
           // The API pointed the component at an ancestor (a book section's or an archive
           // unit's source record); say whose it is, so the whole parent record isn't
           // mistaken for one of the requested item.
-          deps.io.err(
-            `Note: item ${(id ?? "").trim()} has no ${part} of its own; this is the ${part} of its ancestor ` +
+          logOf(deps).info(
+            "api",
+            `item ${(id ?? "").trim()} has no ${part} of its own; this is the ${part} of its ancestor ` +
               `${result.heldBy}, which the API points to.`,
           );
         }
@@ -89,7 +90,7 @@ function writeRaw(
 ): void {
   if (output) {
     deps.io.writeFile(output, bytes, force);
-    deps.io.err(`Wrote ${bytes.length} bytes to ${output}`);
+    logOf(deps).info("output", `Wrote ${bytes.length} bytes to ${output}`);
   } else if (deps.io.isTerminal?.() === false) {
     deps.io.outBinary(bytes);
   } else {

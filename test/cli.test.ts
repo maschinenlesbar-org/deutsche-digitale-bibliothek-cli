@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultIO, type CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
-import { makeMockTransport, jsonResponse, rawResponse, queryOf } from "./helpers.js";
+import { makeMockTransport, jsonResponse, rawResponse, queryOf, untimed } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 const ID = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
@@ -86,14 +86,14 @@ test("the paging note counts only this page's documents and names their position
   const page = { response: { numFound: 99215, start: 20, docs: [{ id: "a" }, { id: "b" }, { id: "c" }] } };
   const cli = makeCli(() => jsonResponse(page));
   await run(["search", "Goethe", "--rows", "3", "--offset", "20"], cli.deps);
-  assert.match(cli.err.join("\n"), /^Note: 99215 documents match; 3 shown \(21–23\)\. /);
+  assert.match(untimed(cli.err.join("\n")), /^INFO  \[ddb\.api\] 99215 documents match; 3 shown \(21–23\)\. /);
 });
 
 test("the paging note ignores a non-numeric start", async () => {
   const odd = { response: { numFound: 10, start: "-5", docs: [{ id: "a" }, { id: "b" }] } };
   const cli = makeCli(() => jsonResponse(odd));
   await run(["search", "x"], cli.deps);
-  assert.match(cli.err.join("\n"), /^Note: 10 documents match; 2 shown\. /);
+  assert.match(untimed(cli.err.join("\n")), /^INFO  \[ddb\.api\] 10 documents match; 2 shown\. /);
 });
 
 test("--handler whose answer is not Solr's response envelope fails naming the handler and the rule", async () => {
@@ -104,8 +104,8 @@ test("--handler whose answer is not Solr's response envelope fails naming the ha
   assert.equal(cli.out.length, 0);
   assert.equal(new URL(cli.mt.last().url).pathname, "/2/search/index/search/get");
   assert.equal(
-    cli.err.join("\n"),
-    "Error: Unexpected response shape from /search/index/search/get: expected a response object. " +
+    untimed(cli.err.join("\n")),
+    "ERROR [ddb.cli] Unexpected response shape from /search/index/search/get: expected a response object. " +
       "Only request handlers that return Solr's standard response envelope " +
       '(a "response" object with "numFound" and "docs") are supported; handler "get" did not.',
   );
@@ -123,13 +123,13 @@ test("paging past the end prints a note naming the total and the requested offse
   const code = await run(["search", "x", "--offset", "100000"], cli.deps);
   assert.equal(code, 0);
   assert.deepEqual(JSON.parse(cli.out.join("\n")), past);
-  assert.equal(cli.err.join("\n"), "Note: 754 documents match; --offset 100000 is past the end, so none are shown.");
+  assert.equal(untimed(cli.err.join("\n")), "INFO  [ddb.api] 754 documents match; --offset 100000 is past the end, so none are shown.");
 });
 
 test("the past-the-end note covers an offset equal to the total, and one match", async () => {
   const cli = makeCli(() => jsonResponse({ response: { numFound: 1, start: 1, docs: [] } }));
   await run(["search", "x", "--offset", "1"], cli.deps);
-  assert.equal(cli.err.join("\n"), "Note: 1 document matches; --offset 1 is past the end, so none are shown.");
+  assert.equal(untimed(cli.err.join("\n")), "INFO  [ddb.api] 1 document matches; --offset 1 is past the end, so none are shown.");
 });
 
 test("no past-the-end note without --offset, with --rows 0, or when the page has documents", async () => {
@@ -158,8 +158,8 @@ test("an empty 200 body from search is a clean parse error (exit 1), not a TypeE
   assert.equal(code, 1);
   assert.equal(cli.out.length, 0);
   assert.match(
-    cli.err.join("\n"),
-    /^Error: Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\. Only request handlers that return Solr's standard response envelope .* are supported; handler "select" did not\.$/,
+    untimed(cli.err.join("\n")),
+    /^ERROR \[ddb\.cli\] Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\. Only request handlers that return Solr's standard response envelope .* are supported; handler "select" did not\.$/,
   );
 });
 
@@ -250,7 +250,7 @@ test("a DDB-wrapped Solr error (HTTP 500, Solr JSON as a string) prints only err
   const code = await run(["search", "Goethe", "--rows", "0", "--facet", "time_fct"], cli.deps);
   assert.equal(code, 1);
   assert.equal(cli.err.length, 1);
-  assert.match(cli.err[0]!, /^Error: HTTP 500 for GET \S+: undefined field: "time_fct"$/);
+  assert.match(untimed(cli.err[0]!), /^ERROR \[ddb\.api\] HTTP 500 for GET \S+: undefined field: "time_fct"$/);
 });
 
 test("an oversized or multi-line error message is folded to one line and capped", async () => {
@@ -307,7 +307,7 @@ test("item raw XML keeps non-UTF-8 bytes and CRs byte-exact with -o", async () =
   const code = await run(["item", ID, "--part", "source-record", "-o", "l1.xml"], cli.deps);
   assert.equal(code, 0);
   assert.ok(cli.files[0]!.data.equals(latin1));
-  assert.deepEqual(cli.err, [`Wrote ${latin1.length} bytes to l1.xml`]);
+  assert.deepEqual(cli.err.map(untimed), [`INFO  [ddb.output] Wrote ${latin1.length} bytes to l1.xml`]);
 });
 
 test("item raw XML to a non-terminal stdout is written byte-exact", async () => {
@@ -328,16 +328,16 @@ test("item raw XML to a non-terminal stdout is written byte-exact", async () => 
 
 test("item --lang / --rows / --offset for a part that ignores them is a usage error", async () => {
   const cases: [string[], RegExp][] = [
-    [["--part", "parents", "--lang", "de"], /^Error: Invalid lang: applies only to part view, aip, edm, binaries, source, source-description \(got parents\)\.$/],
-    [["--part", "edm", "--rows", "5"], /^Error: Invalid rows: applies only to part children \(got edm\)\.$/],
-    [["--offset", "3"], /^Error: Invalid offset: applies only to part children \(got view\)\.$/],
+    [["--part", "parents", "--lang", "de"], /^ERROR \[ddb\.cli\] Invalid lang: applies only to part view, aip, edm, binaries, source, source-description \(got parents\)\.$/],
+    [["--part", "edm", "--rows", "5"], /^ERROR \[ddb\.cli\] Invalid rows: applies only to part children \(got edm\)\.$/],
+    [["--offset", "3"], /^ERROR \[ddb\.cli\] Invalid offset: applies only to part children \(got view\)\.$/],
   ];
   for (const [args, message] of cases) {
     const cli = makeCli(() => jsonResponse(fx.itemView));
     const code = await run(["item", ID, ...args], cli.deps);
     assert.equal(code, 2, args.join(" "));
     assert.equal(cli.mt.calls.length, 0);
-    assert.match(cli.err.join("\n"), message);
+    assert.match(untimed(cli.err.join("\n")), message);
   }
   const ok = makeCli(() => jsonResponse(fx.itemView));
   assert.equal(await run(["item", ID, "--part", "children", "--rows", "5", "--offset", "3"], ok.deps), 0);
@@ -370,11 +370,11 @@ test("an existing -o file or a directory is refused before any request, for ever
     const existing = join(dir, "exists.json");
     writeFileSync(existing, "original");
     const cases: [string[], string][] = [
-      [["search", "x", "-o", existing], `Error: Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
-      [["item", ID, "-o", existing], `Error: Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
-      [["version", "-o", existing], `Error: Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
-      [["search", "x", "-o", dir], `Error: "${dir}" is a directory; give a file path to --output.`],
-      [["search", "x", "-o", dir, "--force"], `Error: "${dir}" is a directory; give a file path to --output.`],
+      [["search", "x", "-o", existing], `ERROR [ddb.cli] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["item", ID, "-o", existing], `ERROR [ddb.cli] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["version", "-o", existing], `ERROR [ddb.cli] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["search", "x", "-o", dir], `ERROR [ddb.cli] "${dir}" is a directory; give a file path to --output.`],
+      [["search", "x", "-o", dir, "--force"], `ERROR [ddb.cli] "${dir}" is a directory; give a file path to --output.`],
     ];
     for (const [args, message] of cases) {
       const cli = makeCli(() => jsonResponse(fx.solr));
@@ -383,7 +383,7 @@ test("an existing -o file or a directory is refused before any request, for ever
       assert.equal(cli.mt.calls.length, 0, args.join(" "));
       assert.equal(cli.files.length, 0);
       assert.deepEqual(cli.out, []);
-      assert.equal(cli.err.join("\n"), message);
+      assert.equal(untimed(cli.err.join("\n")), message);
     }
     assert.equal(readFileSync(existing, "utf8"), "original");
 
@@ -424,14 +424,14 @@ test("a deeply nested response fails pretty-printing cleanly and still prints wi
   const pretty = makeCli(deep);
   assert.equal(await run(["item", ID], pretty.deps), 1);
   assert.deepEqual(pretty.out, []);
-  assert.equal(pretty.err.join("\n"), "Error: The response is nested too deeply to pretty-print; try --compact.");
+  assert.equal(untimed(pretty.err.join("\n")), "ERROR [ddb.cli] The response is nested too deeply to pretty-print; try --compact.");
 
   // Compact serialisation goes much deeper (it prints this one on current Node);
   // should a runtime's stack still be too small, it must fail just as cleanly.
   const compact = makeCli(deep);
   const code = await run(["--compact", "item", ID], compact.deps);
   if (code === 0) assert.equal(compact.out.join(""), body);
-  else assert.equal(compact.err.join("\n"), "Error: The response is nested too deeply to print.");
+  else assert.equal(untimed(compact.err.join("\n")), "ERROR [ddb.cli] The response is nested too deeply to print.");
 });
 
 test("-o does not pass force by default; --force threads through (DDB-02)", async () => {
@@ -602,7 +602,7 @@ test("credentials in --base-url are redacted from error messages", async () => {
   // ...but still sent: as the engine's Authorization header, never inside the URL.
   assert.equal(cli.mt.last().url, "http://127.0.0.1:18109/e403/2/version");
   assert.equal(cli.mt.last().headers?.["Authorization"], `Basic ${Buffer.from("user:s3cret").toString("base64")}`);
-  assert.equal(cli.err[0], "Error: HTTP 403 for GET http://127.0.0.1:18109/e403/2/version: nope");
+  assert.equal(untimed(cli.err[0] ?? ""), "ERROR [ddb.api] HTTP 403 for GET http://127.0.0.1:18109/e403/2/version: nope");
   assert.ok(!cli.err.join("\n").includes("s3cret"));
 });
 
@@ -709,5 +709,19 @@ test("item prints an ancestor's component with a note naming it, exit 0 (01#1)",
   const code = await run(["item", ID, "--part", "source-record"], cli.deps);
   assert.equal(code, 0, cli.err.join("\n"));
   assert.equal(cli.out.join("\n"), "<mets/>");
-  assert.equal(cli.err.join("\n"), `Note: item ${ID} has no source-record of its own; this is the source-record of its ancestor ${VOLUME}, which the API points to.`);
+  assert.equal(untimed(cli.err.join("\n")), `INFO  [ddb.api] item ${ID} has no source-record of its own; this is the source-record of its ancestor ${VOLUME}, which the API points to.`);
+});
+
+test("an https->http redirect downgrade is a WARN record of ddb.http, without a second 'Warning:' prefix", async () => {
+  const cli = makeCli((req) =>
+    req.url.startsWith("https:")
+      ? { status: 302, headers: { location: "http://mirror.example/2/version" }, body: Buffer.alloc(0) }
+      : rawResponse("7.5", "text/plain"),
+  );
+  assert.equal(await run(["--base-url", "https://mirror.example/2", "version"], cli.deps), 0, cli.err.join("\n"));
+  assert.deepEqual(cli.err.map(untimed), [
+    "WARN  [ddb.http] following an https->http redirect downgrade to http://mirror.example " +
+      "(subsequent traffic is unencrypted; credentials were stripped).",
+  ]);
+  assert.deepEqual(cli.out, ["7.5"]);
 });

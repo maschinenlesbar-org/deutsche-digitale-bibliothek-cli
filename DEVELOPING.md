@@ -145,7 +145,7 @@ invalid, or `undefined`). The client enforces them before any request through
 `assertValid(name, value, problem)` from `src/client/validate.ts`, which throws
 **`DdbValidationError`** (`Invalid <name>: <reason>`); a client method rejects its
 promise, a constructor throws. `DdbValidationError` extends `DdbUsageError`, so
-`run.ts` maps it to exit 2 and prints `Error: <message>`. The CLI's commander
+`run.ts` maps it to exit 2 and logs it as an `ERROR` record of `ddb.cli`. The CLI's commander
 parsers call the same functions and turn a reason into commander's
 `InvalidArgumentError` (exit 2 too).
 
@@ -287,7 +287,8 @@ src/
     errors.ts    # DdbError / DdbApiError / DdbNetworkError / DdbParseError / DdbUsageError / DdbValidationError
     client.ts    # DdbClient — search (Solr) / item (content-type aware) / version
   cli/
-    io.ts        # injectable I/O seam (stdout/stderr/file)
+    io.ts        # injectable I/O seam (stdout/stderr/file), the logger and the clock
+    log.ts       # the stderr log: records with ts, level, topic; --log-format text|jsonl
     shared.ts    # option parsers, global-option resolver, JSON renderer
     commands/    # search, item, catalog (version)
     program.ts   # assembles the commander program from injectable deps
@@ -373,15 +374,15 @@ crosses an origin boundary (scheme, host **or** port), the engine keeps only its
 `Accept` and `User-Agent` and drops every header passed in `defaultHeaders` (so
 `Proxy-Authorization` or a custom token header too) before following it — this
 includes a same-host `https:`->`http:` downgrade. A followed `https:`->`http:`
-downgrade additionally emits a one-line warning through the `warn` hook (wired to
-stderr by the CLI), because the remaining hops travel in cleartext. A redirect to the
+downgrade additionally emits a one-line warning through the `warn` hook (logged by the
+CLI as a `WARN` record of `ddb.http`, its `Warning: ` prefix dropped), because the remaining hops travel in cleartext. A redirect to the
 same origin keeps every header, whether its `Location` is relative or absolute.
 
 **Plain-http base URL.** `cleartextProblem(baseUrl, secrets?)` (exported) returns one
 sentence when the base URL is `http:` to a host other than loopback (`localhost`,
 `127.0.0.0/8`, `::1`) — `requests to <host> are sent unencrypted (http:, not https:)`, or
 naming the base URL's `user:password@` as "the base URL's credentials" (never the value) —
-and `undefined` otherwise. The CLI prints it as `warning: <sentence>` on stderr once per run,
+and `undefined` otherwise. The CLI logs it as a `WARN` record of `ddb.http` on stderr once per run,
 before the first request (`action()` in `src/cli/shared.ts`); help, version and usage errors
 never warn, and stdout and the exit code are untouched.
 
@@ -517,3 +518,21 @@ npm run serve                        # http://127.0.0.1:4000/deutsche-digitale-b
 Dual-licensed under **[AGPL-3.0-or-later](LICENSE)** or a commercial license —
 see **[LICENSING.md](LICENSING.md)**. This project does **not** accept external
 code contributions; see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+## The log on stderr
+
+Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+(`ERROR`, `WARN`, `INFO`) and a topic, `ddb.<area>`. `--log-format text` (the default)
+writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
+`--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
+and `msg`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
+`api` (the API's answers: HTTP errors, the 403 hint, the paging notes, the ancestor note
+of `item`), `http` (the connection: network errors, the cleartext warning, the
+https->http redirect downgrade) and `output` (`Wrote N bytes to …`). Code logs through
+`logOf(deps)` and never writes diagnostics with `io.err` directly. `run()` builds the
+logger from argv before commander parses it, so commander's own usage errors are records
+too, and on top of the redacted `io.err`, so a secret is kept out of the log in either
+format. `CliDeps.now` makes the timestamps testable. stdout carries data only. The one
+line that is not a record is `handleOutputErrors`' `Output error: …` (stdout itself
+failed; it writes to `process.stderr` directly, outside any run). Conformance test P23
+checks all of this, and its body is shared across the *-cli repos.

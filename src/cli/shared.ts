@@ -3,7 +3,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import type { CliDeps } from "./io.js";
+import { logOf, type CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
 import { DdbError, DdbUsageError } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem } from "../client/validate.js";
@@ -167,7 +167,7 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
   if (global.output) {
     const data = Buffer.from(text + "\n", "utf8");
     deps.io.writeFile(global.output, data, global.force);
-    deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
+    logOf(deps).info("output", `Wrote ${data.length} bytes to ${global.output}`);
   } else {
     deps.io.out(text);
   }
@@ -205,15 +205,16 @@ export function action(
     // An -o file that exists (without --force), or a directory, is refused before any
     // request, with the error the write would raise afterwards — no traffic for nothing.
     if (global.output !== undefined) deps.io.checkOutput?.(global.output, global.force);
-    // One warning per run, before the first request, when the base URL is plain http:
-    // to a host other than loopback. Help, version and usage errors never get here.
+    // One warning per run (a WARN record of `ddb.http`), before the first request, when
+    // the base URL is plain http: to a host other than loopback. Help, version and usage
+    // errors never get here.
     const cleartext = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL);
-    if (cleartext !== undefined) deps.io.err(`warning: ${cleartext}`);
+    if (cleartext !== undefined) logOf(deps).warn("http", cleartext);
     // Route engine warnings (e.g. an https->http redirect downgrade) to stderr so
     // stdout stays clean for piping.
     const client = deps.createClient({
       ...toEngineOptions(global),
-      warn: (message) => deps.io.err(message),
+      warn: (message) => logOf(deps).warn("http", message.replace(/^warning: /i, "")),
     });
     await fn({ client, global, opts: command.opts() }, positionals);
   };

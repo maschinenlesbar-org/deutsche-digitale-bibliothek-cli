@@ -9,7 +9,7 @@ import { run } from "../src/cli/run.js";
 import { DdbError, DdbValidationError } from "../src/client/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import { ITEM_LANG_PARTS, ITEM_PARTS, SOLR_MAX_INT, type ItemOptions, type ItemPart } from "../src/client/types.js";
-import { parity, jsonResponse, rawResponse, requestLines, type ParityResult } from "./helpers.js";
+import { parity, jsonResponse, rawResponse, requestLines, untimed, type ParityResult } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 const ID = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
@@ -25,7 +25,7 @@ function assertBothRejected(r: ParityResult, label: string): void {
   assert.equal(r.lib.ok, false, `${label}: library resolved`);
   if (!r.lib.ok) assert.ok(r.lib.error instanceof DdbValidationError, `${label}: ${String(r.lib.error)}`);
   assert.equal(r.lib.requests.length, 0, `${label}: library requests`);
-  if (!r.lib.ok && r.lib.error instanceof Error) assert.equal(r.cli.err, `Error: ${r.lib.error.message}`, label);
+  if (!r.lib.ok && r.lib.error instanceof Error) assert.equal(r.cli.err, `ERROR [ddb.cli] ${r.lib.error.message}`, label);
 }
 
 /** Both sides succeeded with the identical request(s). */
@@ -254,7 +254,7 @@ test("run() maps the library's base-URL rejection to exit 2, not the network exi
     createClient: (opts) => new DdbClient({ ...opts, baseUrl: "ftp://h.example/2" }),
   });
   assert.equal(code, 2);
-  assert.deepEqual(err, ["Error: Invalid baseUrl: Only http: and https: base URLs are supported."]);
+  assert.deepEqual(err.map(untimed), ["ERROR [ddb.cli] Invalid baseUrl: Only http: and https: base URLs are supported."]);
 });
 
 test("parity: item parts and the Solr int bound come from the library's constants (finding #9)", async () => {
