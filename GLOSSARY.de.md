@@ -167,7 +167,7 @@ Zeitstempel, eine Stufe (`ERROR`, `WARN`, `INFO`) und ein Thema `ddb.<Bereich>`,
 Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler), `api` (die
 Antworten der API: ein Fehlerstatus, die Hinweise zum Blättern und zum Vorfahren, und eine
 fehlerhafte Antwort — ungültiges JSON, die falsche Form, eine HTML-Seite statt einer
-Version), `http` (die Verbindung, die Klartext-Warnung) und `output` (die `-o`-Datei,
+Version), `http` (die Verbindung, die Klartext-Warnung und je Wiederholung eine WARN-Zeile vor dem Warten) und `output` (die `-o`-Datei,
 Schreibfehler auf stdout). Ein Eintrag ist immer eine Zeile; Steuerzeichen darin werden
 maskiert.
 

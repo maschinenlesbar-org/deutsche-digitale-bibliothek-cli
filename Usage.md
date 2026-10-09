@@ -17,7 +17,7 @@ The v2 read routes are **public — no API key**. Just run the commands.
 | `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted; plain `http:` to a non-loopback host logs one `WARN` record of `ddb.http`, `… unencrypted …`, on stderr) |
 | `--timeout <ms>` | per-request timeout in ms (0 = no timeout) |
 | `--user-agent <ua>` | User-Agent header value |
-| `--max-retries <n>` | retries for transient 429/503 responses and reset connections (0..10; each waits the server's Retry-After, up to 30 s) |
+| `--max-retries <n>` | retries for transient 429/503 responses and reset connections (0..10; each waits the server's Retry-After, up to 30 s; each retry logs one WARN record of `ddb.http` before it waits) |
 | `--max-response-bytes <n>` | cap the response body size in bytes (0 = unlimited; default 100 MiB) |
 | `--compact` | print JSON on a single line (for piping to `jq`) |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [ddb.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |

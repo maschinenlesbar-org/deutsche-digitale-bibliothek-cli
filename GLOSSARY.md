@@ -166,7 +166,7 @@ not found · `6` network failure · `1` other API/runtime error. See
 `--log-format jsonl` as one JSON object per line. The areas: `cli` (usage errors,
 commander's messages, unexpected errors), `api` (the API's answers: an error status, the
 paging and ancestor notes, and a malformed answer — bad JSON, the wrong shape, an HTML
-page instead of a version), `http` (the connection, the cleartext warning) and `output`
+page instead of a version), `http` (the connection, the cleartext warning, and one WARN per retry before it waits) and `output`
 (the `-o` file, stdout failures). A record is always one line; control characters in it
 are escaped.
 

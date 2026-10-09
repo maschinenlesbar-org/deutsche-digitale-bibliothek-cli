@@ -376,6 +376,12 @@ the client waits; retrying sooner won't help"; `test/conformance-p6-retry-policy
 `EPIPE`, `ECONNABORTED`, undici's `UND_ERR_SOCKET`, anywhere in the `cause` chain) is
 retried the same way for a GET, whichever transport reported it
 (`isTransientNetworkError`); a refused connection, a DNS failure or a timeout is not.
+Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exported type:
+`{ retry` (1-based), `maxRetries`, `delayMs`, `status?` (absent for a reset), `url` (userinfo
+redacted) `}`) is called once per retry right before the sleep, never when there is none, and
+a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
+`ddb.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host only, whole
+seconds, ms under 1 s). Tests: `test/engine.test.ts`, `test/retry-log.test.ts`.
 
 **Redirects.** Only `301`/`302`/`303`/`307`/`308` with a parseable `Location` are
 followed, up to `maxRedirects` (5). Any other 3xx, a missing or malformed

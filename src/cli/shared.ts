@@ -7,7 +7,7 @@ import { OutputError, logOf, type CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
 import { DdbError, DdbUsageError } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem } from "../client/validate.js";
-import { DEFAULT_BASE_URL, cleartextProblem } from "../client/engine.js";
+import { DEFAULT_BASE_URL, cleartextProblem, type RetryEvent } from "../client/engine.js";
 import { SOLR_MAX_INT } from "../client/types.js";
 
 /**
@@ -191,6 +191,19 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
   }
 }
 
+/** `HTTP 503 from host: retry 1 of 3 in 2 s` (host only; whole seconds, ms under 1 s). */
+export function retryMessage(event: RetryEvent): string {
+  let host: string;
+  try {
+    host = new URL(event.url).host;
+  } catch {
+    host = "the server";
+  }
+  const why = event.status === undefined ? "connection reset" : `HTTP ${event.status}`;
+  const wait = event.delayMs < 1000 ? `${event.delayMs} ms` : `${Math.round(event.delayMs / 1000)} s`;
+  return `${why} from ${host}: retry ${event.retry} of ${event.maxRetries} in ${wait}`;
+}
+
 export interface ActionContext {
   client: ReturnType<CliDeps["createClient"]>;
   global: GlobalOptions;
@@ -236,6 +249,7 @@ export function action(
     const client = deps.createClient({
       ...toEngineOptions(global),
       warn: (message) => logOf(deps).warn("http", message.replace(/^warning: /i, "")),
+      onRetry: (event) => logOf(deps).warn("http", retryMessage(event)),
     });
     await fn({ client, global, opts: command.opts() }, positionals);
   };
