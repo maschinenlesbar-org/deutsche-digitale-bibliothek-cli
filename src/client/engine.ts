@@ -20,7 +20,7 @@ import {
   DdbParseError,
   DdbValidationError,
   credentialsIn,
-  cutText,
+  cutForMessage,
   redactCredentials,
   redactUrl,
 } from "./errors.js";
@@ -392,7 +392,7 @@ function solrErrorMessage(message: string): string | undefined {
  */
 function cleanDetail(detail: string): string {
   const clean = sanitizeServerText(detail).replace(/\s+/g, " ").trim();
-  return clean.length > MAX_DETAIL_LENGTH ? `${cutText(clean, MAX_DETAIL_LENGTH)}…` : clean;
+  return cutForMessage(clean, MAX_DETAIL_LENGTH);
 }
 
 const realSleep = (ms: number): Promise<void> =>
@@ -458,8 +458,8 @@ export class RequestEngine {
     }
     this.#defaultHeaders = { ...(defaultHeaders as Record<string, string>) };
     for (const [name, value] of Object.entries(this.#defaultHeaders)) {
-      assertValid(`defaultHeaders name ${JSON.stringify(name)}`, name, headerNameProblem);
-      assertValid(`defaultHeaders[${JSON.stringify(name)}]`, value, headerValueProblem);
+      assertValid(`defaultHeaders name ${JSON.stringify(cutForMessage(name))}`, name, headerNameProblem);
+      assertValid(`defaultHeaders[${JSON.stringify(cutForMessage(name))}]`, value, headerValueProblem);
     }
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, 30_000, MAX_TIMEOUT_MS);
     this.maxRetries = intOption("maxRetries", options.maxRetries, 2, MAX_RETRIES);
@@ -704,7 +704,7 @@ export class RequestEngine {
             dropped =
               prev.protocol === "http:" && next.protocol === "https:" && prev.hostname === next.hostname
                 ? "the server redirected http→https, which dropped the base URL's credentials; use an https base URL"
-                : `the redirect to ${next.origin} dropped the credentials (they are sent to their own origin only)`;
+                : `the redirect to ${cutForMessage(next.origin)} dropped the credentials (they are sent to their own origin only)`;
           }
           headers = engineHeadersOnly(headers);
         }
@@ -714,7 +714,7 @@ export class RequestEngine {
         // host silently steering the client onto http: is visible to the user.
         if (prev.protocol === "https:" && next.protocol === "http:") {
           this.warn(
-            `Warning: following an https->http redirect downgrade to ${next.origin} ` +
+            `Warning: following an https->http redirect downgrade to ${cutForMessage(next.origin)} ` +
               "(subsequent traffic is unencrypted; credentials were stripped).",
           );
         }
@@ -762,7 +762,7 @@ export class RequestEngine {
     try {
       return JSON.parse(text) as T;
     } catch (cause) {
-      throw new DdbParseError(`Failed to parse JSON response from ${path}`, { cause });
+      throw new DdbParseError(`Failed to parse JSON response from ${cutForMessage(path)}`, { cause });
     }
   }
 
@@ -845,7 +845,7 @@ export function decodeBody(body: Buffer, contentType: string, where: string, mod
     decoder = new TextDecoder(charset);
   } catch {
     if (mode === "lenient") return new TextDecoder("utf-8").decode(body);
-    throw new DdbParseError(`Unsupported response charset "${cleanDetail(charset)}" from ${redactUrl(where)}.`);
+    throw new DdbParseError(`Unsupported response charset "${cutForMessage(cleanDetail(charset))}" from ${cutForMessage(redactUrl(where))}.`);
   }
   return decoder.decode(body);
 }

@@ -151,7 +151,8 @@ connection, `ddb.output` for `-o`). By default it is written log4j style; `--log
 jsonl` writes one JSON object per line instead. A record is always one line: a line
 break, a control character or a bidi control in a message (a server's text, a value you
 typed) is written as an escape (`\n`, `\u001b`, `\u202e`), so it can neither split a
-record nor forge another one, nor steer the terminal:
+record nor forge another one, nor steer the terminal; a message longer than 4000
+characters is cut and ends in `… (N more characters)`:
 
 ```text
 2026-10-09T14:03:12.481Z WARN  [ddb.http] requests to mirror.test are sent unencrypted (http:, not https:)

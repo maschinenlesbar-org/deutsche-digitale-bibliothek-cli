@@ -13,7 +13,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
 import { RequestEngine, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
-import { DdbApiError, DdbParseError, DdbValidationError, cutText } from "./errors.js";
+import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
 import {
@@ -89,7 +89,7 @@ function invalid(name: string, expected: string, value: unknown): DdbValidationE
   // A string is quoted (cut at 50 characters), a number shown, anything else named by type.
   const shown =
     typeof value === "string"
-      ? JSON.stringify(value.length > 50 ? `${cutText(value, 50)}…` : value)
+      ? JSON.stringify(cutForMessage(value, 50))
       : typeof value === "number"
         ? String(value)
         : value === null
@@ -167,7 +167,7 @@ export const ITEM_OPTION_KEYS = Object.freeze(["lang", "rows", "offset"] as cons
 function assertKnownKeys(name: string, value: object, allowed: readonly string[]): void {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
-      const shown = JSON.stringify(key.length > 50 ? `${cutText(key, 50)}…` : key);
+      const shown = JSON.stringify(cutForMessage(key, 50));
       throw new DdbValidationError(`Invalid ${name}: unknown key ${shown}; expected one of ${allowed.join(", ")}.`);
     }
   }
@@ -199,16 +199,12 @@ function assertSearchParams(params: SearchParams): void {
 }
 
 function shapeError(path: string, expected: string): DdbParseError {
-  return new DdbParseError(`Unexpected response shape from ${path}: expected ${expected}.`);
+  return new DdbParseError(`Unexpected response shape from ${cutForMessage(path)}: expected ${expected}.`);
 }
 
-/** Longest stretch of a server's error text a message quotes. */
-const MAX_QUOTED = 200;
-
-/** `text` cleaned of control characters, on one line, cut at MAX_QUOTED characters (never inside a surrogate pair). */
+/** `text` cleaned of control characters, on one line, cut at MAX_QUOTED_LENGTH (200) characters (never inside a surrogate pair). */
 function quoted(text: string): string {
-  const clean = sanitizeServerText(text).replace(/\s+/g, " ").trim();
-  return clean.length > MAX_QUOTED ? `${cutText(clean, MAX_QUOTED)}…` : clean;
+  return cutForMessage(sanitizeServerText(text).replace(/\s+/g, " ").trim(), MAX_QUOTED_LENGTH);
 }
 
 /**
@@ -235,9 +231,9 @@ function errorEnvelope(body: Record<string, unknown>): string | undefined {
  */
 function searchShapeError(path: string, handler: string, expected: string): DdbParseError {
   return new DdbParseError(
-    `Unexpected response shape from ${path}: expected ${expected}. Only request handlers that ` +
+    `Unexpected response shape from ${cutForMessage(path)}: expected ${expected}. Only request handlers that ` +
       `return Solr's standard response envelope (a "response" object with "numFound" and "docs") ` +
-      `are supported; handler "${handler}" did not.`,
+      `are supported; handler "${cutForMessage(handler)}" did not.`,
   );
 }
 
@@ -253,7 +249,7 @@ function assertSolrResponse(path: string, handler: string, body: unknown): asser
   if (!isObject(body)) throw searchShapeError(path, handler, "a JSON object");
   const error = errorEnvelope(body);
   if (error !== undefined) {
-    throw new DdbParseError(`Unexpected response from ${path}: an error document with a success status: ${quoted(error)}`);
+    throw new DdbParseError(`Unexpected response from ${cutForMessage(path)}: an error document with a success status: ${quoted(error)}`);
   }
   const response = body["response"];
   if (!isObject(response)) throw searchShapeError(path, handler, "a response object");

@@ -346,3 +346,24 @@ test("an ancestor chain that ends in a 404 says so instead of naming another id 
   );
   assert.equal(once.calls.length, 1);
 });
+
+test("own messages quote a server's or user's value at most 200 characters long (L3)", async () => {
+  // A redirect that is not followed names its target: cut, not 20 000 characters.
+  const target = `https://mirror.test/${"x".repeat(20_000)}`;
+  const redirect = new DdbClient({ transport: async () => ({ status: 300, headers: { location: target }, body: Buffer.alloc(0) }) });
+  await assert.rejects(redirect.version(), (err: Error) => {
+    assert.ok(err instanceof DdbApiError);
+    assert.match(err.message, /redirect to https:\/\/mirror\.test\/x+… not followed/);
+    assert.ok(err.message.length < 600, `${err.message.length}`);
+    return true;
+  });
+  // A request handler that does not answer Solr's envelope is named, cut.
+  const handler = "h".repeat(20_000);
+  const search = new DdbClient({ transport: async () => jsonResponse({ ok: true }) });
+  await assert.rejects(search.search({ query: "x", requestHandler: handler }), (err: Error) => {
+    assert.ok(err instanceof DdbParseError);
+    assert.ok(err.message.length < 1000, `${err.message.length}`);
+    assert.match(err.message, /handler "h{200}…" did not/);
+    return true;
+  });
+});
