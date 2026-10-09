@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/client/engine.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, redactUrl } from "../src/client/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, redactUrl, toWellFormed } from "../src/client/errors.js";
 import { DdbClient } from "../src/client/client.js";
 import type { HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
@@ -449,5 +449,33 @@ test("a redirect to a non-http(s) scheme is refused before the transport sees it
     const e = new RequestEngine({ baseUrl: "https://api.test/2", transport: mt.transport });
     await assert.rejects(() => e.getJson("/x"), (err) => err instanceof DdbNetworkError && /unsupported protocol/.test(err.message), target);
     assert.equal(mt.calls.length, 1, target);
+  }
+});
+
+test("cutText never cuts inside a surrogate pair; toWellFormed replaces half a character", () => {
+  assert.equal(cutText("ab\u{1f600}cd", 3), "ab");
+  assert.equal(cutText("ab\u{1f600}cd", 4), "ab\u{1f600}");
+  assert.equal(cutText("short", 10), "short");
+  assert.equal(toWellFormed("a\ud83d b\ude00 \u{1f600}"), "a\ufffd b\ufffd \u{1f600}");
+});
+
+test("a server detail cut at 500 characters keeps the message well-formed", async () => {
+  for (const message of ["\u{1f600}".repeat(400), "a" + "\u{1f600}".repeat(400)]) {
+    const engine = new RequestEngine({ transport: async () => ({ status: 500, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify({ message })) }) });
+    await assert.rejects(engine.getJson("/search/index/search/select"), (err: Error) => {
+      assert.equal(toWellFormed(err.message), err.message);
+      assert.match(err.message, /…$/);
+      return true;
+    });
+  }
+});
+
+test("a quoted /version body cut at 200 characters keeps the message well-formed", async () => {
+  for (const body of ["\u{1f600}".repeat(200), "a" + "\u{1f600}".repeat(200)]) {
+    const client = new DdbClient({ transport: async () => rawResponse(body, "text/plain; charset=utf-8") });
+    await assert.rejects(client.version(), (err: Error) => {
+      assert.equal(toWellFormed(err.message), err.message);
+      return true;
+    });
   }
 });

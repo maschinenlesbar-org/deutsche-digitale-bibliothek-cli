@@ -133,7 +133,8 @@ No rejected input ever surfaces as a raw `TypeError`
 
 Server text in a message is cleaned of control characters and cut at 500 characters,
 and a request URL at 300 (`messageUrl`, ending in "… (N characters)"); `DdbApiError.url`
-and `.body` keep them whole. An HTTP `414` adds that the URL is too long and to shorten
+and `.body` keep them whole. A cut never lands inside a surrogate pair (`cutText`), so
+the message stays well-formed. An HTTP `414` adds that the URL is too long and to shorten
 the query or the `--filter` list.
 
 ### Library input validation
@@ -531,7 +532,9 @@ and `msg`. A record is always one line: `formatLogRecord` runs `escapeForRecord`
 the message (text) or the whole JSON object (jsonl), which writes CR and LF as `\r`/`\n`,
 every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
 controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
-forge another one or steer the terminal. The areas are `cli` (usage errors, commander's messages, unexpected errors),
+forge another one or steer the terminal. Before that a lone surrogate (half a
+character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`).
+The areas are `cli` (usage errors, commander's messages, unexpected errors),
 `api` (the API's answers: HTTP errors, the 403 hint, the paging notes, the ancestor note
 of `item`), `http` (the connection: network errors, the cleartext warning, the
 https->http redirect downgrade) and `output` (`Wrote N bytes to …`). Code logs through

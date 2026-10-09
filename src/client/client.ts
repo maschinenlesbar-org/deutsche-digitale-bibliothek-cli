@@ -13,7 +13,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
 import { RequestEngine, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
-import { DdbApiError, DdbParseError, DdbValidationError } from "./errors.js";
+import { DdbApiError, DdbParseError, DdbValidationError, cutText } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
 import {
@@ -89,7 +89,7 @@ function invalid(name: string, expected: string, value: unknown): DdbValidationE
   // A string is quoted (cut at 50 characters), a number shown, anything else named by type.
   const shown =
     typeof value === "string"
-      ? JSON.stringify(value.length > 50 ? `${value.slice(0, 50)}…` : value)
+      ? JSON.stringify(value.length > 50 ? `${cutText(value, 50)}…` : value)
       : typeof value === "number"
         ? String(value)
         : value === null
@@ -167,7 +167,7 @@ export const ITEM_OPTION_KEYS = Object.freeze(["lang", "rows", "offset"] as cons
 function assertKnownKeys(name: string, value: object, allowed: readonly string[]): void {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
-      const shown = JSON.stringify(key.length > 50 ? `${key.slice(0, 50)}…` : key);
+      const shown = JSON.stringify(key.length > 50 ? `${cutText(key, 50)}…` : key);
       throw new DdbValidationError(`Invalid ${name}: unknown key ${shown}; expected one of ${allowed.join(", ")}.`);
     }
   }
@@ -205,10 +205,10 @@ function shapeError(path: string, expected: string): DdbParseError {
 /** Longest stretch of a server's error text a message quotes. */
 const MAX_QUOTED = 200;
 
-/** `text` cleaned of control characters, on one line, cut at MAX_QUOTED characters. */
+/** `text` cleaned of control characters, on one line, cut at MAX_QUOTED characters (never inside a surrogate pair). */
 function quoted(text: string): string {
   const clean = sanitizeServerText(text).replace(/\s+/g, " ").trim();
-  return clean.length > MAX_QUOTED ? `${clean.slice(0, MAX_QUOTED)}…` : clean;
+  return clean.length > MAX_QUOTED ? `${cutText(clean, MAX_QUOTED)}…` : clean;
 }
 
 /**

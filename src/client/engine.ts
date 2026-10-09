@@ -20,6 +20,7 @@ import {
   DdbParseError,
   DdbValidationError,
   credentialsIn,
+  cutText,
   redactCredentials,
   redactUrl,
 } from "./errors.js";
@@ -386,11 +387,12 @@ function solrErrorMessage(message: string): string | undefined {
 
 /**
  * Clean an error detail for a one-line stderr message: strip control characters,
- * fold every whitespace run (newlines included) into one space and cap the length.
+ * fold every whitespace run (newlines included) into one space and cap the length
+ * (never inside a surrogate pair).
  */
 function cleanDetail(detail: string): string {
   const clean = sanitizeServerText(detail).replace(/\s+/g, " ").trim();
-  return clean.length > MAX_DETAIL_LENGTH ? `${clean.slice(0, MAX_DETAIL_LENGTH)}…` : clean;
+  return clean.length > MAX_DETAIL_LENGTH ? `${cutText(clean, MAX_DETAIL_LENGTH)}…` : clean;
 }
 
 const realSleep = (ms: number): Promise<void> =>
