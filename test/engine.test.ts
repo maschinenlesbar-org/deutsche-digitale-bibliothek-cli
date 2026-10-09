@@ -479,3 +479,19 @@ test("a quoted /version body cut at 200 characters keeps the message well-formed
     });
   }
 });
+
+test("credentials a server echoes are scrubbed from the error: Basic, user:password, password (L13)", async () => {
+  // The engine sends the pair UTF-8 encoded, so that is the form a server echoes.
+  const basic = Buffer.from("alice:pa ss-pw", "utf8").toString("base64");
+  const engine = new RequestEngine({
+    baseUrl: "https://alice:pa%20ss-pw@mirror.test/2",
+    maxRetries: 0,
+    transport: makeMockTransport(() => jsonResponse({ message: `no: Basic ${basic} / alice:pa ss-pw / pa ss-pw` }, 401)).transport,
+  });
+  await assert.rejects(engine.getText("/version"), (err: DdbApiError) => {
+    for (const form of [basic, "alice:pa ss-pw", "pa ss-pw"]) assert.ok(!err.message.includes(form), err.message);
+    assert.match(err.message, /no: Basic \*\*\* \/ \*\*\* \/ \*\*\*/);
+    for (const form of [basic, "alice:pa ss-pw", "pa ss-pw"]) assert.ok(!err.body.includes(form), err.body);
+    return true;
+  });
+});

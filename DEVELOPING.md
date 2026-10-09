@@ -106,7 +106,10 @@ which also cuts the userinfo out of a value that doesn't parse. The CLI goes fur
 `withRedactedOutput` in `run.ts` collects the exact userinfo of every argument (and of
 the value part of `--opt=value`, `redactionFor`) with the exported `credentialsIn` and
 redacts it with `redactCredentials` from every line printed on stdout and from every log
-record's *message*, before the record is cut and escaped; the record is then written to
+record's *message*. The forms a server echoes a userinfo back in are replaced too: the
+`Basic` value and the decoded `user:password` on stdout and stderr, the password alone
+(4 characters or more) on stderr only, since it may well occur in the data. The log
+replaces them before the record is cut and escaped; the record is then written to
 the raw stderr, so its frame (time, level, topic) is never touched and a password with
 DEL, C1 or bidi characters is matched in its raw form — commander's usage errors, which echo a
 rejected value as typed, and the unknown-command message for a URL typed where a
@@ -116,7 +119,9 @@ quotes, `#`, `?` or `/` is covered too (`test/conformance-p1-cli-redaction.test.
 The library keeps them out of logged objects too: the engine holds the base URL and
 `defaultHeaders` in real `#private` fields, so `console.log(client)`,
 `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
-userinfo (raw and percent-decoded) from error bodies and details, redirect targets,
+userinfo (raw and percent-decoded), and the forms a server echoes it back in (the
+`Basic` value, the decoded `user:password`, the password alone from 4 characters:
+`echoedCredentialForms`), from error bodies and details, redirect targets,
 transport error text and the `cause` chain. Whatever a custom transport throws reaches
 the caller as a `DdbNetworkError` (`GET <url> failed: <reason>`, the original as
 `cause`), never as a raw `TypeError` (`test/conformance-p2-library-redaction.test.ts`).

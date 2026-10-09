@@ -757,3 +757,16 @@ test("jsonl never prints a rejected base URL's password with DEL or C1 plus a sp
     }
   }
 });
+
+test("a server echoing the Authorization header never puts the credentials into the record (results/03)", async () => {
+  // The report's run: a 401 body reflecting the Basic value and the decoded user:password.
+  const basic = Buffer.from("alice:S3cr@t", "utf8").toString("base64");
+  for (const format of ["text", "jsonl"]) {
+    const cli = makeCli(() => jsonResponse({ message: `Unauthorized for Basic ${basic} decoded=alice:S3cr@t` }, 401));
+    const code = await run(["--log-format", format, "--base-url", "http://alice:S3cr%40t@127.0.0.1:18431/2", "version"], cli.deps);
+    assert.equal(code, 1);
+    const all = cli.err.join("\n");
+    assert.match(all, /Unauthorized for Basic \*\*\* decoded=\*\*\*/, all);
+    assert.ok(!all.includes(basic) && !all.includes("S3cr@t"), all);
+  }
+});

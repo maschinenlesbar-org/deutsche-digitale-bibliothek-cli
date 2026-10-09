@@ -21,7 +21,9 @@ import {
   DdbValidationError,
   credentialsIn,
   cutForMessage,
+  echoedCredentialForms,
   redactCredentials,
+  redactSecrets,
   redactUrl,
 } from "./errors.js";
 import { assertValid, baseUrlProblem, headerNameProblem, headerValueProblem } from "./validate.js";
@@ -420,6 +422,12 @@ export class RequestEngine {
   readonly #baseUrl: string;
   /** The base URL's userinfo, raw and percent-decoded, for scrubbing server and transport text. */
   readonly #credentials: string[];
+  /**
+   * The forms a server echoes that userinfo back in (the Basic value, the decoded
+   * `user:password`, the password alone), longest first, so a password never leaves half
+   * of the `user:password` around it.
+   */
+  readonly #echoed: string[];
   readonly #defaultHeaders: Record<string, string>;
   private readonly transport: Transport;
   private readonly userAgent: string;
@@ -443,6 +451,9 @@ export class RequestEngine {
         return [raw];
       }
     });
+    this.#echoed = credentialsIn(this.#baseUrl)
+      .flatMap(echoedCredentialForms)
+      .sort((a, b) => b.length - a.length);
     this.transport = functionOption("transport", options.transport, nodeHttpTransport);
     // Only `undefined` selects the default; a blank or otherwise unsendable value
     // is a DdbValidationError here rather than a network error at request time.
@@ -477,11 +488,11 @@ export class RequestEngine {
 
   /**
    * `text` without the base URL's credentials: server text (an error body that echoes the
-   * request URL) and transport text (fetch's "Request cannot be constructed from a URL that
+   * request URL, the Authorization header or the decoded `user:password`) and transport text (fetch's "Request cannot be constructed from a URL that
    * includes credentials: <url>") can carry them.
    */
   private scrub(text: string): string {
-    return this.#credentials.length === 0 ? text : redactCredentials(text, this.#credentials);
+    return this.#credentials.length === 0 ? text : redactSecrets(redactCredentials(text, this.#credentials), this.#echoed);
   }
 
   /**
