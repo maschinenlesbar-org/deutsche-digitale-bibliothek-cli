@@ -478,6 +478,9 @@ npm test          # builds, then runs `node --test` over dist/test
   the paging note and the past-the-end note (an `--offset` at or beyond `numFound`, CLI only:
   the library returns Solr's answer as is), raw-XML item output, id validation, and exit
   codes — mocked client.
+- **`io.test.ts`** — `-o` writes and refusals, and `handleOutputErrors()`: a reader that
+  has gone (EPIPE, ENOTCONN), and any other stdout write error as an ERROR record of
+  `ddb.output`.
 - **`log.test.ts`** — the record helpers of `src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
 - **`conformance-p*.test.ts`** — the checks shared across the `*-cli` repos (fix plan
@@ -563,7 +566,9 @@ command (or `help` with an unknown name) an ERROR "missing command: `ddb <subcom
 before that help, so every failed run has an ERROR record (`writeCommanderErr`). The log
 is built with the run's redaction (`withRedactedOutput`), which replaces a secret in the
 message only, before it is escaped: the frame is never touched, and a secret is kept out
-of the log in either format. `CliDeps.now` makes the timestamps testable. stdout carries data only. The one
-line that is not a record is `handleOutputErrors`' `Output error: …` (stdout itself
-failed; it writes to `process.stderr` directly, outside any run). Conformance test P23
+of the log in either format. `CliDeps.now` makes the timestamps testable. stdout carries data only. What
+happens outside `run()`, in the bin shim, is logged too, through `processLogger(argv)`
+(the format argv asks for, the run's redaction): a stdout write error
+(`handleOutputErrors`, e.g. EBADF) is an ERROR of `ddb.output`, `Could not write to
+stdout: …`, and exits 1. Conformance test P23
 checks all of this, and its body is shared across the *-cli repos.

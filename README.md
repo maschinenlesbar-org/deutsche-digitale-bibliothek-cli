@@ -147,7 +147,7 @@ components (`edm`, `source-record`) print raw text. Errors and diagnostics
 Each line on stderr is a **log record**: a timestamp (UTC), a level (`ERROR`, `WARN`,
 `INFO`) and a topic, the program and the area it comes from (`ddb.cli` for usage
 errors, `ddb.api` for the API's answers and the paging notes, `ddb.http` for the
-connection, `ddb.output` for `-o`). By default it is written log4j style; `--log-format
+connection, `ddb.output` for `-o` and a failed write to stdout). By default it is written log4j style; `--log-format
 jsonl` writes one JSON object per line instead. A record is always one line: a line
 break, a control character or a bidi control in a message (a server's text, a value you
 typed) is written as an escape (`\n`, `\u001b`, `\u202e`), so it can neither split a
