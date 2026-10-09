@@ -3,7 +3,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { logOf, type CliDeps } from "./io.js";
+import { OutputError, logOf, type CliDeps } from "./io.js";
 import type { DdbClientOptions } from "../client/client.js";
 import { DdbError, DdbUsageError } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem } from "../client/validate.js";
@@ -157,6 +157,24 @@ function stringifyJson(value: unknown, compact: boolean): string {
   }
 }
 
+/** `fn`, with any failure an `OutputError` (message and cause kept). */
+function asOutputError(fn: () => void): void {
+  try {
+    fn();
+  } catch (cause) {
+    if (cause instanceof OutputError) throw cause;
+    throw new OutputError(cause instanceof Error ? cause.message : String(cause), { cause });
+  }
+}
+
+/**
+ * `deps.io.writeFile`, with any failure an `OutputError` (message and cause kept), so
+ * every `-o` failure is logged under `ddb.output`, whatever the `CliIO` threw.
+ */
+export function writeOutputFile(deps: CliDeps, path: string, data: Buffer, force: boolean | undefined): void {
+  asOutputError(() => deps.io.writeFile(path, data, force));
+}
+
 /**
  * Render a JSON value, pretty by default and compact with --compact. Writes to
  * the file given by --output (with a short stderr confirmation so stdout stays
@@ -166,7 +184,7 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
   const text = escapeControlChars(stringifyJson(value, global.compact === true));
   if (global.output) {
     const data = Buffer.from(text + "\n", "utf8");
-    deps.io.writeFile(global.output, data, global.force);
+    writeOutputFile(deps, global.output, data, global.force);
     logOf(deps).info("output", `Wrote ${data.length} bytes to ${global.output}`);
   } else {
     deps.io.out(text);
@@ -204,7 +222,10 @@ export function action(
     if (global.output === "-") delete global.output;
     // An -o file that exists (without --force), or a directory, is refused before any
     // request, with the error the write would raise afterwards — no traffic for nothing.
-    if (global.output !== undefined) deps.io.checkOutput?.(global.output, global.force);
+    if (global.output !== undefined) {
+      const output = global.output;
+      asOutputError(() => deps.io.checkOutput?.(output, global.force));
+    }
     // One warning per run (a WARN record of `ddb.http`), before the first request, when
     // the base URL is plain http: to a host other than loopback. Help, version and usage
     // errors never get here.

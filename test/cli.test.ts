@@ -365,17 +365,17 @@ test("-o - writes to stdout, not to a file named -", async () => {
   assert.ok(!cli.err.some((line) => line.startsWith("Wrote")));
 });
 
-test("an existing -o file or a directory is refused before any request, for every command", async () => {
+test("an existing -o file or a directory is refused before any request, for every command, as an ERROR of ddb.output", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ddb-cli-o-"));
   try {
     const existing = join(dir, "exists.json");
     writeFileSync(existing, "original");
     const cases: [string[], string][] = [
-      [["search", "x", "-o", existing], `ERROR [ddb.cli] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
-      [["item", ID, "-o", existing], `ERROR [ddb.cli] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
-      [["version", "-o", existing], `ERROR [ddb.cli] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
-      [["search", "x", "-o", dir], `ERROR [ddb.cli] "${dir}" is a directory; give a file path to --output.`],
-      [["search", "x", "-o", dir, "--force"], `ERROR [ddb.cli] "${dir}" is a directory; give a file path to --output.`],
+      [["search", "x", "-o", existing], `ERROR [ddb.output] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["item", ID, "-o", existing], `ERROR [ddb.output] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["version", "-o", existing], `ERROR [ddb.output] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["search", "x", "-o", dir], `ERROR [ddb.output] "${dir}" is a directory; give a file path to --output.`],
+      [["search", "x", "-o", dir, "--force"], `ERROR [ddb.output] "${dir}" is a directory; give a file path to --output.`],
     ];
     for (const [args, message] of cases) {
       const cli = makeCli(() => jsonResponse(fx.solr));
@@ -845,4 +845,25 @@ test("the log format is the one commander parsed, where an option's value looks 
   assert.equal(await run(["-o", "--log-format", "jsonl", "version"], parse.deps), 2);
   assert.ok(parse.err.length > 0 && !parse.err.some(isJsonl), parse.err.join("\n"));
   assert.match(untimed(parse.err[0] ?? ""), /^ERROR \[ddb\.cli\] unknown command 'jsonl'/);
+});
+
+test("every -o failure is an ERROR record of ddb.output, exit 1 (L8, results/01 and 04)", async () => {
+  // The refusals and the write errors of the real CliIO, and a CliIO that throws a plain Error.
+  const dir = mkdtempSync(join(tmpdir(), "ddb-cli-o8-"));
+  try {
+    for (const [args, writer] of [
+      [["search", "x", "-o", join(dir, "missing", "x.json")], defaultIO.writeFile],
+      [["version", "-o", join(dir, "missing", "x.txt")], defaultIO.writeFile],
+      [["item", ID, "--part", "edm", "-o", join(dir, "missing", "x.xml")], defaultIO.writeFile],
+      [["search", "x", "-o", "out.json"], () => { throw new Error("EACCES: permission denied, open 'out.json'"); }],
+    ] as [string[], CliDeps["io"]["writeFile"]][]) {
+      const cli = makeCli((req) => (req.url.endsWith("/version") ? rawResponse("7.5", "text/plain") : req.url.includes("/edm") ? rawResponse("<rdf/>", "application/rdf+xml") : jsonResponse(fx.solr)));
+      cli.deps.io.writeFile = writer;
+      assert.equal(await run(args, cli.deps), 1, args.join(" "));
+      assert.match(untimed(cli.err.join("\n")), /(^|\n)ERROR \[ddb\.output\] (Could not write to|EACCES)/, args.join(" "));
+      assert.doesNotMatch(cli.err.join("\n"), /Unexpected error|\[ddb\.cli\]/);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

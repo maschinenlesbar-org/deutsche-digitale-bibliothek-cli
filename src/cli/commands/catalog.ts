@@ -5,7 +5,7 @@
 import type { Command } from "commander";
 import { logOf, type CliDeps } from "../io.js";
 import { sanitizeServerText } from "../../client/engine.js";
-import { action } from "../shared.js";
+import { action, writeOutputFile } from "../shared.js";
 
 export function registerCatalogCommands(program: Command, deps: CliDeps): void {
   program
@@ -19,7 +19,7 @@ export function registerCatalogCommands(program: Command, deps: CliDeps): void {
           // File output is not sanitised (a file is not a terminal); it gets the
           // version plus a trailing newline.
           const data = Buffer.from(version + "\n", "utf8");
-          deps.io.writeFile(global.output, data, global.force);
+          writeOutputFile(deps, global.output, data, global.force);
           logOf(deps).info("output", `Wrote ${data.length} bytes to ${global.output}`);
         } else {
           // The version string is attacker-controlled under a hostile --base-url;

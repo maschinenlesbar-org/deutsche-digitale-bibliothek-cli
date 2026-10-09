@@ -6,20 +6,28 @@ import type { DdbClient, DdbClientOptions } from "../client/client.js";
 import { DdbError } from "../client/errors.js";
 import { createLogger, type Logger } from "./log.js";
 
+/**
+ * Writing the output to the `-o` file failed, or was refused before the request (an
+ * existing file without `--force`, a directory, EACCES, a missing directory, …). Logged
+ * as an ERROR of `ddb.output`, exit 1.
+ */
+export class OutputError extends DdbError {}
+
 export interface CliIO {
   out(text: string): void;
   err(text: string): void;
   /**
    * Persist raw bytes to a file. Refuses to clobber an existing file unless
-   * `force` is set, and surfaces any filesystem failure as a typed `DdbError`
-   * with a clean message rather than a bare Node fs error.
+   * `force` is set, and surfaces any filesystem failure as an `OutputError` (a
+   * `DdbError`) with a clean message rather than a bare Node fs error.
    */
   writeFile(path: string, data: Buffer, force?: boolean): void;
   /**
    * Check an `-o` path before any request, with the same errors `writeFile` raises:
-   * a directory, or an existing file without `force`. Throws a `DdbError`; returns
-   * when the write may go ahead. `writeFile` still refuses to clobber (the file may
-   * appear meanwhile). Optional: an I/O object without it skips the early check.
+   * a directory, or an existing file without `force`. Throws an `OutputError` (a
+   * `DdbError`); returns when the write may go ahead. `writeFile` still refuses to
+   * clobber (the file may appear meanwhile). Optional: an I/O object without it skips
+   * the early check.
    */
   checkOutput?(path: string, force?: boolean): void;
   /** Write raw bytes to stdout (binary-safe). */
@@ -118,12 +126,12 @@ function exists(path: string): boolean {
   }
 }
 
-function directoryError(path: string, cause?: unknown): DdbError {
-  return new DdbError(`"${path}" is a directory; give a file path to --output.`, { cause });
+function directoryError(path: string, cause?: unknown): OutputError {
+  return new OutputError(`"${path}" is a directory; give a file path to --output.`, { cause });
 }
 
-function existingFileError(path: string, cause?: unknown): DdbError {
-  return new DdbError(`Refusing to overwrite existing file "${path}"; pass --force to overwrite.`, { cause });
+function existingFileError(path: string, cause?: unknown): OutputError {
+  return new OutputError(`Refusing to overwrite existing file "${path}"; pass --force to overwrite.`, { cause });
 }
 
 export const defaultIO: CliIO = {
@@ -140,7 +148,7 @@ export const defaultIO: CliIO = {
       if ((code === "EEXIST" || code === "EISDIR") && isDirectory(path)) throw directoryError(path, cause);
       if (code === "EEXIST") throw existingFileError(path, cause);
       const reason = cause instanceof Error ? cause.message : String(cause);
-      throw new DdbError(`Could not write to "${path}": ${reason}`, { cause });
+      throw new OutputError(`Could not write to "${path}": ${reason}`, { cause });
     }
   },
   checkOutput: (path, force = false) => {

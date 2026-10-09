@@ -14,7 +14,7 @@ import {
   type ItemPart,
 } from "../../client/index.js";
 import { sanitizeServerText } from "../../client/engine.js";
-import { action, parseNonEmpty, parseSolrInt, renderJson } from "../shared.js";
+import { action, parseNonEmpty, parseSolrInt, renderJson, writeOutputFile } from "../shared.js";
 
 /** commander value-parser for --part: the library's rule (itemPartProblem). */
 function parsePart(value: string): ItemPart {
@@ -89,7 +89,7 @@ function writeRaw(
   force: boolean | undefined,
 ): void {
   if (output) {
-    deps.io.writeFile(output, bytes, force);
+    writeOutputFile(deps, output, bytes, force);
     logOf(deps).info("output", `Wrote ${bytes.length} bytes to ${output}`);
   } else if (deps.io.isTerminal?.() === false) {
     deps.io.outBinary(bytes);

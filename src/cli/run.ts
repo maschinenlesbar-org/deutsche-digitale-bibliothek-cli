@@ -4,7 +4,7 @@
 
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
-import { logOf, type CliDeps } from "./io.js";
+import { OutputError, logOf, type CliDeps } from "./io.js";
 import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat, type Logger } from "./log.js";
 import {
   DdbApiError,
@@ -283,7 +283,8 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       return 6;
     }
     if (err instanceof DdbError) {
-      log.error("cli", err.message);
+      // An -o failure (OutputError) is an output record.
+      log.error(err instanceof OutputError ? "output" : "cli", err.message);
       return 1;
     }
     log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
