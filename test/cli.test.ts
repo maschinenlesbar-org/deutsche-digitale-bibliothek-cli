@@ -725,3 +725,22 @@ test("an https->http redirect downgrade is a WARN record of ddb.http, without a 
   ]);
   assert.deepEqual(cli.out, ["7.5"]);
 });
+
+test("a line break, ESC or bidi control in a typed value never forges a record (-o, --part, an unknown command)", async () => {
+  const forged = "x\n2026-10-09T00:00:00.000Z INFO  [ddb.api] forged\u001b]0;title\u0007\u202e\u2028";
+  const record = /^\S+Z (ERROR|WARN |INFO ) \[ddb\.[a-z-]+\] /;
+  const raw = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e]/;
+  const output = makeCli(() => rawResponse("7.5", "text/plain"));
+  assert.equal(await run(["-o", forged, "version"], output.deps), 0);
+  const part = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["item", ID, "--part", forged], part.deps), 2);
+  const command = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run([forged], command.deps), 2);
+  for (const err of [output.err, part.err, command.err]) {
+    assert.ok(err.length > 0);
+    for (const line of err) {
+      assert.match(line, record, JSON.stringify(line));
+      assert.doesNotMatch(line, raw, JSON.stringify(line));
+    }
+  }
+});
