@@ -42,8 +42,8 @@ const USERINFO_PHRASE = "the base URL's credentials";
  * and port, never the userinfo) and what secret travels with the requests: `secrets`
  * are noun phrases such as `"the API key"`, and a `user:password@` in the URL adds
  * "the base URL's credentials". The secrets themselves are never in the sentence. Not
- * an error (a mirror on a trusted network is a legitimate setup), so the CLI prints it
- * as a warning on stderr, once per run.
+ * an error (a mirror on a trusted network is a legitimate setup), so the CLI logs it as
+ * a `WARN` record of `ddb.http` on stderr (once per run, before the first request).
  *
  * - `requests to <host> are sent unencrypted (http:, not https:)`
  * - `the base URL's credentials are sent unencrypted to <host> (http:, not https:)`
