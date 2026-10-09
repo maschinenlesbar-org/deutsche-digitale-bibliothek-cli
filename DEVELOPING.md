@@ -576,5 +576,8 @@ happens outside `run()`, in the bin shim, is logged too, through `processLogger(
 (`handleOutputErrors`, e.g. EBADF) is an ERROR of `ddb.output`, `Could not write to
 stdout: …`, and exits 1; Node's own process warnings (`NODE_TLS_REJECT_UNAUTHORIZED=0`)
 are WARN records of `ddb.cli`: the bin shim installs `installWarningLog`, which removes
-Node's default `warning` listener and logs `(node) <name>: <message>`. Conformance test P23
+Node's default `warning` listener and logs `(node) <name>: <message>`. In `defaultDeps` a
+record waits for stdout (`stderrAfterStdout`): it is held while stdout has a backlog and
+written, in order, once it is gone, so with `2>&1 |` and a slow reader it never lands
+inside the data. Conformance test P23
 checks all of this, and its body is shared across the *-cli repos.
