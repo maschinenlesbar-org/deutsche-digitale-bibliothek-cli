@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import { DdbClient } from "../src/client/client.js";
+import { credentialsIn } from "../src/client/errors.js";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -769,4 +770,16 @@ test("a server echoing the Authorization header never puts the credentials into 
     assert.match(all, /Unauthorized for Basic \*\*\* decoded=\*\*\*/, all);
     assert.ok(!all.includes(basic) && !all.includes("S3cr@t"), all);
   }
+});
+
+test("an a:b@c argument (a query, an -o path) is neither a credential in the log nor rewritten in the JSON on stdout (L14)", async () => {
+  const body = { responseHeader: { status: 0 }, response: { numFound: 1, start: 0, docs: [{ id: "1", label: "run:2026-10-09@x" }] } };
+  const cli = makeCli(() => jsonResponse(body));
+  assert.equal(await run(["search", "run:2026-10-09@x"], cli.deps), 0);
+  assert.match(cli.out.join("\n"), /"label": "run:2026-10-09@x"/);
+  const file = makeCli(() => jsonResponse(body));
+  assert.equal(await run(["-o", "run:2026-10-09@x.json", "search", "x"], file.deps), 0);
+  assert.match(untimed(file.err.join("\n")), /INFO  \[ddb\.output\] Wrote \d+ bytes to run:2026-10-09@x\.json/);
+  assert.deepEqual(credentialsIn("run:2026-10-09@x"), []);
+  assert.deepEqual(credentialsIn("https://alice:pw@host"), ["alice:pw"]);
 });
