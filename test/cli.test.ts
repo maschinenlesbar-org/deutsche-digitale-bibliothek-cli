@@ -744,3 +744,16 @@ test("a line break, ESC or bidi control in a typed value never forges a record (
     }
   }
 });
+
+test("jsonl never prints a rejected base URL's password with DEL or C1 plus a space (results/03)", async () => {
+  for (const password of ["Hu nt\u007fer", "Hu nt\u0085er"]) {
+    for (const argv of [["--base-url", `http://alice:${password}@127.0.0.1:18431/2?x`], [`--base-url=http://alice:${password}@127.0.0.1:18431/2?x`], ["--timeout", `http://alice:${password}@127.0.0.1:18431/2`]]) {
+      const cli = makeCli(() => rawResponse("7.5", "text/plain"));
+      const code = await run(["--log-format", "jsonl", ...argv, "version"], cli.deps);
+      assert.equal(code, 2);
+      const all = cli.err.join("\n");
+      assert.ok(!all.includes("er@") && !all.includes("alice:Hu"), all);
+      assert.match(all, /http:\/\/\*\*\*@127\.0\.0\.1:18431\/2/);
+    }
+  }
+});

@@ -104,8 +104,11 @@ for the default transport's per-hop scheme check and real transport failures.
 Userinfo is never printed. Messages show URLs through `redactUrl` (`https://***@host/…`),
 which also cuts the userinfo out of a value that doesn't parse. The CLI goes further:
 `withRedactedOutput` in `run.ts` collects the exact userinfo of every argument (and of
-the value part of `--opt=value`) with the exported `credentialsIn` and redacts it from
-every line it prints with `redactCredentials` — commander's usage errors, which echo a
+the value part of `--opt=value`, `redactionFor`) with the exported `credentialsIn` and
+redacts it with `redactCredentials` from every line printed on stdout and from every log
+record's *message*, before the record is cut and escaped; the record is then written to
+the raw stderr, so its frame (time, level, topic) is never touched and a password with
+DEL, C1 or bidi characters is matched in its raw form — commander's usage errors, which echo a
 rejected value as typed, and the unknown-command message for a URL typed where a
 command goes, included. Exact strings, not a pattern, so a password with spaces,
 quotes, `#`, `?` or `/` is covered too (`test/conformance-p1-cli-redaction.test.ts`).
@@ -544,8 +547,9 @@ of `item`), `http` (the connection: network errors, the cleartext warning, the
 https->http redirect downgrade) and `output` (`Wrote N bytes to …`). Code logs through
 `logOf(deps)` and never writes diagnostics with `io.err` directly. `run()` builds the
 logger from argv before commander parses it, so commander's own usage errors are records
-too, and on top of the redacted `io.err`, so a secret is kept out of the log in either
-format. `CliDeps.now` makes the timestamps testable. stdout carries data only. The one
+too, and with the run's redaction (`withRedactedOutput`), which replaces a secret in the
+message only, before it is escaped: the frame is never touched, and a secret is kept out
+of the log in either format. `CliDeps.now` makes the timestamps testable. stdout carries data only. The one
 line that is not a record is `handleOutputErrors`' `Output error: …` (stdout itself
 failed; it writes to `process.stderr` directly, outside any run). Conformance test P23
 checks all of this, and its body is shared across the *-cli repos.
