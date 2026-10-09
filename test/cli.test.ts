@@ -106,7 +106,7 @@ test("--handler whose answer is not Solr's response envelope fails naming the ha
   assert.equal(new URL(cli.mt.last().url).pathname, "/2/search/index/search/get");
   assert.equal(
     untimed(cli.err.join("\n")),
-    "ERROR [ddb.cli] Unexpected response shape from /search/index/search/get: expected a response object. " +
+    "ERROR [ddb.api] Unexpected response shape from /search/index/search/get: expected a response object. " +
       "Only request handlers that return Solr's standard response envelope " +
       '(a "response" object with "numFound" and "docs") are supported; handler "get" did not.',
   );
@@ -160,7 +160,7 @@ test("an empty 200 body from search is a clean parse error (exit 1), not a TypeE
   assert.equal(cli.out.length, 0);
   assert.match(
     untimed(cli.err.join("\n")),
-    /^ERROR \[ddb\.cli\] Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\. Only request handlers that return Solr's standard response envelope .* are supported; handler "select" did not\.$/,
+    /^ERROR \[ddb\.api\] Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\. Only request handlers that return Solr's standard response envelope .* are supported; handler "select" did not\.$/,
   );
 });
 
@@ -865,5 +865,19 @@ test("every -o failure is an ERROR record of ddb.output, exit 1 (L8, results/01 
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a malformed answer is an ERROR record of ddb.api, exit 1 (L9, results/01)", async () => {
+  const cases: [string[], HttpResponse][] = [
+    [["search", "x"], rawResponse("{not json", "application/json")],
+    [["search", "x"], jsonResponse({ response: { numFound: "2\nforged", docs: [] } })],
+    [["version"], rawResponse("<!doctype html><html>a portal</html>", "text/html")],
+    [["item", ID], rawResponse("{}", "application/json; charset=x-unknown")],
+  ];
+  for (const [argv, answer] of cases) {
+    const cli = makeCli(() => answer);
+    assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[ddb\.api\] /, cli.err.join("\n"));
   }
 });

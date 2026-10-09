@@ -45,6 +45,13 @@ function secretArgv(secret: string): string[] {
   // with DEL or C1 characters leaked through in jsonl (2026-10-09, result 03, shared finding #6).
   return ["--base-url", `http://u:${secret}@127.0.0.1:9/?x`];
 }
+/** Malformed answers to SIMPLE_COMMAND with status 200: an HTML page, a JSON document, an empty body, an unknown charset. */
+const MALFORMED_ANSWERS: HttpResponse[] = [
+  { status: 200, headers: { "content-type": "text/html" }, body: Buffer.from("<!doctype html><html>a portal</html>") },
+  { status: 200, headers: { "content-type": "application/json" }, body: Buffer.from('{"version":"7.5"}') },
+  { status: 200, headers: { "content-type": "text/plain" }, body: Buffer.alloc(0) },
+  { status: 200, headers: { "content-type": "text/plain; charset=x-unknown" }, body: Buffer.from(okBody) },
+];
 /** Builds the CliDeps for a run, on a transport that answers `okBody` (or `answer`) and a fixed clock. */
 function makeDeps(out: string[], err: string[], now: () => Date, answer?: HttpResponse): CliDeps {
   const transport = async (): Promise<HttpResponse> => answer ?? {
@@ -277,4 +284,12 @@ test("P23: the log format is the one commander parsed, also where an option's va
   const dashes = await cli(["--user-agent", "--", "--log-format", "jsonl", ...SIMPLE_COMMAND], errorAnswer("boom"));
   assert.notEqual(dashes.code, 0);
   assertOneRecordEach(dashes.err, "jsonl", "--user-agent -- --log-format jsonl");
+});
+
+test("P23: a malformed answer is an ERROR record of <program>.api", async () => {
+  for (const answer of MALFORMED_ANSWERS) {
+    const r = await cli(SIMPLE_COMMAND, answer);
+    assert.notEqual(r.code, 0, answer.body.toString());
+    assert.match(r.err[0] ?? "", new RegExp(`^${TS} ERROR \\[${PROGRAM}\\.api\\] `), r.err.join("\n"));
+  }
 });

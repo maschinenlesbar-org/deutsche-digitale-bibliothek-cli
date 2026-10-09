@@ -554,7 +554,9 @@ character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellF
 and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cut at a
 code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, unexpected errors),
 `api` (the API's answers: HTTP errors, the 403 hint, the paging notes, the ancestor note
-of `item`), `http` (the connection: network errors, the cleartext warning, the
+of `item`, and a malformed answer, a `DdbParseError`: bad JSON, the wrong shape, an
+error document with a success status, an unknown charset, a `/version` body that is no
+version), `http` (the connection: network errors, the cleartext warning, the
 https->http redirect downgrade) and `output` (`Wrote N bytes to …`, and any refusal or
 failure to write the `-o` file: an `OutputError`, whatever the `CliIO` threw). Code logs through
 `logOf(deps)` and never writes diagnostics with `io.err` directly. `run()` builds the

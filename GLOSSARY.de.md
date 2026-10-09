@@ -161,6 +161,16 @@ Siehe [DATA_LICENSE.md](DATA_LICENSE.md).
 nicht gefunden · `6` Netzwerkfehler · `1` sonstiger API- oder Laufzeitfehler. Siehe
 [Usage.md](Usage.md#exit-codes).
 
+**Log-Eintrag (log record).** Jede Diagnosezeile, die die CLI nach stderr schreibt: ein
+Zeitstempel, eine Stufe (`ERROR`, `WARN`, `INFO`) und ein Thema `ddb.<Bereich>`, als Text
+(im Stil von log4j) oder mit `--log-format jsonl` als ein JSON-Objekt pro Zeile. Die
+Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler), `api` (die
+Antworten der API: ein Fehlerstatus, die Hinweise zum Blättern und zum Vorfahren, und eine
+fehlerhafte Antwort — ungültiges JSON, die falsche Form, eine HTML-Seite statt einer
+Version), `http` (die Verbindung, die Klartext-Warnung) und `output` (die `-o`-Datei,
+Schreibfehler auf stdout). Ein Eintrag ist immer eine Zeile; Steuerzeichen darin werden
+maskiert.
+
 **Entfernen von Zugangsdaten beim Wechsel des Origins.** Die Lese-Routen senden keine
 Zugangsdaten. Falls Sie aber über einen Header welche mitgeben und die API jemals auf einen
 anderen Host umleitet, entfernt der Client vor dem Folgen jeden Header, den Sie hinzugefügt haben

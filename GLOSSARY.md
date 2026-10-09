@@ -161,6 +161,15 @@ file's `kind`. See [DATA_LICENSE.md](DATA_LICENSE.md).
 not found · `6` network failure · `1` other API/runtime error. See
 [Usage.md](Usage.md#exit-codes).
 
+**Log record.** Every diagnostic line the CLI writes to stderr: a timestamp, a level
+(`ERROR`, `WARN`, `INFO`) and a topic `ddb.<area>`, as text (log4j style) or with
+`--log-format jsonl` as one JSON object per line. The areas: `cli` (usage errors,
+commander's messages, unexpected errors), `api` (the API's answers: an error status, the
+paging and ancestor notes, and a malformed answer — bad JSON, the wrong shape, an HTML
+page instead of a version), `http` (the connection, the cleartext warning) and `output`
+(the `-o` file, stdout failures). A record is always one line; control characters in it
+are escaped.
+
 **Cross-origin credential stripping.** The read routes send no credentials, but if
 you inject one via a header and the API ever redirects to a different host, the
 client drops every header you added (`Authorization`, `Proxy-Authorization`,

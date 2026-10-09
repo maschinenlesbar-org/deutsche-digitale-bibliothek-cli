@@ -10,6 +10,7 @@ import {
   DdbApiError,
   DdbError,
   DdbNetworkError,
+  DdbParseError,
   DdbUsageError,
   DdbValidationError,
   credentialsIn,
@@ -217,6 +218,18 @@ export function processLogger(argv: readonly string[]): Logger {
   });
 }
 
+/**
+ * The log area of a `DdbError` that is neither an API error nor a usage error: a
+ * malformed answer (`api`: bad JSON, the wrong shape, an error document with a success
+ * status, an unknown charset, an HTML page for `/version` — the API's answer as much as
+ * an error status is), the `-o` file (`output`), else `cli`.
+ */
+function areaOf(err: DdbError): string {
+  if (err instanceof DdbParseError) return "api";
+  if (err instanceof OutputError) return "output";
+  return "cli";
+}
+
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
   // The log replaces the secrets of the run in every message, in either format.
   deps = withRedactedOutput(deps, argv);
@@ -283,8 +296,7 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       return 6;
     }
     if (err instanceof DdbError) {
-      // An -o failure (OutputError) is an output record.
-      log.error(err instanceof OutputError ? "output" : "cli", err.message);
+      log.error(areaOf(err), err.message);
       return 1;
     }
     log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
