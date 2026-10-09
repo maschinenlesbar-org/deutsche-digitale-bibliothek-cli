@@ -555,7 +555,11 @@ of `item`), `http` (the connection: network errors, the cleartext warning, the
 https->http redirect downgrade) and `output` (`Wrote N bytes to …`). Code logs through
 `logOf(deps)` and never writes diagnostics with `io.err` directly. `run()` builds the
 logger from argv before commander parses it, so commander's own usage errors are records
-too, and with the run's redaction (`withRedactedOutput`), which replaces a secret in the
+too: its `error: …` an ERROR of `cli` (a `(Did you mean …?)` line joined to it), the help
+it shows after one an INFO record per line, and the program run with options but no
+command (or `help` with an unknown name) an ERROR "missing command: `ddb <subcommand>`"
+before that help, so every failed run has an ERROR record (`writeCommanderErr`). The log
+is built with the run's redaction (`withRedactedOutput`), which replaces a secret in the
 message only, before it is escaped: the frame is never touched, and a secret is kept out
 of the log in either format. `CliDeps.now` makes the timestamps testable. stdout carries data only. The one
 line that is not a record is `handleOutputErrors`' `Output error: …` (stdout itself

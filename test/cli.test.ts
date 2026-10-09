@@ -783,3 +783,40 @@ test("an a:b@c argument (a query, an -o path) is neither a credential in the log
   assert.deepEqual(credentialsIn("run:2026-10-09@x"), []);
   assert.deepEqual(credentialsIn("https://alice:pw@host"), ["alice:pw"]);
 });
+
+test("commander's output is one record per line, and a run without a command has an ERROR (L5, results/01)", async () => {
+  // Options but no command: commander shows the help as an error.
+  for (const argv of [["--compact"], ["--log-format", "jsonl"], ["--base-url", "http://127.0.0.1:18431/2"]]) {
+    const none = makeCli(() => jsonResponse(fx.solr));
+    assert.equal(await run(argv, none.deps), 2);
+    if (argv[0] === "--log-format") {
+      const records = none.err.map((line) => JSON.parse(line) as { level: string; msg: string });
+      assert.deepEqual([records[0]?.level, records[0]?.msg], ["ERROR", "missing command: `ddb <subcommand>`"]);
+      assert.ok(records.slice(1).every((r) => r.level === "INFO" && !r.msg.includes("\n")), none.err.join("\n"));
+      continue;
+    }
+    const text = none.err.map(untimed);
+    assert.equal(text[0], "ERROR [ddb.cli] missing command: `ddb <subcommand>`");
+    assert.ok(text.slice(1).every((line) => line.startsWith("INFO  [ddb.cli] ") && !line.includes("\\n")), text.join("\n"));
+    assert.ok(text.some((line) => line === "INFO  [ddb.cli] Usage: ddb [options] [command]"), text.join("\n"));
+  }
+
+  // A command typo: the suggestion is part of the ERROR, the help one INFO record per line.
+  const typo = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["serch"], typo.deps), 2);
+  const typoLines = typo.err.map(untimed);
+  assert.equal(typoLines[0], "ERROR [ddb.cli] unknown command 'serch' (Did you mean search?)");
+  assert.ok(typoLines.slice(1).every((line) => line.startsWith("INFO  [ddb.cli] ") && !line.includes("\\n")), typoLines.join("\n"));
+
+  // A missing argument: commander's error, then the subcommand's help, one record per line.
+  const missing = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["search"], missing.deps), 2);
+  const missingLines = missing.err.map(untimed);
+  assert.equal(missingLines[0], "ERROR [ddb.cli] missing required argument 'query'");
+  assert.ok(missingLines.some((line) => line === "INFO  [ddb.cli] Usage: ddb search [options] <query>"), missingLines.join("\n"));
+
+  // An unknown help topic is an ERROR too.
+  const help = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["help", "nope"], help.deps), 2);
+  assert.match(untimed(help.err[0] ?? ""), /^ERROR \[ddb\.cli\] /);
+});
