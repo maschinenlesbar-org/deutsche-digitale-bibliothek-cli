@@ -26,14 +26,14 @@ the **public read routes** — search, item, version — which need **no API key
 
 ```bash
 npm install
-npm run build        # compiles TypeScript to dist/
+npm run build        # compiles every workspace (tsc -b) to its dist/
 ```
 
 Run the locally built CLI without a global install:
 
 ```bash
-node dist/src/cli/index.js --help
-# or, after `npm link`:
+node apps/cli/dist/src/cli/index.js --help    # or: npm start -- --help
+# or, after `npm link --workspace apps/cli`:
 ddb --help
 ```
 
@@ -115,7 +115,7 @@ the raw stderr, so its frame (time, level, topic) is never touched and a passwor
 DEL, C1 or bidi characters is matched in its raw form — commander's usage errors, which echo a
 rejected value as typed, and the unknown-command message for a URL typed where a
 command goes, included. Exact strings, not a pattern, so a password with spaces,
-quotes, `#`, `?` or `/` is covered too (`test/conformance-p1-cli-redaction.test.ts`).
+quotes, `#`, `?` or `/` is covered too (`apps/cli/test/conformance-p1-cli-redaction.test.ts`).
 A bare `a:b@c` anywhere else (`-o run:2026-10-09@x.json`, a query, a User-Agent) is no
 credential: `credentialsIn` reads userinfo only from a value that starts with a scheme.
 
@@ -127,7 +127,7 @@ userinfo (raw and percent-decoded), and the forms a server echoes it back in (th
 `echoedCredentialForms`), from error bodies and details, redirect targets,
 transport error text and the `cause` chain. Whatever a custom transport throws reaches
 the caller as a `DdbNetworkError` (`GET <url> failed: <reason>`, the original as
-`cause`), never as a raw `TypeError` (`test/conformance-p2-library-redaction.test.ts`).
+`cause`), never as a raw `TypeError` (`apps/cli/test/conformance-p2-library-redaction.test.ts`).
 
 The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
@@ -140,7 +140,7 @@ or negative `rows`/`start`/`offset` (at most `SOLR_MAX_INT`, 2^31−1), a `facet
 without `facetFields` throw a `DdbValidationError` (`Invalid <name>: expected …, got …`;
 a value is quoted only when it is a short string, anything else is named by type).
 No rejected input ever surfaces as a raw `TypeError`
-(`test/conformance-p8-p9-p13-responses-and-errors.test.ts`).
+(`apps/cli/test/conformance-p8-p9-p13-responses-and-errors.test.ts`).
 
 Server text in a message is cleaned of control characters and cut at 500 characters,
 and a request URL at 300 (`messageUrl`, ending in "… (N characters)"); `DdbApiError.url`
@@ -155,9 +155,9 @@ the query or the `--filter` list.
 
 The library owns every rule about what a request may contain; the CLI only turns
 argv strings into typed values and calls the same rules. The rules are pure,
-exported functions in `src/client` (`…Problem(value)` returns the reason a value is
+exported functions in `packages/client/src` (`…Problem(value)` returns the reason a value is
 invalid, or `undefined`). The client enforces them before any request through
-`assertValid(name, value, problem)` from `src/client/validate.ts`, which throws
+`assertValid(name, value, problem)` from `packages/client/src/validate.ts`, which throws
 **`DdbValidationError`** (`Invalid <name>: <reason>`); a client method rejects its
 promise, a constructor throws. `DdbValidationError` extends `DdbUsageError`, so
 `run.ts` maps it to exit 2 and logs it as an `ERROR` record of `ddb.cli`. The CLI's commander
@@ -198,7 +198,7 @@ above included):
   `toString` is rejected too. `--part` uses the same rule.
 
 The domain constants behind these rules are exported from the package entry
-(`src/client/types.ts`), so callers can offer valid values and the CLI builds its
+(`packages/client/src/types.ts`), so callers can offer valid values and the CLI builds its
 parsers and help text from them instead of keeping copies: `ITEM_PARTS` (every
 item component, frozen; `ItemPart` derives from it), `ITEM_LANG_PARTS` (the parts
 that take `lang`) and `SOLR_MAX_INT` (2^31−1, the largest Solr int).
@@ -215,7 +215,7 @@ that take `lang`) and `SOLR_MAX_INT` (2^31−1, the largest Solr int).
   longer be the most frequent value. A key outside `SEARCH_PARAM_KEYS` (a misspelled
   `filter`, `__proto__`) and a `filters`/`facetFields` that is not an array are a
   `DdbValidationError`, and so is an `item()` option outside `ITEM_OPTION_KEYS`: the API
-  would ignore them and answer the unfiltered set (`test/conformance-p10-strict-filters.test.ts`).
+  would ignore them and answer the unfiltered set (`apps/cli/test/conformance-p10-strict-filters.test.ts`).
 - `item(id, part?, opts?)` → an `ItemResult` (`GET /2/items/{id}...`). `part`
   defaults to `view`; others (`ITEM_PARTS`): `aip`, `edm`, `binaries`, `children`, `parents`,
   `source`, `source-description`, `source-record`, `iiif`, `citation`. The result
@@ -291,9 +291,46 @@ service:
 
 ## Architecture
 
+The repository is an **npm workspace** with two folders: `apps/` holds the programs it
+publishes, `packages/` the libraries they are built from.
+
 ```
-src/
-  client/
+package.json         # private workspace manifest: no version, never packed
+apps/cli/            # @maschinenlesbar.org/deutsche-digitale-bibliothek-cli — the published package
+  package.json       # its version, bin, files, bundleDependencies
+  src/index.ts       # library entry: re-exports @maschinenlesbar.org/deutsche-digitale-bibliothek-client
+  src/cli/           # the CLI (below)
+  test/              # CLI tests and every conformance-*.test.ts
+packages/client/     # @maschinenlesbar.org/deutsche-digitale-bibliothek-client — private, bundled into the CLI
+  src/               # the API client (below)
+  test/              # tests that only touch the client, + the transport helpers and fixtures
+tools/pack/          # prepack/postpack: bundle the client and commander into the tarball
+tools/bump.mjs       # version bump + commit + tag (npm run bump)
+tsconfig.docs.json   # TypeDoc only: the package entry, with the client read from its sources
+```
+
+- **The client is its own package** so a later MCP app can share it with the CLI. It is
+  never published on its own: `apps/cli`'s `prepack` copies it (and commander) into the
+  app's `node_modules`, and `bundleDependencies` ships it inside the tarball. The library
+  entry re-exports the client's `"."`, so `import { DdbClient } from
+  "@maschinenlesbar.org/deutsche-digitale-bibliothek-cli"` is unchanged.
+- **The client's exports:** `"."` is the public library surface (`src/index.ts`);
+  `"./internal/*"` maps to any module (`…/deutsche-digitale-bibliothek-client/internal/engine`)
+  for what the CLI needs beyond that; `"./test/*"` reaches the client's test helpers and
+  fixtures from the CLI's tests (not bundled). Only `"."` is part of the library.
+- **Dependencies point one way:** the app depends on the client, the client on nothing
+  in the workspace.
+- **The version lives in `apps/cli/package.json`.** The root has none; a plain
+  `npm version` at the root is refused. Release with `npm run bump -- <patch|minor|major>`,
+  which bumps the app, commits (the bare version as the message) and tags `vX.Y.Z`.
+- **TypeScript:** `tsconfig.base.json` holds the compiler options; every workspace has a
+  `tsconfig.json` (`src/`) and a `tsconfig.test.json` (`test/`), and the root
+  `tsconfig.json`/`tsconfig.test.json` reference them, built with `tsc -b`.
+
+The client (`packages/client/src/`) and the CLI (`apps/cli/src/`):
+
+```
+packages/client/src/
     types.ts     # SolrResponse/SolrDoc; ItemPart/ItemResult; SearchParams
     validate.ts  # the Problem type + assertValid (throws DdbValidationError)
     query.ts     # dependency-free query-string builder
@@ -301,7 +338,8 @@ src/
     engine.ts    # URL building (base incl. /2), retry/backoff, redirects, decoding, errors
     errors.ts    # DdbError / DdbApiError / DdbNetworkError / DdbParseError / DdbUsageError / DdbValidationError
     client.ts    # DdbClient — search (Solr) / item (content-type aware) / version
-  cli/
+    index.ts     # the client's public surface (the library entry re-exports it)
+apps/cli/src/cli/
     io.ts        # injectable I/O seam (stdout/stderr/file), the logger and the clock
     log.ts       # the stderr log: records with ts, level, topic; --log-format text|jsonl
     shared.ts    # option parsers, global-option resolver, JSON renderer
@@ -340,23 +378,23 @@ src/
 
 ### Library / technical terms
 
-**API client.** [`DdbClient`](src/client/client.ts) — the typed wrapper over the
+**API client.** [`DdbClient`](packages/client/src/client.ts) — the typed wrapper over the
 API, usable as a library independently of the CLI.
 
 **SolrResponse.** The native Solr response returned by `search`: `{ responseHeader?,
 response: { numFound, start, docs[] }, facet_counts? }`
-([`types.ts`](src/client/types.ts)). Each `SolrDoc` has a guaranteed `id` plus an
+([`types.ts`](packages/client/src/types.ts)). Each `SolrDoc` has a guaranteed `id` plus an
 open index signature for the Solr fields.
 
 **ItemResult.** The decoded body of an item component
-([`types.ts`](src/client/types.ts)): `{ part, contentType, json? , text? }` —
+([`types.ts`](packages/client/src/types.ts)): `{ part, contentType, json? , text? }` —
 exactly one of `json`/`text` is set, chosen by Content-Type.
 
 **Transport.** A single function `(HttpRequest) => Promise<HttpResponse>`
-([`http.ts`](src/client/http.ts)). The default uses Node's built-in
+([`http.ts`](packages/client/src/http.ts)). The default uses Node's built-in
 `http`/`https`; tests inject a mock. This is the only HTTP seam.
 
-**Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs (base URL
+**Request engine.** [`RequestEngine`](packages/client/src/engine.ts) — builds URLs (base URL
 includes the `/2` version prefix), serialises queries, applies retry/backoff,
 follows redirects, decodes JSON/raw responses and maps errors (DDB envelope **and**
 Solr `error.msg`). A failing Solr request comes back as HTTP 500 with the Solr error
@@ -371,7 +409,7 @@ IMF-fixdate, parsed strictly by the exported `parseRetryAfter`); `Retry-After: 0
 date in the past never makes a zero-delay burst. A `Retry-After` above
 `MAX_RETRY_AFTER_MS` (30 s) is not retried at all: the error surfaces at once and names
 the requested wait ("the server asked to wait 31 s (Retry-After), longer than the 30 s
-the client waits; retrying sooner won't help"; `test/conformance-p6-retry-policy.test.ts`). `DdbApiError` exposes
+the client waits; retrying sooner won't help"; `apps/cli/test/conformance-p6-retry-policy.test.ts`). `DdbApiError` exposes
 `isRetryable` (true for `429`/`503`). A connection reset mid-request (`ECONNRESET`,
 `EPIPE`, `ECONNABORTED`, undici's `UND_ERR_SOCKET`, anywhere in the `cause` chain) is
 retried the same way for a GET, whichever transport reported it
@@ -381,7 +419,7 @@ Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exporte
 redacted) `}`) is called once per retry right before the sleep, never when there is none, and
 a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
 `ddb.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host only, whole
-seconds, ms under 1 s). Tests: `test/engine.test.ts`, `test/retry-log.test.ts`.
+seconds, ms under 1 s). Tests: `packages/client/test/engine.test.ts`, `apps/cli/test/retry-log.test.ts`.
 
 **Redirects.** Only `301`/`302`/`303`/`307`/`308` with a parseable `Location` are
 followed, up to `maxRedirects` (5). Any other 3xx, a missing or malformed
@@ -404,7 +442,7 @@ sentence when the base URL is `http:` to a host other than loopback (`localhost`
 `127.0.0.0/8`, `::1`) — `requests to <host> are sent unencrypted (http:, not https:)`, or
 naming the base URL's `user:password@` as "the base URL's credentials" (never the value) —
 and `undefined` otherwise. The CLI logs it as a `WARN` record of `ddb.http` on stderr once per run,
-before the first request (`action()` in `src/cli/shared.ts`); help, version and usage errors
+before the first request (`action()` in `apps/cli/src/cli/shared.ts`); help, version and usage errors
 never warn, and stdout and the exit code are untouched.
 
 **Base-URL credentials per hop.** The userinfo of a base URL (`https://user:pw@mirror/2`,
@@ -425,7 +463,7 @@ per hop; `fetch` follows by default and strips only `Authorization`, not `X-Auth
 or `X-API-Key`. A fetch transport passes it on (`fetch(url, { redirect: req.redirect })`)
 and reports `HttpResponse.url = response.url`; a response whose `url` lies on another
 origin than the request is rejected as a `DdbNetworkError` ("the transport followed a
-redirect to another origin"). Checked by `test/conformance-p3-redirect-credentials.test.ts`.
+redirect to another origin"). Checked by `apps/cli/test/conformance-p3-redirect-credentials.test.ts`.
 
 **maxResponseBytes.** A cap on the response body size in bytes (`0` = unlimited;
 default 100 MiB), guarding against unbounded responses. The built-in transport aborts
@@ -440,14 +478,14 @@ could keep the request alive indefinitely. A breach of either surfaces as a
 `DdbNetworkError`. Both timers are capped at `MAX_TIMEOUT_MS` (2^31 - 1 ms, the
 longest delay Node's timers support; a longer one would fire after 1 ms), and the
 CLI rejects a larger `--timeout` as a usage error. The engine enforces the deadline
-itself too, for every transport (`test/conformance-p5-transport-contract.test.ts`).
+itself too, for every transport (`apps/cli/test/conformance-p5-transport-contract.test.ts`).
 
-**Query builder.** [`buildQueryString`](src/client/query.ts) — a dependency-free
+**Query builder.** [`buildQueryString`](packages/client/src/query.ts) — a dependency-free
 serialiser: omits `undefined`/`null`, repeats keys for arrays, renders booleans
 as `true`/`false`, and encodes spaces as `%20` (not `+`).
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
-([`io.ts`](src/cli/io.ts)): a client factory plus an I/O object
+([`io.ts`](apps/cli/src/cli/io.ts)): a client factory plus an I/O object
 (`out`/`err`/`writeFile`/`outBinary`, optional `checkOutput`/`isTerminal`). Lets the
 whole CLI run in tests with a mocked client and captured output — no subprocess.
 `checkOutput` runs in `action()` before the client is built: an existing `-o` file
@@ -455,7 +493,7 @@ whole CLI run in tests with a mocked client and captured output — no subproces
 `writeFile` raises, so a refused write costs no request. `writeFile` keeps its own
 `wx` check for a file that appears meanwhile; `-o -` (stdout) skips both.
 
-**Error types.** [`errors.ts`](src/client/errors.ts): `DdbApiError` (non-2xx,
+**Error types.** [`errors.ts`](packages/client/src/errors.ts): `DdbApiError` (non-2xx,
 carries `status`/`apiName`/`detail`/`url`/`method`/`body`, with `isRetryable`),
 `DdbNetworkError` (transport failure/timeout), `DdbParseError` (bad JSON),
 `DdbUsageError` (a usage error such as `--force` without `--output` — no request
@@ -465,8 +503,15 @@ it extends `DdbUsageError`), all extending `DdbError`.
 ## Testing
 
 ```bash
-npm test          # builds, then runs `node --test` over dist/test
+npm test          # builds, then runs `node --test` over each workspace's dist/test
+npm run coverage  # the same tests in one run, with a coverage report
+node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
+
+The client's tests are in `packages/client/test/` (`query`, `http`, `engine`, `client`),
+with the transport helpers (`helpers.ts`, which `apps/cli/test/helpers.ts` re-exports next
+to the CLI's own helpers) and the canned responses (`fixtures.ts`); everything that drives
+the CLI is in `apps/cli/test/`.
 
 - **`query.test.ts`** — query-string serialisation.
 - **`http.test.ts`** — the default transport against a real loopback
@@ -478,7 +523,7 @@ npm test          # builds, then runs `node --test` over dist/test
   forwarding, content-type-aware `item` decoding (JSON vs XML), the item sub-paths,
   and that no `Authorization` header is sent — mocked transport.
 - **`validate.test.ts`** — `assertValid`, the `DdbValidationError` → exit 2
-  mapping and the `parity()` helper (`test/helpers.ts`), which sends one input
+  mapping and the `parity()` helper (`apps/cli/test/helpers.ts`), which sends one input
   through `run()` and through the library on one recording mock transport.
 - **`cli.test.ts`** — command parsing, `--filter`/`--facet`/`--sort`/`--fields`,
   the paging note and the past-the-end note (an `--offset` at or beyond `numFound`, CLI only:
@@ -487,7 +532,7 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`io.test.ts`** — `-o` writes and refusals, and `handleOutputErrors()`: a reader that
   has gone (EPIPE, ENOTCONN), and any other stdout write error as an ERROR record of
   `ddb.output`.
-- **`log.test.ts`** — the record helpers of `src/cli/log.ts` on their own
+- **`log.test.ts`** — the record helpers of `apps/cli/src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are
   P23's.
 - **`conformance-p*.test.ts`** — the checks shared across the `*-cli` repos (fix plan
@@ -507,10 +552,13 @@ npm test          # builds, then runs `node --test` over dist/test
 
 GitHub Actions workflows under `.github/workflows/`:
 
-- **ci.yml** — type-check, build and test on Node 22/24 for every push and PR.
-- **release.yml** — on a `v*` tag: verify the tag matches `package.json`, test,
-  `npm pack`, and create a GitHub Release with the tarball.
-- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): publish to npm via OIDC **Trusted
+- **ci.yml** — type-check, build and test on Node 22/24 for every push and PR; then pack the
+  real tarball, check the pack left nothing behind, install it globally with the registry out
+  of reach and run the bin.
+- **release.yml** — on a `v*` tag (made by `npm run bump`): verify the tag matches
+  `apps/cli/package.json`, test, write the SBOMs (scoped to the `apps/cli` workspace), then
+  `npm pack --workspace apps/cli`, and create a GitHub Release with the tarball.
+- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): `npm publish --workspace apps/cli` via OIDC **Trusted
   Publishing** (no stored `NPM_TOKEN`) with provenance.
 - **docs.yml** — build the project website (`site/`, English and German) with the TypeDoc API docs
   under `/api/`, and deploy both to GitHub Pages on each `v*`
@@ -529,8 +577,10 @@ and deployed by `docs.yml` together with the TypeDoc API reference under `/api/`
 comes from this repository: the README intro and quick start, the command tree of the built CLI
 (`site/scripts/cli-reference.mjs`), `Usage.md`, `GLOSSARY.md` and its German version
 `GLOSSARY.de.md`, the skills, and the skill examples in `EXAMPLE.md` and `EXAMPLE.de.md`. The
-only repo-specific files are `site/_config.yml` and `site/_data/project.yml` (the German intro
-and the access requirements); the rest of `site/` is identical in every maschinenlesbar.org
+only repo-specific files are `site/_config.yml` (which also says where the published manifest
+and the built program are: `manifest: apps/cli/package.json`, `program:
+apps/cli/dist/src/cli/program.js`) and `site/_data/project.yml` (the German intro and the
+access requirements); the rest of `site/` is identical in every maschinenlesbar.org
 CLI, so change it in all of them together. When the README intro changes, update the German
 intro in `site/_data/project.yml`.
 
@@ -548,7 +598,7 @@ code contributions; see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## The log on stderr
 
-Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+Every diagnostic line on stderr is a log record (`apps/cli/src/cli/log.ts`): a timestamp, a level
 (`ERROR`, `WARN`, `INFO`) and a topic, `ddb.<area>`. `--log-format text` (the default)
 writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
 `--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
