@@ -41,7 +41,8 @@ stdout and the exit code are unchanged; `--help`, `--version` and usage errors n
 ddb search <query> [options]
 ```
 
-v2 search is a **Solr passthrough**: the query and `--filter` use Solr syntax, and
+v2 search is a **Solr passthrough**: the query and `--filter` use Solr syntax (sent in
+composed Unicode, NFC, the only form the index matches), and
 the response is **native Solr JSON**. Some starting points:
 
 ```bash

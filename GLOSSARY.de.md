@@ -100,7 +100,10 @@ zurückzugeben* (damit Sie sehen, worauf Sie eingrenzen können). `--filter` nim
 Solr-**Filterabfrage (`fq`)** entgegen, die die Ergebnismenge *einschränkt*, z. B.
 `--filter place_fct:"Berlin"` oder `--filter type_fct:mediatype_002`. Wiederholen Sie
 `--filter`, um mehrere Bedingungen mit AND zu verknüpfen; ein OR formulieren Sie innerhalb
-einer fq (`--filter 'place_fct:("Berlin" OR "Dessau")'`).
+einer fq (`--filter 'place_fct:("Berlin" OR "Dessau")'`). Die Abfrage und jeder Filter gehen in
+zusammengesetztem Unicode (NFC) hinaus, der einzigen Form, die der Index findet: Ein mit
+kombinierendem Trema kopiertes `München` fand 231 statt 2,77 Millionen Dokumente, als
+Facettenfilter keines.
 
 **sort.** Solr-Sortiersyntax: `<field> asc|desc`, z. B. `--sort "score desc"` (Relevanz, der
 Standard, wenn nichts angegeben ist) oder `--sort "id asc"`. Weitere Kriterien für Gleichstände

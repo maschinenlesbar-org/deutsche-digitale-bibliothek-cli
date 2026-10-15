@@ -367,3 +367,19 @@ test("own messages quote a server's or user's value at most 200 characters long 
     return true;
   });
 });
+
+test("the query and every filter go out in composed Unicode (NFC) (bug 1, 2026-10-15)", async () => {
+  // The query `München` with U+0308 found 231 documents where the composed form found 2,770,474;
+  // `place_fct:"München"` in NFD found 0 where NFC found 2,517,097.
+  const mt = makeMockTransport(() => jsonResponse(fx.solr));
+  const client = new DdbClient({ transport: mt.transport });
+  await client.search({
+    query: "München",
+    filters: ['place_fct:"München"', "type_fct:mediatype_002"],
+    facetFields: ["place_fct"],
+  });
+  const q = queryOf(mt.calls[0]!);
+  assert.equal(q.get("q"), "München");
+  assert.deepEqual(q.getAll("fq"), ['place_fct:"München"', "type_fct:mediatype_002"]);
+  assert.equal(q.get("facet.field"), "place_fct");
+});

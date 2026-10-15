@@ -310,12 +310,15 @@ export class DdbClient {
     assertSearchParams(params);
     const collection = params.collection ?? "search";
     const handler = params.requestHandler ?? "select";
-    const query: QueryParams = { q: params.query, wt: "json" };
+    // The index matches composed text only: `München` with U+0308 (as pasted from a macOS file
+    // name) found 231 documents instead of 2.77 million, and as a facet filter none. The query and
+    // the filters go out in NFC; field names, sort and paging are ASCII and left alone.
+    const query: QueryParams = { q: params.query.normalize("NFC"), wt: "json" };
     query["rows"] = params.rows ?? DEFAULT_SEARCH_ROWS;
     if (params.start !== undefined) query["start"] = params.start;
     if (params.sort !== undefined) query["sort"] = params.sort;
     if (params.fields !== undefined) query["fl"] = params.fields;
-    if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters;
+    if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters.map((fq) => fq.normalize("NFC"));
     if (params.facetFields !== undefined && params.facetFields.length > 0) {
       query["facet"] = "true";
       query["facet.field"] = params.facetFields;
