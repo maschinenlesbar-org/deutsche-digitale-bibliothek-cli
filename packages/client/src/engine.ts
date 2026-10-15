@@ -433,6 +433,39 @@ function engineHeadersOnly(headers: Record<string, string>): Record<string, stri
   return Object.fromEntries(Object.entries(headers).filter(([key]) => ENGINE_HEADERS.has(key)));
 }
 
+/** A JSON number token, matched at a given position (sticky). */
+const JSON_NUMBER = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+
+/**
+ * The first number literal in `json` (JSON that parsed) that JSON.parse cannot carry exactly, or
+ * undefined: one out of a double's range (`1e400` became Infinity, printed as `null`) or an
+ * integer beyond 2^53 that it rounds (`12345678901234567890` became `12345678901234567000`). A
+ * decimal fraction keeps a double's usual precision, as JSON means it. A linear scan that skips
+ * strings; a reviver would recurse per nesting level and overflow on deep data.
+ */
+export function firstInexactNumber(json: string): string | undefined {
+  for (let i = 0; i < json.length; i++) {
+    const c = json.charCodeAt(i);
+    if (c === 0x22) {
+      // a string: skip to its closing quote, past escapes
+      for (i++; i < json.length; i++) {
+        const d = json.charCodeAt(i);
+        if (d === 0x5c) i++;
+        else if (d === 0x22) break;
+      }
+    } else if (c === 0x2d || (c >= 0x30 && c <= 0x39)) {
+      JSON_NUMBER.lastIndex = i;
+      const literal = JSON_NUMBER.exec(json)?.[0];
+      if (literal === undefined) continue;
+      const value = Number(literal);
+      if (!Number.isFinite(value)) return literal;
+      if (!Number.isSafeInteger(value) && /^-?\d+$/.test(literal) && BigInt(literal) !== BigInt(value)) return literal;
+      i += literal.length - 1;
+    }
+  }
+  return undefined;
+}
+
 export class RequestEngine {
   // Real private fields (not TypeScript's `private`): util.inspect, console.log and
   // JSON.stringify of a client never show them, so a password in the base URL or a
@@ -808,11 +841,17 @@ export class RequestEngine {
     if (res.status === 204 || text.trim().length === 0) {
       return null as T;
     }
+    let parsed: T;
     try {
-      return JSON.parse(text) as T;
+      parsed = JSON.parse(text) as T;
     } catch (cause) {
       throw new DdbParseError(`Failed to parse JSON response from ${cutForMessage(path)}`, { cause });
     }
+    const inexact = firstInexactNumber(text);
+    if (inexact !== undefined) {
+      throw new DdbParseError(`Unexpected response from ${cutForMessage(path)}: the number ${cutForMessage(inexact)} cannot be represented exactly.`);
+    }
+    return parsed;
   }
 
   /** Perform a GET returning the decoded response body as text (e.g. /version). */

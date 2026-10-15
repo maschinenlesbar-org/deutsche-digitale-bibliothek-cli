@@ -383,3 +383,31 @@ test("the query and every filter go out in composed Unicode (NFC) (bug 1, 2026-1
   assert.deepEqual(q.getAll("fq"), ['place_fct:"München"', "type_fct:mediatype_002"]);
   assert.equal(q.get("facet.field"), "place_fct");
 });
+
+test("a number the answer cannot carry exactly is a parse error in search and item (bug 2, 2026-10-15)", async () => {
+  // JSON.parse rounded 12345678901234567890 to 12345678901234567000 and turned 1e400 into
+  // Infinity (printed as null), with exit 0, in search docs and in item JSON parts.
+  const ID = "A".repeat(32);
+  for (const n of ["12345678901234567890", "1e400", "-1e400"]) {
+    const search = makeMockTransport(() =>
+      rawResponse(`{"response":{"numFound":1,"docs":[{"id":"x","label":"a 12345678901234567890 in text","begin_time":${n}}]}}`, "application/json"),
+    );
+    await assert.rejects(new DdbClient({ transport: search.transport }).search({ query: "x" }), (err) => {
+      assert.ok(err instanceof DdbParseError, n);
+      assert.equal(err.message, `Unexpected response from /search/index/search/select: the number ${n} cannot be represented exactly.`);
+      return true;
+    });
+    const item = makeMockTransport(() => rawResponse(`{"item":{"pages":${n}}}`, "application/json"));
+    await assert.rejects(new DdbClient({ transport: item.transport }).item(ID), (err) => {
+      assert.ok(err instanceof DdbParseError, n);
+      assert.equal(err.message, `Unexpected response for item ${ID} (view): the number ${n} cannot be represented exactly.`);
+      return true;
+    });
+  }
+  // What a double carries exactly passes, digits inside strings included.
+  const ok = makeMockTransport(() =>
+    rawResponse('{"response":{"numFound":1,"docs":[{"id":"x","label":"12345678901234567890","begin_time":9007199254740991,"w":1.10}]}}', "application/json"),
+  );
+  const res = await new DdbClient({ transport: ok.transport }).search({ query: "x" });
+  assert.equal((res.response.docs[0] as Record<string, unknown>)["begin_time"], 9007199254740991);
+});

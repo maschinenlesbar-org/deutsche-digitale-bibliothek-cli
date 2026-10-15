@@ -239,7 +239,11 @@ exit 1): `search` needs the documented Solr shape — a JSON object with a `resp
 object holding an integer `numFound` and a `docs` array; a JSON item part must be an
 object or an array (not `null`, an empty body or a scalar); and an error document sent
 with a 2xx status (Solr's `{ error: { msg } }`, the DDB `{ name: "…Exception", message }`
-envelope) is reported with its message.
+envelope) is reported with its message. So is a body (search or a JSON item part) holding a
+number JSON.parse cannot carry exactly — one out of a double's range (`1e400`, which printed as
+`null`) or an integer literal beyond 2^53 that it rounds (`12345678901234567890`): "the number …
+cannot be represented exactly", never a changed value; a decimal fraction keeps a double's usual
+precision.
 
 ## No authentication
 

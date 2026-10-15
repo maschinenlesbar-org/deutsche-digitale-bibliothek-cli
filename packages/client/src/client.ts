@@ -12,7 +12,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
+import { RequestEngine, decodeBody, firstInexactNumber, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
 import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
@@ -416,6 +416,10 @@ export class DdbClient {
         json = text.trim().length === 0 ? null : JSON.parse(text);
       } catch (cause) {
         throw new DdbParseError(`Failed to parse JSON for item ${id} (${part})`, { cause });
+      }
+      const inexact = firstInexactNumber(text);
+      if (inexact !== undefined) {
+        throw new DdbParseError(`Unexpected response for item ${id} (${part}): the number ${cutForMessage(inexact)} cannot be represented exactly.`);
       }
       // Every JSON part is an object or an array; `null`, an empty body or a scalar is not
       // data, and neither is an error document sent with a 2xx status.
