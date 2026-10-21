@@ -22,6 +22,7 @@ import {
   credentialsIn,
   cutForMessage,
   echoedCredentialForms,
+  messageUrl,
   redactCredentials,
   redactSecrets,
   redactUrl,
@@ -761,8 +762,24 @@ export class RequestEngine {
         `Invalid path segment "${dotSegment}" in ${normalizedPath}: "." and ".." cannot be used as an id.`,
       );
     }
+    return this.joinUrl(normalizedPath, query);
+  }
+
+  /** Base URL + path + query string, without buildUrl's validation. */
+  private joinUrl(path: string, query?: QueryParams): string {
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const qs = query ? buildQueryString(query) : "";
     return `${this.#baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
+  }
+
+  /**
+   * The request URL as error messages show it: absolute (so a message names the host that gave
+   * a bad answer, which matters with a custom base URL), userinfo redacted (`https://***@host`)
+   * and cut at MAX_MESSAGE_URL_LENGTH characters (`messageUrl`). It never throws: describing a
+   * URL for a message does not validate it (buildUrl does).
+   */
+  describeUrl(path: string, query?: QueryParams): string {
+    return messageUrl(redactUrl(this.joinUrl(path, query)));
   }
 
   /**
@@ -989,25 +1006,35 @@ export class RequestEngine {
     }
   }
 
-  /** Perform a GET expecting JSON and parse it into `T`. */
+  /** Perform a GET expecting JSON and parse it into `T` ({@link parseJson}). */
   async getJson<T>(path: string, query?: QueryParams): Promise<T> {
     const res = await this.request("GET", path, { query, accept: "application/json" });
-    const text = decodeBody(res.data, res.contentType, path);
-    // A successful response with an empty body (e.g. 204 No Content) is not a
-    // parse failure — treat it as `null` rather than surfacing a DdbParseError.
-    if (res.status === 204 || text.trim().length === 0) {
-      return null as T;
-    }
+    return this.parseJson<T>(res, `GET ${this.describeUrl(path, query)}`);
+  }
+
+  /**
+   * A JSON answer, decoded by its charset and parsed. Every error about the answer is a
+   * DdbParseError that names the request (`request`, as `GET <url>`, userinfo redacted):
+   * an unknown charset, an empty body (every JSON answer is a document; read as "nothing", it
+   * let a script carry on as if the API had found nothing), a body that isn't JSON (naming its
+   * Content-Type when that isn't JSON either: an HTML maintenance or proxy page), and a number
+   * JSON.parse can't carry exactly. Declared big integers (`bigIntegerKeys`) are quoted first.
+   */
+  parseJson<T>(res: RawResponse, request: string): T {
+    const text = decodeBody(res.data, res.contentType, request);
+    if (text.trim() === "") throw new DdbParseError(`${request}: empty response body.`);
     // Declared big integers are quoted first, so JSON.parse delivers them exactly.
     const { json, inexact } = scanNumbers(text, this.bigIntegerKeys);
     let parsed: T;
     try {
       parsed = JSON.parse(json) as T;
     } catch (cause) {
-      throw new DdbParseError(`Failed to parse JSON response from ${cutForMessage(path)}`, { cause });
+      throw new DdbParseError(`${request}: the answer is not valid JSON${typeHint(res.contentType)}.`, { cause });
     }
+    // JSON.parse rounds and overflows numbers silently: refuse the answer rather than print a
+    // changed value.
     if (inexact !== undefined) {
-      throw new DdbParseError(`Unexpected response from ${cutForMessage(path)}: the number ${cutForMessage(inexact)} cannot be represented exactly.`);
+      throw new DdbParseError(`${request}: the number ${cutForMessage(inexact)} cannot be represented exactly.`);
     }
     return parsed;
   }
@@ -1015,7 +1042,7 @@ export class RequestEngine {
   /** Perform a GET returning the decoded response body as text (e.g. /version). */
   async getText(path: string, query?: QueryParams): Promise<string> {
     const res = await this.request("GET", path, { query, accept: "*/*" });
-    return decodeBody(res.data, res.contentType, path);
+    return decodeBody(res.data, res.contentType, `GET ${this.describeUrl(path, query)}`);
   }
 
   /** Perform a GET returning the raw bytes (binary downloads). */
@@ -1078,20 +1105,29 @@ export class RequestEngine {
 }
 
 /**
+ * ` (expected JSON, got Content-Type "text/html")` for an answer that is not JSON when its type
+ * isn't either, so it reads as an upstream problem rather than a client bug; "" otherwise.
+ */
+function typeHint(contentType: string): string {
+  const type = contentType.split(";")[0]?.trim() ?? "";
+  return type !== "" && !/json/i.test(type) ? ` (expected JSON, got Content-Type "${cutForMessage(cleanDetail(type))}")` : "";
+}
+
+/**
  * Decode a response body by the charset of its Content-Type (UTF-8 when none is given,
  * as JSON requires). TextDecoder drops a leading byte order mark, which Buffer#toString
  * keeps and JSON.parse then rejects. An unknown charset label is a DdbParseError naming
- * it (`where` is the request path for the message), or, with `"lenient"` (raw XML parts,
- * error bodies), decoded as UTF-8 — those callers keep the exact bytes anyway.
+ * it and `request` (`GET <url>`), or, with `"lenient"` (raw XML parts, error bodies),
+ * decoded as UTF-8 — those callers keep the exact bytes anyway.
  */
-export function decodeBody(body: Buffer, contentType: string, where: string, mode: "strict" | "lenient" = "strict"): string {
+export function decodeBody(body: Buffer, contentType: string, request: string, mode: "strict" | "lenient" = "strict"): string {
   const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1] ?? "utf-8";
   let decoder: TextDecoder;
   try {
     decoder = new TextDecoder(charset);
   } catch {
     if (mode === "lenient") return new TextDecoder("utf-8").decode(body);
-    throw new DdbParseError(`Unsupported response charset "${cutForMessage(cleanDetail(charset))}" from ${cutForMessage(redactUrl(where))}.`);
+    throw new DdbParseError(`${request}: unsupported response charset "${cutForMessage(cleanDetail(charset))}".`);
   }
   return decoder.decode(body);
 }

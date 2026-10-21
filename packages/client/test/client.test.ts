@@ -174,9 +174,12 @@ test("search rejects a 2xx body that is not a Solr JSON object", async () => {
       (err) =>
         err instanceof DdbParseError &&
         err.message ===
-          `Unexpected response shape from /search/index/search/select: expected ${expected}. Only request ` +
-            `handlers that return Solr's standard response envelope (a "response" object with "numFound" ` +
-            `and "docs") are supported; handler "select" did not.`,
+          (body === ""
+            ? "GET https://api.deutsche-digitale-bibliothek.de/2/search/index/search/select?q=x&wt=json&rows=10: empty response body."
+            : "GET https://api.deutsche-digitale-bibliothek.de/2/search/index/search/select?q=x&wt=json&rows=10: " +
+              `unexpected response shape: expected ${expected}. Only request ` +
+              `handlers that return Solr's standard response envelope (a "response" object with "numFound" ` +
+              `and "docs") are supported; handler "select" did not.`),
       body,
     );
   }
@@ -394,13 +397,13 @@ test("a number the answer cannot carry exactly is a parse error in search and it
     );
     await assert.rejects(new DdbClient({ transport: search.transport }).search({ query: "x" }), (err) => {
       assert.ok(err instanceof DdbParseError, n);
-      assert.equal(err.message, `Unexpected response from /search/index/search/select: the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `GET https://api.deutsche-digitale-bibliothek.de/2/search/index/search/select?q=x&wt=json&rows=10: the number ${n} cannot be represented exactly.`);
       return true;
     });
     const item = makeMockTransport(() => rawResponse(`{"item":{"pages":${n}}}`, "application/json"));
     await assert.rejects(new DdbClient({ transport: item.transport }).item(ID), (err) => {
       assert.ok(err instanceof DdbParseError, n);
-      assert.equal(err.message, `Unexpected response for item ${ID} (view): the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `GET https://api.deutsche-digitale-bibliothek.de/2/items/${ID}/view: the number ${n} cannot be represented exactly.`);
       return true;
     });
   }
@@ -421,13 +424,13 @@ test("a big number written as a decimal or an exponent, a fraction past 2^53 and
     );
     await assert.rejects(new DdbClient({ transport: search.transport }).search({ query: "x" }), (err) => {
       assert.ok(err instanceof DdbParseError, n);
-      assert.equal(err.message, `Unexpected response from /search/index/search/select: the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `GET https://api.deutsche-digitale-bibliothek.de/2/search/index/search/select?q=x&wt=json&rows=10: the number ${n} cannot be represented exactly.`);
       return true;
     });
     const item = makeMockTransport(() => rawResponse(`{"item":{"pages":${n}}}`, "application/json"));
     await assert.rejects(new DdbClient({ transport: item.transport }).item(ID), (err) => {
       assert.ok(err instanceof DdbParseError, n);
-      assert.equal(err.message, `Unexpected response for item ${ID} (view): the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `GET https://api.deutsche-digitale-bibliothek.de/2/items/${ID}/view: the number ${n} cannot be represented exactly.`);
       return true;
     });
   }
@@ -504,7 +507,7 @@ test("Solr's _version_ is delivered as its exact decimal literal, a string, in s
   );
   await assert.rejects(new DdbClient({ transport: big.transport }).search({ query: "x" }), (err) => {
     assert.ok(err instanceof DdbParseError);
-    assert.equal(err.message, "Unexpected response from /search/index/search/select: the number 1850000000000000001 cannot be represented exactly.");
+    assert.equal(err.message, "GET https://api.deutsche-digitale-bibliothek.de/2/search/index/search/select?q=x&wt=json&rows=10: the number 1850000000000000001 cannot be represented exactly.");
     return true;
   });
   const bigItem = makeMockTransport(() => rawResponse('{"_version_":1,"n":1850000000000000001}', "application/json"));
@@ -540,5 +543,30 @@ test("a JSON item part answered with a non-JSON body is a parse error, never dat
     const r = await new DdbClient({ transport: mt.transport }).item(ID, part);
     assert.equal(r.text, '{"a":1}', part);
     assert.equal(r.json, undefined, part);
+  }
+});
+
+test("every answer error of search, item and version names the request, method and URL (T9, D9, 2026-10-21)", async () => {
+  const BASE = "https://api.deutsche-digitale-bibliothek.de/2";
+  const ID = "A".repeat(32);
+  const cases: Array<[string, () => Promise<unknown>, string]> = [
+    ["search shape", () => new DdbClient({ transport: makeMockTransport(() => jsonResponse({ docs: [] })).transport }).search({ query: "x", rows: 1 }),
+      `GET ${BASE}/search/index/search/select?q=x&wt=json&rows=1: unexpected response shape: expected a response object.`],
+    ["search error document", () => new DdbClient({ transport: makeMockTransport(() => jsonResponse({ error: { msg: "bad" } })).transport }).search({ query: "x" }),
+      `GET ${BASE}/search/index/search/select?q=x&wt=json&rows=10: an error document with a success status: bad`],
+    ["item shape", () => new DdbClient({ transport: makeMockTransport(() => jsonResponse(5)).transport }).item(ID),
+      `GET ${BASE}/items/${ID}/view: unexpected response shape: expected a JSON object or array.`],
+    ["item number", () => new DdbClient({ transport: makeMockTransport(() => rawResponse('{"n":1e400}', "application/json")).transport }).item(ID, "children", { rows: 2 }),
+      `GET ${BASE}/items/${ID}/children?rows=2: the number 1e400 cannot be represented exactly.`],
+    ["version", () => new DdbClient({ transport: makeMockTransport(() => rawResponse("<html>", "text/html")).transport }).version(),
+      `GET ${BASE}/version: expected a version string such as "7.5", got "<html>".`],
+  ];
+  for (const [label, call, message] of cases) {
+    await assert.rejects(call(), (err: unknown) => {
+      assert.ok(err instanceof DdbParseError, label);
+      assert.equal(err.message.startsWith(message.split(": ")[0]! + ": "), true, `${label}: ${err.message}`);
+      assert.ok(err.message.startsWith(message), `${label}: ${err.message}`);
+      return true;
+    });
   }
 });

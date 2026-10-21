@@ -12,7 +12,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, bigIntegerKeysOption, decodeBody, sanitizeServerText, scanNumbers, type EngineOptions, type RawResponse } from "./engine.js";
+import { RequestEngine, bigIntegerKeysOption, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
 import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, normalizeText, pathNameProblem } from "./validate.js";
@@ -206,18 +206,9 @@ function assertSearchParams(params: SearchParams): void {
   }
 }
 
-/**
- * ` (expected JSON, got Content-Type "text/html")` for an answer that is not JSON when its type
- * isn't either (an HTML maintenance or proxy page, the usual case), so it reads as an upstream
- * problem rather than a client bug; "" otherwise.
- */
-function typeHint(contentType: string): string {
-  const type = contentType.split(";")[0]?.trim() ?? "";
-  return type !== "" && !/json/i.test(type) ? ` (expected JSON, got Content-Type "${quoted(type)}")` : "";
-}
-
-function shapeError(path: string, expected: string): DdbParseError {
-  return new DdbParseError(`Unexpected response shape from ${cutForMessage(path)}: expected ${expected}.`);
+/** A 2xx answer without the documented shape; `request` names it (`GET <url>`). */
+function shapeError(request: string, expected: string): DdbParseError {
+  return new DdbParseError(`${request}: unexpected response shape: expected ${expected}.`);
 }
 
 /** `text` cleaned of control characters, on one line, cut at MAX_QUOTED_LENGTH (200) characters (never inside a surrogate pair). */
@@ -247,9 +238,9 @@ function errorEnvelope(body: Record<string, unknown>): string | undefined {
  * the request handler — only handlers that return Solr's standard `response` envelope are
  * supported (`select`, the default, does; a real-time `get`, for one, answers differently).
  */
-function searchShapeError(path: string, handler: string, expected: string): DdbParseError {
+function searchShapeError(request: string, handler: string, expected: string): DdbParseError {
   return new DdbParseError(
-    `Unexpected response shape from ${cutForMessage(path)}: expected ${expected}. Only request handlers that ` +
+    `${request}: unexpected response shape: expected ${expected}. Only request handlers that ` +
       `return Solr's standard response envelope (a "response" object with "numFound" and "docs") ` +
       `are supported; handler "${cutForMessage(handler)}" did not.`,
   );
@@ -263,19 +254,19 @@ function searchShapeError(path: string, handler: string, expected: string): DdbP
  * rule (only handlers returning that envelope are supported); there is no fallback for
  * other shapes.
  */
-function assertSolrResponse(path: string, handler: string, body: unknown): asserts body is SolrResponse {
-  if (!isObject(body)) throw searchShapeError(path, handler, "a JSON object");
+function assertSolrResponse(request: string, handler: string, body: unknown): asserts body is SolrResponse {
+  if (!isObject(body)) throw searchShapeError(request, handler, "a JSON object");
   const error = errorEnvelope(body);
   if (error !== undefined) {
-    throw new DdbParseError(`Unexpected response from ${cutForMessage(path)}: an error document with a success status: ${quoted(error)}`);
+    throw new DdbParseError(`${request}: an error document with a success status: ${quoted(error)}`);
   }
   const response = body["response"];
-  if (!isObject(response)) throw searchShapeError(path, handler, "a response object");
+  if (!isObject(response)) throw searchShapeError(request, handler, "a response object");
   const numFound = response["numFound"];
   if (typeof numFound !== "number" || !Number.isSafeInteger(numFound) || numFound < 0) {
-    throw searchShapeError(path, handler, "an integer response.numFound");
+    throw searchShapeError(request, handler, "an integer response.numFound");
   }
-  if (!Array.isArray(response["docs"])) throw searchShapeError(path, handler, "a response.docs array");
+  if (!Array.isArray(response["docs"])) throw searchShapeError(request, handler, "a response.docs array");
 }
 
 /**
@@ -353,7 +344,7 @@ export class DdbClient {
     }
     const path = `/search/index/${enc(collection)}/${enc(handler)}`;
     const body = await this.engine.getJson<unknown>(path, query);
-    assertSolrResponse(path, handler, body);
+    assertSolrResponse(`GET ${this.engine.describeUrl(path, query)}`, handler, body);
     return body;
   }
 
@@ -396,10 +387,12 @@ export class DdbClient {
     const ancestors: string[] = [];
     let current = id;
     let res: RawResponse;
+    let path: string;
     for (;;) {
+      path = `/items/${enc(current)}${suffix}`;
       try {
         res = await this.engine.getRaw(
-          `/items/${enc(current)}${suffix}`,
+          path,
           "application/json, application/xml;q=0.9, text/plain;q=0.8, */*;q=0.5",
           query,
           (target) => {
@@ -433,33 +426,23 @@ export class DdbClient {
     // `view` (a captive portal, a proxy login, a wrong --base-url) was returned as text and
     // printed as data, exit 0 (Bug 04-1 of the 2026-10-21 round).
     const jsonPart = !ITEM_TEXT_PARTS.includes(part);
-    // JSON parts are decoded strictly by their charset; the raw XML/file parts keep their
-    // exact `bytes`, and `text` falls back to UTF-8 for a charset label Node doesn't know.
-    const text = decodeBody(res.data, res.contentType, `/items/${id}`, jsonPart ? "strict" : "lenient");
+    // Every error about the answer names the request (the ancestor's, when the API pointed there).
+    const request = `GET ${this.engine.describeUrl(path, query)}`;
     if (jsonPart) {
       // Declared big integers (`_version_`) are quoted first, as in search.
-      const scan = scanNumbers(text, this.engine.bigIntegerKeys);
-      let json: unknown;
-      try {
-        json = text.trim().length === 0 ? null : JSON.parse(scan.json);
-      } catch (cause) {
-        throw new DdbParseError(`Unexpected response for item ${id} (${part}): the answer is not valid JSON${typeHint(res.contentType)}.`, { cause });
-      }
-      const inexact = scan.inexact;
-      if (inexact !== undefined) {
-        throw new DdbParseError(`Unexpected response for item ${id} (${part}): the number ${cutForMessage(inexact)} cannot be represented exactly.`);
-      }
-      // Every JSON part is an object or an array; `null`, an empty body or a scalar is not
-      // data, and neither is an error document sent with a 2xx status.
-      if (typeof json !== "object" || json === null) {
-        throw new DdbParseError(`Unexpected response shape for item ${id} (${part}): expected a JSON object or array.`);
-      }
+      const json = this.engine.parseJson<unknown>(res, request);
+      // Every JSON part is an object or an array; `null` or a scalar is not data, and neither
+      // is an error document sent with a 2xx status.
+      if (typeof json !== "object" || json === null) throw shapeError(request, "a JSON object or array");
       const error = isObject(json) ? errorEnvelope(json) : undefined;
       if (error !== undefined) {
-        throw new DdbParseError(`Unexpected response for item ${id} (${part}): an error document with a success status: ${quoted(error)}`);
+        throw new DdbParseError(`${request}: an error document with a success status: ${quoted(error)}`);
       }
       return { part, contentType: res.contentType, json: json as JsonValue, ...heldBy };
     }
+    // The raw XML/file parts keep their exact `bytes`; `text` falls back to UTF-8 for a charset
+    // label Node doesn't know.
+    const text = decodeBody(res.data, res.contentType, request, "lenient");
     return { part, contentType: res.contentType, text, bytes: res.data, ...heldBy };
   }
 
@@ -473,7 +456,7 @@ export class DdbClient {
     const version = (await this.engine.getText("/version")).trim();
     if (!VERSION_PATTERN.test(version)) {
       throw new DdbParseError(
-        `Unexpected response from /version: expected a version string such as "7.5", got ${
+        `GET ${this.engine.describeUrl("/version")}: expected a version string such as "7.5", got ${
           version === "" ? "an empty body" : `"${quoted(version)}"`
         }.`,
       );

@@ -637,7 +637,7 @@ test("bigIntegerKeys: a declared member's number arrives as its literal, as writ
   await assert.rejects(e('{"n":12345678901234567890,"m":12345678901234567891}').getJson("/x"), /the number 12345678901234567891 cannot/);
   // A literal JSON does not allow stays a parse error: quoting it must not make bad JSON good.
   for (const bad of ['{"n":01}', '{"n":1.}', '{"n":-}', '["n":1]']) {
-    await assert.rejects(e(bad).getJson("/x"), (err: unknown) => err instanceof DdbParseError && /Failed to parse JSON/.test(err.message), bad);
+    await assert.rejects(e(bad).getJson("/x"), (err: unknown) => err instanceof DdbParseError && /not valid JSON/.test(err.message), bad);
   }
   // The set is copied: a later change by the caller has no effect.
   const mutable = new Set(["n"]);
@@ -682,4 +682,26 @@ test("a header named __proto__ is an ordinary header, never the prototype of the
   const fetchLike = new Headers([["__proto__", "x"], ["content-type", "application/json"]]);
   const f = new RequestEngine({ transport: async () => ({ status: 200, headers: fetchLike as unknown as Record<string, string>, body: Buffer.from('{"a":1}') }) });
   assert.deepEqual(await f.getJson("/x"), { a: 1 });
+});
+
+test("an answer error names the request: method and URL, userinfo redacted (T9, D9, 2026-10-21)", async () => {
+  const answers: Array<[string, () => HttpResponse]> = [
+    ["the answer is not valid JSON (expected JSON, got Content-Type \"text/html\")", () => rawResponse("<html>", "text/html")],
+    ["empty response body", () => rawResponse(" ", "application/json")],
+    ["cannot be represented exactly", () => rawResponse('{"n":1e400}', "application/json")],
+    ["unsupported response charset", () => rawResponse("{}", "application/json; charset=x-bogus")],
+  ];
+  for (const [what, respond] of answers) {
+    const e = new RequestEngine({ baseUrl: "https://alice:s3cret@api.example/2", transport: makeMockTransport(respond).transport });
+    await assert.rejects(e.getJson("/search/index/search/select", { q: "x" }), (err: unknown) => {
+      assert.ok(err instanceof DdbParseError, what);
+      assert.ok(err.message.startsWith("GET https://***@api.example/2/search/index/search/select?q=x: "), err.message);
+      assert.ok(err.message.includes(what), err.message);
+      assert.ok(!err.message.includes("s3cret"), err.message);
+      return true;
+    });
+  }
+  // getText too.
+  const text = new RequestEngine({ transport: makeMockTransport(() => rawResponse("7.5", "text/plain; charset=x-bogus")).transport });
+  await assert.rejects(text.getText("/version"), /^DdbParseError: GET https:\/\/api\.deutsche-digitale-bibliothek\.de\/2\/version: unsupported response charset "x-bogus"\.$/);
 });

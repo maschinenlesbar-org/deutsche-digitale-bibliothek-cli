@@ -107,7 +107,7 @@ test("--handler whose answer is not Solr's response envelope fails naming the ha
   assert.equal(new URL(cli.mt.last().url).pathname, "/2/search/index/search/get");
   assert.equal(
     untimed(cli.err.join("\n")),
-    "ERROR [ddb.api] Unexpected response shape from /search/index/search/get: expected a response object. " +
+    "ERROR [ddb.api] GET https://api.deutsche-digitale-bibliothek.de/2/search/index/search/get?q=x&wt=json&rows=10: unexpected response shape: expected a response object. " +
       "Only request handlers that return Solr's standard response envelope " +
       '(a "response" object with "numFound" and "docs") are supported; handler "get" did not.',
   );
@@ -161,7 +161,7 @@ test("an empty 200 body from search is a clean parse error (exit 1), not a TypeE
   assert.equal(cli.out.length, 0);
   assert.match(
     untimed(cli.err.join("\n")),
-    /^ERROR \[ddb\.api\] Unexpected response shape from \/search\/index\/search\/select: expected a JSON object\. Only request handlers that return Solr's standard response envelope .* are supported; handler "select" did not\.$/,
+    /^ERROR \[ddb\.api\] GET https:\/\/api\.deutsche-digitale-bibliothek\.de\/2\/search\/index\/search\/select\?q=x&wt=json&rows=10: empty response body\.$/,
   );
 });
 

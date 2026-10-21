@@ -244,7 +244,12 @@ that take `lang`) and `SOLR_MAX_INT` (2^31−1, the largest Solr int).
   body) is a `DdbParseError`. The CLI prints it as is.
 
 **2xx bodies are checked, never printed as data when they aren't** (`DdbParseError`,
-exit 1): `search` needs the documented Solr shape — a JSON object with a `response`
+exit 1). Every such error names the request, `GET <url>: …` (the absolute URL, userinfo redacted
+as `***@`, cut at 300 characters: `RequestEngine.describeUrl`), like a network error: an unknown
+charset, an empty body, a body that isn't JSON (naming its Content-Type when that isn't JSON
+either: `GET <url>: the answer is not valid JSON (expected JSON, got Content-Type "text/html").`),
+a wrong shape, an error document, an inexact number and a `/version` body that is no version.
+`search` needs the documented Solr shape — a JSON object with a `response`
 object holding an integer `numFound` and a `docs` array; a JSON item part must be an
 object or an array (not `null`, an empty body or a scalar); and an error document sent
 with a 2xx status (Solr's `{ error: { msg } }`, the DDB `{ name: "…Exception", message }`
@@ -391,7 +396,7 @@ apps/cli/src/cli/
 - `search()` builds the Solr passthrough path and forces `wt=json`, and checks the
   top-level shape only: a 2xx body that is not a JSON object (empty, `null`, an
   array) or whose `response` is not an object raises `DdbParseError`
-  (`Unexpected response shape from <path>: expected …`, exit 1). The CLI's
+  (`GET <url>: unexpected response shape: expected …`, exit 1). The CLI's
   `--filter`/`--facet`/`--sort`/`--fields` map straight onto `fq`/`facet.field`/
   `sort`/`fl`.
 - `item()` fetches raw via the engine and **branches on the part**: the raw parts
