@@ -1033,3 +1033,17 @@ test("item raw XML with bytes invalid in its charset: exact to a pipe, U+FFFD on
   assert.deepEqual(tty.out, ["<a>�</a>"]);
   assert.match(untimed(tty.err.join("\n")), /^WARN  \[ddb\.api\] 1 character of the answer was not valid text in its charset and replaced with U\+FFFD for the terminal/);
 });
+
+test("terminal controls are escaped in chunks: the same text as one pass, across chunk edges (T4, D7)", () => {
+  const DEL = String.fromCharCode(0x7f);
+  const C1 = String.fromCharCode(0x9b);
+  const RLO = String.fromCharCode(0x202e);
+  // Controls right before, at and after the 64 Ki edges, and a run of them.
+  const text = ["a".repeat(65535), DEL, C1, "b".repeat(65534), RLO, DEL.repeat(70000), "ü😀", C1].join("");
+  const { deps, out } = makeCli(() => jsonResponse({}));
+  renderJson(deps, { compact: true }, { text });
+  const expected = JSON.stringify({ text }).replace(/[\u007f-\u009f؜‎‏‪-‮⁦-⁩]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  assert.equal(out[0], expected);
+  assert.deepEqual(JSON.parse(out[0]!), { text });
+});

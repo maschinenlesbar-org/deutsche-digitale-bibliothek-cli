@@ -430,7 +430,10 @@ apps/cli/src/cli/
 - JSON output (stdout and the `-o` file) escapes what `JSON.stringify` leaves raw although a
   terminal acts on it: DEL, C1 (U+0080–U+009F) and the bidi controls (`isBidiControl`: U+061C,
   U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) become `\uXXXX`, the same JSON
-  (`escapeControlChars`).
+  (`escapeControlChars`). Each becomes six characters, so the output is measured first: past V8's
+  longest string it is an `OutputError` ("The answer is too large to print (N characters once its
+  control characters are escaped).", ddb.output, exit 1); otherwise it is built in 64 Ki chunks
+  and joined once, within memory on 100 MB of DEL characters.
 - JSON output (`renderJson` in `apps/cli/src/cli/shared.ts`) is pretty by default. Printing can
   fail two ways, each an `OutputError` (an ERROR of `ddb.output`, exit 1) that names the cause:
   an answer nested too deeply ("The answer is nested too deeply to pretty-print[; try --compact].")
