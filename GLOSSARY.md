@@ -65,6 +65,9 @@ or past `numFound` is not an error upstream (an empty `docs`); the CLI notes it 
 fields — commonly `label` / `title` (display text), `type` (media-type codes),
 `objecttype`, `place` / `place_fct`, `provider` / `provider_fct`, `preview`
 (thumbnail URL), `license`. Fields vary by object; project what you need with `jq`.
+Every doc also carries `_version_`, Solr's internal 64-bit document version (it changes when
+the record is re-indexed; not a DDB version): printed as a **string** of its digits
+(`"1858054135406919680"`), because it is past what a JSON number keeps exactly.
 
 **Facet.** A field the index can group and count by — object type, place,
 provider, language, sector, time. `--facet <field>` asks Solr to *return value

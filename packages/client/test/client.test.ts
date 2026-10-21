@@ -470,3 +470,50 @@ test("the query and every filter go out trimmed, a Solr-escaped trailing space k
   assert.equal(mt.calls.length, 1);
   assert.equal(lib.normalizeText(" Müller "), "Müller");
 });
+
+test("Solr's _version_ is delivered as its exact decimal literal, a string, in search and item; undeclared numbers keep the rule (Bug 05-1, 2026-10-21)", async () => {
+  // Every live Solr doc carries `_version_` (about 1.85e18, past 2^53); the number check refused
+  // it, so every search with hits exited 1 and search() rejected.
+  const ID = "A".repeat(32);
+  const body =
+    '{"response":{"numFound":3,"docs":[' +
+    '{"id":"a","_version_":1850000000000000001,"label":"x \\"_version_\\":123 y"},' +
+    '{"id":"b","_version_" : 5},' +
+    '{"id":"c","\\u005fversion_":-7,"_version_x":1,"x_version_":2}]}}';
+  const mt = makeMockTransport(() => rawResponse(body, "application/json"));
+  const res = await new DdbClient({ transport: mt.transport }).search({ query: "x" });
+  const docs = res.response.docs as Array<Record<string, unknown>>;
+  assert.equal(docs[0]!["_version_"], "1850000000000000001");
+  // A string holding the same text is left alone.
+  assert.equal(docs[0]!["label"], 'x "_version_":123 y');
+  // A small value is a string too, so the type never depends on the size.
+  assert.equal(docs[1]!["_version_"], "5");
+  // A member name written with an escape is the same name; other names are not.
+  assert.equal(docs[2]!["_version_"], "-7");
+  assert.equal(docs[2]!["_version_x"], 1);
+  assert.equal(docs[2]!["x_version_"], 2);
+  assert.equal(res.response.numFound, 3);
+
+  const item = makeMockTransport(() => rawResponse('{"item":{"_version_":1858054135406919680,"pages":4}}', "application/json"));
+  const got = await new DdbClient({ transport: item.transport }).item(ID);
+  assert.deepEqual(got.json, { item: { _version_: "1858054135406919680", pages: 4 } });
+
+  // An undeclared big number next to it is still refused, in search and in item.
+  const big = makeMockTransport(() =>
+    rawResponse('{"response":{"numFound":1,"docs":[{"id":"a","_version_":1850000000000000001,"begin_time":1850000000000000001}]}}', "application/json"),
+  );
+  await assert.rejects(new DdbClient({ transport: big.transport }).search({ query: "x" }), (err) => {
+    assert.ok(err instanceof DdbParseError);
+    assert.equal(err.message, "Unexpected response from /search/index/search/select: the number 1850000000000000001 cannot be represented exactly.");
+    return true;
+  });
+  const bigItem = makeMockTransport(() => rawResponse('{"_version_":1,"n":1850000000000000001}', "application/json"));
+  await assert.rejects(new DdbClient({ transport: bigItem.transport }).item(ID), /the number 1850000000000000001 cannot be represented exactly/);
+});
+
+test("a caller's bigIntegerKeys are added to _version_, and a bad value is refused", async () => {
+  const mt = makeMockTransport(() => rawResponse('{"response":{"numFound":1,"docs":[{"id":"a","_version_":1,"begin_time":2}]}}', "application/json"));
+  const res = await new DdbClient({ transport: mt.transport, bigIntegerKeys: new Set(["begin_time"]) }).search({ query: "x" });
+  assert.deepEqual(res.response.docs[0], { id: "a", _version_: "1", begin_time: "2" });
+  assert.throws(() => new DdbClient({ bigIntegerKeys: "begin_time" as unknown as ReadonlySet<string> }), DdbValidationError);
+});

@@ -143,7 +143,10 @@ ddb search Bauhaus --rows 0 --facet place_fct --facet-limit 10 \
 ## Output & scripting
 
 `search` and JSON item components print **JSON to stdout**; `version` and the XML
-components (`edm`, `source-record`) print raw text. Errors and diagnostics
+components (`edm`, `source-record`) print raw text. Numbers are printed exactly or the answer
+is an error (exit 1), never a rounded value; Solr's `_version_` (a 64-bit document version
+every search document carries, past what a JSON number keeps exactly) is printed as a string of
+its digits, `"_version_": "1858054135406919680"`. Errors and diagnostics
 (including the paging hint) go to stderr, so piping stdout into `jq` stays clean.
 
 Each line on stderr is a **log record**: a timestamp (UTC), a level (`ERROR`, `WARN`,

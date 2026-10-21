@@ -955,3 +955,16 @@ test("printed JSON escapes the bidi controls, on stdout and in the -o file (kit 
   const written = file.files[0]!.data.toString("utf8");
   assert.ok(written.includes("a\\u202eb") && !written.includes(RLO), written);
 });
+
+test("search prints documents with Solr's _version_ as a string and exits 0 (Bug 05-1, 2026-10-21)", async () => {
+  // Every live doc carries `_version_` past 2^53; the number check made every search with hits exit 1.
+  const body =
+    '{"response":{"numFound":2,"start":0,"docs":[{"id":"TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK","_version_":1858054135406919680},' +
+    '{"id":"N4N7TIGNXOHU6IW5L64Z3RPYARCTWNEL","_version_":5}]}}';
+  const cli = makeCli(() => rawResponse(body, "application/json"));
+  const code = await run(["--compact", "search", "Goethe"], cli.deps);
+  assert.equal(code, 0, cli.err.join("\n"));
+  assert.match(cli.out.join("\n"), /"_version_":"1858054135406919680"/);
+  const docs = JSON.parse(cli.out.join("\n")).response.docs as Array<Record<string, unknown>>;
+  assert.deepEqual(docs.map((d) => d["_version_"]), ["1858054135406919680", "5"]);
+});

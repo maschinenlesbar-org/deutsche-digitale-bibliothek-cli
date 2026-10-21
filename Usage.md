@@ -73,11 +73,15 @@ The result shape is native Solr:
   "response": {
     "numFound": 99866,
     "start": 0,
-    "docs": [ { "id": "…", "label": "…", "type": ["mediatype_002"] } ]
+    "docs": [ { "id": "…", "label": "…", "type": ["mediatype_002"], "_version_": "1858054135406919680" } ]
   },
   "facet_counts": { "facet_fields": { "type_fct": ["mediatype_003", 50024] } }
 }
 ```
+
+Each document's `_version_` (Solr's 64-bit document version) is a **string** of its digits: the
+value is past what a JSON number keeps exactly. Every other number is printed exactly, or the
+answer is an error (exit 1).
 
 ### Filtering with facets
 

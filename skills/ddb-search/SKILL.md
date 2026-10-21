@@ -143,6 +143,10 @@ ddb search Weimar --rows 10 --offset 10
   `München, Königliche Polizeidirektion`, and mixes places with regions (`Bayern`). For
   "which places have the most X?", say the values are as delivered, or merge obvious
   variants of one place and say so.
+- **`_version_` is a string, not a number.** Every doc carries Solr's 64-bit document version
+  as its digits in a string (`"_version_": "1858054135406919680"`); it is internal to Solr (it
+  changes on re-indexing), not an object's version. Compare it as text, never with arithmetic.
+  Any other number is printed exactly, or the command fails (exit 1) rather than round it.
 - **`begin_time` / `end_time` are day numbers, not years.** The 1810 print
   `YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ` has `begin_time [660725]` (1 Jan 1810) and
   `end_time [661089]` (31 Dec 1810); the value is Python's `date.toordinal()` + 1. Convert

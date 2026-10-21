@@ -12,7 +12,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, decodeBody, firstInexactNumber, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
+import { RequestEngine, bigIntegerKeysOption, decodeBody, sanitizeServerText, scanNumbers, type EngineOptions, type RawResponse } from "./engine.js";
 import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, normalizeText, pathNameProblem } from "./validate.js";
@@ -31,6 +31,13 @@ const enc = encodeURIComponent;
 
 /** Options for the DDB client. v2 read routes need no auth, so this is just the engine options. */
 export type DdbClientOptions = EngineOptions;
+
+/**
+ * The member names the client always declares as big integers (`EngineOptions.bigIntegerKeys`):
+ * Solr's `_version_`, a 64-bit document version (about 1.85e18 on the live index, past 2^53),
+ * which every search document carries. It is delivered as a decimal string.
+ */
+const DDB_BIG_INTEGER_KEYS = ["_version_"] as const;
 
 /**
  * Map an item part to its `/items/{id}` path suffix (`aip` is the bare endpoint).
@@ -285,7 +292,11 @@ export class DdbClient {
   private readonly maxAncestors: number;
 
   constructor(options: DdbClientOptions = {}) {
-    this.engine = new RequestEngine(options);
+    // Solr's `_version_` is always declared; a caller's own names are added to it.
+    this.engine = new RequestEngine({
+      ...options,
+      bigIntegerKeys: new Set([...DDB_BIG_INTEGER_KEYS, ...bigIntegerKeysOption(options?.bigIntegerKeys)]),
+    });
     // The engine has validated maxRedirects (0..20); its limit bounds the ancestor walk too.
     this.maxAncestors = options?.maxRedirects ?? 5;
   }
@@ -412,13 +423,15 @@ export class DdbClient {
     // exact `bytes`, and `text` falls back to UTF-8 for a charset label Node doesn't know.
     const text = decodeBody(res.data, res.contentType, `/items/${id}`, json ? "strict" : "lenient");
     if (json) {
+      // Declared big integers (`_version_`) are quoted first, as in search.
+      const scan = scanNumbers(text, this.engine.bigIntegerKeys);
       let json: unknown;
       try {
-        json = text.trim().length === 0 ? null : JSON.parse(text);
+        json = text.trim().length === 0 ? null : JSON.parse(scan.json);
       } catch (cause) {
         throw new DdbParseError(`Failed to parse JSON for item ${id} (${part})`, { cause });
       }
-      const inexact = firstInexactNumber(text);
+      const inexact = scan.inexact;
       if (inexact !== undefined) {
         throw new DdbParseError(`Unexpected response for item ${id} (${part}): the number ${cutForMessage(inexact)} cannot be represented exactly.`);
       }

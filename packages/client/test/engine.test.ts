@@ -622,3 +622,37 @@ test("a timeout, the size cap, a refused connection and a DNS failure name the r
     await new Promise<void>((resolve) => silent.close(() => resolve()));
   }
 });
+
+test("bigIntegerKeys: a declared member's number arrives as its literal, as written, in a string; nothing else changes (Bug 05-1, 2026-10-21)", async () => {
+  const answer = (body: string) => makeMockTransport(() => rawResponse(body, "application/json")).transport;
+  const keys = new Set(["n"]);
+  const e = (body: string) => new RequestEngine({ transport: answer(body), bigIntegerKeys: keys });
+  assert.deepEqual(
+    await e('{"n":12345678901234567890,"m":[{"n":-0},{"n":1.5e3}],"s":"\\"n\\":1","o":{"n":null},"t":{"n":"9"}}').getJson("/x"),
+    { n: "12345678901234567890", m: [{ n: "-0" }, { n: "1.5e3" }], s: '"n":1', o: { n: null }, t: { n: "9" } },
+  );
+  // Without the option every number keeps the rule: exact or refused.
+  await assert.rejects(new RequestEngine({ transport: answer('{"n":12345678901234567890}') }).getJson("/x"), /the number 12345678901234567890 cannot be represented exactly/);
+  // An undeclared one is refused, a declared one never.
+  await assert.rejects(e('{"n":12345678901234567890,"m":12345678901234567891}').getJson("/x"), /the number 12345678901234567891 cannot/);
+  // A literal JSON does not allow stays a parse error: quoting it must not make bad JSON good.
+  for (const bad of ['{"n":01}', '{"n":1.}', '{"n":-}', '["n":1]']) {
+    await assert.rejects(e(bad).getJson("/x"), (err: unknown) => err instanceof DdbParseError && /Failed to parse JSON/.test(err.message), bad);
+  }
+  // The set is copied: a later change by the caller has no effect.
+  const mutable = new Set(["n"]);
+  const engine = new RequestEngine({ transport: answer('{"n":1,"m":2}'), bigIntegerKeys: mutable });
+  mutable.add("m");
+  assert.deepEqual(await engine.getJson("/x"), { n: "1", m: 2 });
+});
+
+test("bigIntegerKeys must be a set or list of non-empty strings", () => {
+  for (const bad of ["n", 5, null, [""], [1], new Set([2])] as unknown[]) {
+    assert.throws(
+      () => new RequestEngine({ bigIntegerKeys: bad as ReadonlySet<string> }),
+      (err: unknown) => err instanceof DdbValidationError && /^Invalid option bigIntegerKeys: /.test(err.message),
+      String(bad),
+    );
+  }
+  assert.doesNotThrow(() => new RequestEngine({ bigIntegerKeys: new Set() }));
+});

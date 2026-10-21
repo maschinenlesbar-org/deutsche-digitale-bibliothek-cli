@@ -138,7 +138,8 @@ The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxR
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
 `DdbValidationError` naming the option; so does a `transport`, `sleep` or `warn` that
-is not a function and a `defaultHeaders` that is not an object. The client also checks
+is not a function, a `defaultHeaders` that is not an object and a `bigIntegerKeys` that is not
+a set or list of non-empty strings. The client also checks
 its own parameters before any request: a `params`/`opts` that is not an object, a blank
 or non-string `query`/`lang`/`sort`/filter, a non-integer
 or negative `rows`/`start`/`offset` (at most `SOLR_MAX_INT`, 2^31−1), a `facetLimit` below −1 or
@@ -256,6 +257,19 @@ changed value; below 2^53 a decimal fraction keeps a double's usual precision. P
 as written is compared with the number as printed (`String(value)`): a double a server wrote in its
 shortest form (`1E23`, `1.7976931348623157E308`) prints as the same number and passes;
 `12345678901234567890`, printed `12345678901234567000`, is refused.
+
+**Known big integers are declared, and delivered as strings** (engine option `bigIntegerKeys`,
+a `ReadonlySet<string>` of member names, default none). The value of a declared member is
+delivered as its exact literal as written, as a JSON string, whatever its size (`"_version_":5`
+becomes `"5"`), so its type never depends on its size; a declared member whose value isn't a
+number is left alone, and every undeclared number keeps the rule above. The client always
+declares Solr's **`_version_`** (a 64-bit document version, about 1.85e18 on the live index,
+which every search document carries) and adds a caller's own names to it; `SolrDoc._version_`
+is typed `string`. In 0.8.0 every search with hits failed on it (Bug 05-1 of
+`.reviews/2026-10-21-exploratory`). It is done in the same linear scan as the check
+(`scanNumbers` in `engine.ts`): it skips strings, compares a member name in place, quotes the
+declared values in the text before `JSON.parse` (only a literal the JSON grammar allows, so a
+malformed `01` still fails), and copies the text only when it finds one — no reviver over the tree.
 
 ## No authentication
 

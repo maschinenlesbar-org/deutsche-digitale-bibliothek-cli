@@ -173,6 +173,17 @@ export interface EngineOptions {
    * and reset connection; never when there is no retry. A throw is swallowed.
    */
   onRetry?: ((event: RetryEvent) => void) | undefined;
+  /**
+   * Member names whose number values are known integers past 2^53 that a double can't carry
+   * (Solr's 64-bit `_version_`). The value of a declared member, whatever its size, is
+   * delivered as its exact literal as written, as a JSON string (`"_version_":5` becomes
+   * `"5"`), so its type never depends on its size. A declared member whose value is not a
+   * number (a string, `null`, an object) is left as it is. Every undeclared number keeps the
+   * rule: exact, or a DdbParseError. Matched by name anywhere in a JSON answer, an escaped
+   * name (`"\u005fversion_"`) included. Defaults to none; anything but a set or list of
+   * non-empty strings makes the constructor throw a DdbValidationError. The set is copied.
+   */
+  bigIntegerKeys?: ReadonlySet<string> | undefined;
 }
 
 /** What `EngineOptions.onRetry` is told about one retry. */
@@ -342,6 +353,23 @@ function functionOption<F extends (...args: never[]) => unknown>(name: string, v
   return value;
 }
 
+/** No declared big-integer members (`EngineOptions.bigIntegerKeys` left out). */
+const NO_KEYS: ReadonlySet<string> = new Set();
+
+/**
+ * Read the `bigIntegerKeys` option: `undefined` gives none; a set or list of non-empty strings is
+ * copied; anything else throws a DdbValidationError.
+ */
+export function bigIntegerKeysOption(value: ReadonlySet<string> | undefined): ReadonlySet<string> {
+  if (value === undefined) return NO_KEYS;
+  const iterable = typeof value === "object" && value !== null && typeof (value as Iterable<unknown>)[Symbol.iterator] === "function";
+  const names = iterable ? [...(value as Iterable<unknown>)] : [];
+  if (!iterable || names.some((key) => typeof key !== "string" || key === "")) {
+    throw new DdbValidationError("Invalid option bigIntegerKeys: expected a set of non-empty member names.");
+  }
+  return new Set(names as string[]);
+}
+
 /**
  * Strip C0/C1 control characters (except tab and newline) from a string that
  * originated in an attacker-controlled response body. A JSON error body can encode
@@ -477,35 +505,111 @@ function decimalOf(text: string): { negative: boolean; digits: string; exponent:
   return { negative: sign === "-", digits, exponent: Number(exp) - fraction.length + (all.length - digits.length) };
 }
 
+/** A JSON number token as the grammar allows it, matched at a given position (sticky). */
+const STRICT_JSON_NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+
+/** What {@link scanNumbers} found in a JSON text. */
+export interface NumberScan {
+  /** The text with each declared member's number value quoted; the input itself when there was none. */
+  json: string;
+  /** The first undeclared number literal JSON.parse cannot carry exactly, or undefined. */
+  inexact: string | undefined;
+}
+
+/** Whether the member name `json` holds between `start` and `end` (its quotes) is one of `keys`, compared in place. */
+function isDeclared(json: string, start: number, end: number, keys: readonly string[]): boolean {
+  for (const key of keys) {
+    if (end - start - 1 === key.length && json.startsWith(key, start + 1)) return true;
+  }
+  return false;
+}
+
+/** The index of the first character at or after `i` that is not JSON whitespace. */
+function skipSpace(json: string, i: number): number {
+  for (; i < json.length; i++) {
+    const c = json.charCodeAt(i);
+    if (c !== 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) break;
+  }
+  return i;
+}
+
+/**
+ * One linear pass over `json` (the text of an answer) that skips strings and looks at every
+ * number literal:
+ * - the value of a member named in `bigIntegerKeys` is quoted, as written (`"_version_":
+ *   1858054135406919680` becomes `"_version_":"1858054135406919680"`), so JSON.parse delivers
+ *   it exactly as a string, whatever its size. Only a literal the JSON grammar allows is quoted,
+ *   so a malformed one (`01`) still fails JSON.parse;
+ * - any other number is checked as {@link firstInexactNumber} says, and the first one JSON.parse
+ *   cannot carry exactly is reported in `inexact`.
+ * Nothing is allocated per value: a member name is compared in place (only a name written with
+ * an escape is decoded), and the text is copied only when a declared member is found. No
+ * reviver, which would recurse per nesting level and overflow on deep data.
+ */
+export function scanNumbers(json: string, bigIntegerKeys: ReadonlySet<string> = NO_KEYS): NumberScan {
+  const keys = bigIntegerKeys.size === 0 ? undefined : [...bigIntegerKeys];
+  let inexact: string | undefined;
+  let out: string | undefined;
+  let copied = 0;
+  for (let i = 0; i < json.length; i++) {
+    const c = json.charCodeAt(i);
+    if (c === 0x22) {
+      // a string: skip to its closing quote, past escapes
+      const start = i;
+      let escaped = false;
+      for (i++; i < json.length; i++) {
+        const d = json.charCodeAt(i);
+        if (d === 0x5c) {
+          escaped = true;
+          i++;
+        } else if (d === 0x22) break;
+      }
+      if (keys === undefined) continue;
+      // A member name is a string followed by a colon; is it a declared one with a number value?
+      const colon = skipSpace(json, i + 1);
+      if (json.charCodeAt(colon) !== 0x3a) continue;
+      if (!(escaped ? bigIntegerKeys.has(decodedName(json.slice(start, i + 1))) : isDeclared(json, start, i, keys))) continue;
+      const at = skipSpace(json, colon + 1);
+      STRICT_JSON_NUMBER.lastIndex = at;
+      const literal = STRICT_JSON_NUMBER.exec(json)?.[0];
+      if (literal === undefined) continue;
+      out = (out ?? "") + json.slice(copied, at) + '"' + literal + '"';
+      copied = at + literal.length;
+      i = copied - 1;
+    } else if (c === 0x2d || (c >= 0x30 && c <= 0x39)) {
+      JSON_NUMBER.lastIndex = i;
+      const literal = JSON_NUMBER.exec(json)?.[0];
+      if (literal === undefined) continue;
+      const value = Number(literal);
+      if (inexact === undefined && (!Number.isFinite(value) || !exactAtTheEdges(literal, value))) {
+        inexact = literal;
+        if (keys === undefined) break;
+      }
+      i += literal.length - 1;
+    }
+  }
+  return { json: out === undefined ? json : out + json.slice(copied), inexact };
+}
+
+/** A member name written with an escape, decoded; a name JSON.parse can't read matches nothing. */
+function decodedName(quoted: string): string {
+  try {
+    return String(JSON.parse(quoted));
+  } catch {
+    return "";
+  }
+}
+
 /**
  * The first number literal in `json` (JSON that parsed) that JSON.parse cannot carry exactly, or
  * undefined: one out of a double's range (`1e400` became Infinity, printed as `null`), one past
  * 2^53 that it rounds, in any form (`12345678901234567890`, `12345678901234567890.0`,
  * `9007199254740993e0`, `9007199254740992.5`), and a non-zero one too small for a double
  * (`1e-400` became 0). Below 2^53 a decimal fraction keeps a double's usual precision, as JSON
- * means it. A linear scan that skips strings; a reviver would recurse per nesting level and
- * overflow on deep data.
+ * means it. {@link scanNumbers} without declared members.
  */
 export function firstInexactNumber(json: string): string | undefined {
-  for (let i = 0; i < json.length; i++) {
-    const c = json.charCodeAt(i);
-    if (c === 0x22) {
-      // a string: skip to its closing quote, past escapes
-      for (i++; i < json.length; i++) {
-        const d = json.charCodeAt(i);
-        if (d === 0x5c) i++;
-        else if (d === 0x22) break;
-      }
-    } else if (c === 0x2d || (c >= 0x30 && c <= 0x39)) {
-      JSON_NUMBER.lastIndex = i;
-      const literal = JSON_NUMBER.exec(json)?.[0];
-      if (literal === undefined) continue;
-      const value = Number(literal);
-      if (!Number.isFinite(value) || !exactAtTheEdges(literal, value)) return literal;
-      i += literal.length - 1;
-    }
-  }
-  return undefined;
+  return scanNumbers(json).inexact;
 }
 
 export class RequestEngine {
@@ -533,6 +637,8 @@ export class RequestEngine {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly onRetry: ((event: RetryEvent) => void) | undefined;
   private readonly warn: (message: string) => void;
+  /** `EngineOptions.bigIntegerKeys`, copied. */
+  readonly bigIntegerKeys: ReadonlySet<string>;
 
   constructor(options: EngineOptions = {}) {
     // A JavaScript caller may pass null for "no options"; treat it like undefined.
@@ -581,6 +687,7 @@ export class RequestEngine {
     this.onRetry =
       options.onRetry === undefined ? undefined : functionOption("onRetry", options.onRetry, () => {});
     this.warn = functionOption("warn", options.warn, () => {});
+    this.bigIntegerKeys = bigIntegerKeysOption(options.bigIntegerKeys);
   }
 
   /** Tell `onRetry` about a retry, then wait. A throwing callback never breaks the request. */
@@ -883,13 +990,14 @@ export class RequestEngine {
     if (res.status === 204 || text.trim().length === 0) {
       return null as T;
     }
+    // Declared big integers are quoted first, so JSON.parse delivers them exactly.
+    const { json, inexact } = scanNumbers(text, this.bigIntegerKeys);
     let parsed: T;
     try {
-      parsed = JSON.parse(text) as T;
+      parsed = JSON.parse(json) as T;
     } catch (cause) {
       throw new DdbParseError(`Failed to parse JSON response from ${cutForMessage(path)}`, { cause });
     }
-    const inexact = firstInexactNumber(text);
     if (inexact !== undefined) {
       throw new DdbParseError(`Unexpected response from ${cutForMessage(path)}: the number ${cutForMessage(inexact)} cannot be represented exactly.`);
     }

@@ -65,6 +65,10 @@ weist auf stderr darauf hin.
 häufig `label` / `title` (Anzeigetext), `type` (Medientyp-Codes), `objecttype`, `place` /
 `place_fct`, `provider` / `provider_fct`, `preview` (URL des Vorschaubilds), `license`. Die
 Felder unterscheiden sich je nach Objekt; wählen Sie mit `jq` aus, was Sie brauchen.
+Jedes Dokument trägt außerdem `_version_`, die interne 64-Bit-Dokumentversion von Solr (sie
+ändert sich, wenn der Datensatz neu indexiert wird; keine DDB-Version): ausgegeben als
+**Zeichenkette** ihrer Ziffern (`"1858054135406919680"`), weil der Wert jenseits dessen liegt, was
+eine JSON-Zahl exakt hält.
 
 **Facette.** Ein Feld, nach dem der Index gruppieren und zählen kann – Objekttyp, Ort,
 Einrichtung, Sprache, Sparte, Zeit. `--facet <field>` weist Solr an, für dieses Feld *die Anzahl

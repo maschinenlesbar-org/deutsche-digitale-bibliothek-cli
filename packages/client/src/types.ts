@@ -22,6 +22,11 @@ export interface JsonObject {
  */
 export interface SolrDoc {
   id: string;
+  /**
+   * Solr's 64-bit document version (about 1.85e18, past 2^53, so a double can't carry it), as
+   * its exact decimal digits in a string: `"1858054135406919680"`. Absent when `fields` leaves it out.
+   */
+  _version_?: string;
   [key: string]: JsonValue | undefined;
 }
 
