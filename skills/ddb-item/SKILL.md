@@ -53,7 +53,8 @@ or the trailing segment of a DDB object URL
 | `citation` | a newspaper-issue citation file — only where applicable | BIB |
 
 `--part children` also takes `--rows`/`--offset` for paging a large child set.
-`--lang <code>` sets the label language for view/aip/edm/binaries/source*.
+`--lang <code>` sets the label language for view/aip/edm/binaries/source*: `de`, `en` or `fr`
+only (lower case; anything else is a usage error, exit 2).
 
 Both `children` and `parents` return `{ numberOfResults, hierarchy[] }`, each entry with
 `id`, `parent`, `label`, `type` and `leaf`. In `parents`, `hierarchy[0]` is the object
@@ -119,8 +120,8 @@ ddb item "$ID"
   Report "no rights statement" only when all of these are empty.
 - **`--lang` can 404.** `--lang en` returned `HTTP 404 … The content of the data column
   <sip_en> … is empty!` (exit 4) for all seven objects tried on 2026-09-15, while the
-  same ids work without `--lang`. A 404 with `--lang` means "no view in that
-  language": retry without it before concluding the id is wrong.
+  same ids work without `--lang`. A 404 with a valid `--lang` (de/en/fr) means "no view in
+  that language": retry without it before concluding the id is wrong.
 - A `404` on `view`/`aip` without `--lang` means the id doesn't exist — re-fetch it
   from a fresh `ddb search`.
 - Don't have an id yet? Use the **ddb-search** skill to find one first.

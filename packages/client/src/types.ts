@@ -91,6 +91,13 @@ export const ITEM_LANG_PARTS: readonly ItemPart[] = Object.freeze([
 ] as const);
 
 /**
+ * The languages `item()`'s `lang` takes (`--lang`): the only ones the API accepts ("Language <x> is
+ * not valid, only <[de, en, fr]> are allowed!", answered as HTTP 404). Frozen; `langProblem`
+ * checks a value against it.
+ */
+export const ITEM_LANGS = Object.freeze(["de", "en", "fr"] as const);
+
+/**
  * The item parts the API serves as XML or a plain file (edm RDF/XML, the source record's XML,
  * the citation's BIB file): `item()` returns them as `text` (and `bytes`). Every other part is
  * JSON, whatever the answer's Content-Type says, so an HTML page in its place (a captive portal,

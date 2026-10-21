@@ -1171,3 +1171,13 @@ test("commander's echo of a rejected value shows invisible and format characters
     assert.ok(err.includes(`\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`), err);
   }
 });
+
+test("item --lang outside de, en, fr is a usage error (exit 2) before any request, not exit 4 (Bug 01-1)", async () => {
+  const cli = makeCli(() => jsonResponse(fx.itemView));
+  assert.equal(await run(["item", ID, "--lang", "DE"], cli.deps), 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(untimed(cli.err.join("\n")), /^ERROR \[ddb\.cli\] .*"DE": expected one of: de, en, fr\./);
+  const padded = makeCli(() => jsonResponse(fx.itemView));
+  assert.equal(await run(["item", ID, "--lang", " de "], padded.deps), 0);
+  assert.equal(queryOf(padded.mt.last()).get("lang"), "de");
+});

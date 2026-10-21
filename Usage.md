@@ -176,7 +176,9 @@ the section. If no ancestor has one, the `404` (exit 4) names the chain:
 `… item N4N7… has no source-record of its own; the API points to its ancestors (N4N7… →
 NSNK… → RQBX…), and the last has none either`.
 
-`--lang <code>` sets the preferred label language for
+`--lang <code>` (`de`, `en` or `fr`, sent trimmed; any other value, `DE` included, is a usage
+error, exit 2, before any request: the API answered it with a misleading 404) sets the preferred
+label language for
 `view`/`aip`/`edm`/`binaries`/`source`/`source-description` (with any other part
 it is a usage error, exit 2, as are `--rows`/`--offset` outside `children`). An object without a
 record in that language answers `404` (exit 4); `--lang en` did so for every

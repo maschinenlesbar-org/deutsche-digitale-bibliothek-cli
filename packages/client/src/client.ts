@@ -20,6 +20,7 @@ import {
   facetFieldProblem,
   fieldsProblem,
   itemPartProblem,
+  langProblem,
   normalizeFields,
   normalizeItemId,
   normalizeText,
@@ -402,12 +403,15 @@ export class DdbClient {
     const id = normalizeItemId(rawId);
     assertValid("part", rawPart, itemPartProblem);
     const part = normalizeToken(rawPart) as ItemPart;
-    if (opts.lang !== undefined) assertText("lang", opts.lang);
+    if (opts.lang !== undefined) {
+      assertText("lang", opts.lang);
+      assertValid("lang", opts.lang, langProblem);
+    }
     assertInt("rows", opts.rows);
     assertInt("offset", opts.offset);
     validateItemOptions(part, opts);
     const query: QueryParams = {};
-    if (opts.lang !== undefined) query["lang"] = opts.lang;
+    if (opts.lang !== undefined) query["lang"] = normalizeToken(opts.lang);
     if (opts.rows !== undefined) query["rows"] = opts.rows;
     if (opts.offset !== undefined) query["offset"] = opts.offset;
     const suffix = PART_SUFFIX[part];

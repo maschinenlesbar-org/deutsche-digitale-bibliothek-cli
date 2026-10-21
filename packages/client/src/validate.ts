@@ -11,7 +11,7 @@
 //   rather than throw synchronously; constructors throw.
 
 import { DdbValidationError, quoteValue } from "./errors.js";
-import { ITEM_PARTS } from "./types.js";
+import { ITEM_LANGS, ITEM_PARTS } from "./types.js";
 
 /** A validation rule: the reason `value` is invalid, or `undefined` when it is valid. */
 export type Problem<T = unknown> = (value: T) => string | undefined;
@@ -284,6 +284,19 @@ export const sortProblem: Problem = (value) => {
     return `${quoteValue(sort)}: a Solr sort is "<field> asc|desc", comma-separated, e.g. "score desc" or "id asc".`;
   }
   return undefined;
+};
+
+/**
+ * A language for item labels (`item(id, part, { lang })`, `--lang`): a token that is, trimmed
+ * (`normalizeToken`), one of {@link ITEM_LANGS}. The API answers any other value, `DE` or a padded
+ * ` de ` included, with HTTP 404, which reads as "no record in that language".
+ */
+export const langProblem: Problem = (value) => {
+  const token = tokenProblem(value);
+  if (token !== undefined) return token;
+  return (ITEM_LANGS as readonly string[]).includes(normalizeToken(value as string))
+    ? undefined
+    : `${quoteValue(value as string)}: expected one of: ${ITEM_LANGS.join(", ")}.`;
 };
 
 /**

@@ -611,3 +611,23 @@ test("a facet field, the sort and the field list go out trimmed or are refused; 
   }
   assert.equal(mt.calls.length, 0);
 });
+
+test("lang is one of de, en, fr, sent trimmed; anything else is a validation error, never a 404 (Bug 01-1, 2026-10-21)", async () => {
+  // `--lang ' de '` went out as `lang=%20de%20` and `--lang DE` as `lang=DE`; upstream answered
+  // HTTP 404 "Language < de > is not valid, only <[de, en, fr]> are allowed!", exit 4 ("not
+  // found"), which Usage.md and the skill read as "no record in that language".
+  const ID = "A".repeat(32);
+  const mt = makeMockTransport(() => jsonResponse(fx.itemView));
+  const c = new DdbClient({ transport: mt.transport });
+  for (const [lang, sent] of [[" de ", "de"], ["en", "en"], ["fr\n", "fr"]] as const) {
+    await c.item(ID, "view", { lang });
+    assert.equal(queryOf(mt.last()).get("lang"), sent, JSON.stringify(lang));
+  }
+  mt.calls.length = 0;
+  for (const lang of ["DE", "it", "de-DE", "d​e"]) {
+    await assert.rejects(c.item(ID, "view", { lang }), (err: unknown) => err instanceof DdbValidationError && /^Invalid lang: /.test(err.message), lang);
+  }
+  await assert.rejects(c.item(ID, "view", { lang: "DE" }), /Invalid lang: "DE": expected one of: de, en, fr\./);
+  assert.equal(mt.calls.length, 0);
+  assert.deepEqual([...lib.ITEM_LANGS], ["de", "en", "fr"]);
+});

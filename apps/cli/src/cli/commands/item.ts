@@ -8,20 +8,29 @@ import { InvalidArgumentError } from "commander";
 import { logOf, type CliDeps } from "../io.js";
 import {
   ITEM_LANG_PARTS,
+  ITEM_LANGS,
   ITEM_PARTS,
   itemPartProblem,
+  langProblem,
   normalizeToken,
   type ItemOptions,
   type ItemPart,
 } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client";
 import { sanitizeServerText } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/engine";
-import { action, parseNonEmpty, parseSolrInt, renderJson, writeOutputFile } from "../shared.js";
+import { action, parseSolrInt, renderJson, writeOutputFile } from "../shared.js";
 
 /** commander value-parser for --part: the library's rule (itemPartProblem). */
 function parsePart(value: string): ItemPart {
   const problem = itemPartProblem(value);
   if (problem !== undefined) throw new InvalidArgumentError(problem);
   return normalizeToken(value) as ItemPart;
+}
+
+/** commander value-parser for --lang: the library's rule (langProblem: de, en or fr, trimmed). */
+function parseLang(value: string): string {
+  const problem = langProblem(value);
+  if (problem !== undefined) throw new InvalidArgumentError(problem);
+  return value;
 }
 
 export function registerItemCommand(program: Command, deps: CliDeps): void {
@@ -35,7 +44,7 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
       parsePart,
       "view",
     )
-    .option("--lang <code>", `preferred language for labels (${ITEM_LANG_PARTS.join("/")})`, parseNonEmpty)
+    .option("--lang <code>", `language for labels: ${ITEM_LANGS.join(", ")} (parts ${ITEM_LANG_PARTS.join("/")})`, parseLang)
     .option("--rows <n>", "page size for --part children", parseSolrInt)
     .option("--offset <n>", "offset for --part children", parseSolrInt)
     .action(

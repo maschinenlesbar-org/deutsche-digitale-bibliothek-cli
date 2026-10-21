@@ -326,5 +326,6 @@ test("the CLI's --part help lists the library's ITEM_PARTS", async () => {
   const r = await parity(["item", "--help"], () => undefined);
   const help = r.cli.out.replace(/\s+/g, " ");
   assert.ok(help.includes(ITEM_PARTS.join(" | ")), help);
-  assert.ok(help.includes(`(${ITEM_LANG_PARTS.join("/")})`), help);
+  assert.ok(help.includes(`(parts ${ITEM_LANG_PARTS.join("/")})`), help);
+  assert.ok(help.includes("language for labels: de, en, fr"), help);
 });
