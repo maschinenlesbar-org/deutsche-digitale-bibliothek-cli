@@ -21,8 +21,8 @@ The v2 read routes are **public — no API key**. Just run the commands.
 | `--max-response-bytes <n>` | cap the response body size in bytes (0 = unlimited; default 100 MiB) |
 | `--compact` | print JSON on a single line (for piping to `jq`) |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [ddb.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
-| `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; any other value that starts with a dash is refused as the next option, a usage error — write `./-name` for such a file; refuses to overwrite an existing file (a dangling link too) unless `--force`, and a directory always — checked before any request, a usage error, exit 2; the file replaces the old one only once complete, so a write that fails part-way (a full disk) leaves the old file as it was and no half-written one, exit 1) |
-| `--force` | overwrite the `--output` file if it already exists (needs `--output`) |
+| `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; any other value that starts with a dash is refused as the next option, a usage error — write `./-name` for such a file; refuses to overwrite an existing file (a dangling link too) unless `--force`, a directory always, and a file whose directory is missing, not a directory or not writable — checked before any request, a usage error, exit 2; the file replaces the old one only once complete, so a write that fails part-way (a full disk) leaves the old file as it was and no half-written one, exit 1, and a signal during the write leaves no half-written or empty file, exit 130/143/129; a device, a FIFO or a descriptor path such as `/dev/null`, `/dev/stdout` or `>(…)` is written in place, no `--force` needed) |
+| `--force` | overwrite the `--output` file if it already exists (needs `--output`); through a symlink it writes the file the link names, and creates it if the link dangles |
 | `-V, --version` / `-h, --help` | version / help |
 
 An option that takes one value may be given once: a second `--rows`, `--sort`,
@@ -225,7 +225,7 @@ ddb --output goethe.json search Goethe --rows 100
 |---|---|
 | `0` | success (help/version included); an empty result also exits 0 |
 | `1` | API/logical error, or a catch-all (includes an unexpected `403`) |
-| `2` | usage error (bad flags, unknown command, wrong-length item id, bad `--base-url`, an `-o` path that exists without `--force` or is a directory) |
+| `2` | usage error (bad flags, unknown command, wrong-length item id, bad `--base-url`, an `-o` path that exists without `--force`, is a directory, or lies in a missing or read-only directory) |
 | `4` | HTTP 404 (not found) |
 | `6` | network / transport failure (DNS, connection, timeout, response size-cap) |
 

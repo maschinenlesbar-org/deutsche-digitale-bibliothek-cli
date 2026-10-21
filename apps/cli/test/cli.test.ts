@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import { DdbClient } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
 import { credentialsIn } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultIO, type CliDeps } from "../src/cli/io.js";
@@ -1046,4 +1046,117 @@ test("terminal controls are escaped in chunks: the same text as one pass, across
     (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
   assert.equal(out[0], expected);
   assert.deepEqual(JSON.parse(out[0]!), { text });
+});
+
+
+// ---- -o targets (T1: decisions D1 and D5 of the 2026-10-21 round), real files -------------
+
+/** makeCli with the real -o seam (`defaultIO.checkOutput`/`writeFile`). */
+function realFilesCli(responder: (req: HttpRequest) => HttpResponse = () => jsonResponse(fx.solrExact)) {
+  const cli = makeCli(responder);
+  cli.deps.io.checkOutput = defaultIO.checkOutput;
+  cli.deps.io.writeFile = defaultIO.writeFile;
+  return cli;
+}
+
+/** Run `body` with a fresh temp directory that is always removed. */
+async function inTempDir(body: (dir: string) => Promise<void>): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "ddb-cli-t1-"));
+  try {
+    await body(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("--force to a new path creates the file; through a dangling link it creates the file the link names (T1, D1)", async () => {
+  await inTempDir(async (dir) => {
+    const fresh = join(dir, "fresh.json");
+    assert.equal(await run(["--compact", "-o", fresh, "--force", "search", "x"], realFilesCli().deps), 0);
+    assert.deepEqual(JSON.parse(readFileSync(fresh, "utf8")), fx.solrExact);
+    // "--force writes through a symlink", also when the file it points at doesn't exist yet; a
+    // relative link is resolved from the link's directory, through a chain of links.
+    mkdirSync(join(dir, "sub"));
+    symlinkSync("sub/nowhere.json", join(dir, "hop.json"));
+    const dangling = join(dir, "dangling.json");
+    symlinkSync("hop.json", dangling);
+    assert.equal(await run(["--compact", "-o", dangling, "--force", "search", "x"], realFilesCli().deps), 0);
+    assert.ok(lstatSync(dangling).isSymbolicLink(), "the link stays a link");
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, "sub", "nowhere.json"), "utf8")), fx.solrExact);
+    assert.deepEqual(readdirSync(dir).sort(), ["dangling.json", "fresh.json", "hop.json", "sub"]);
+    assert.deepEqual(readdirSync(join(dir, "sub")), ["nowhere.json"], "no temporary file is left");
+  });
+});
+
+test("a target whose directory can't take the file is a usage error before any request (T1, D5)", async () => {
+  await inTempDir(async (dir) => {
+    const file = join(dir, "file.json");
+    writeFileSync(file, "x");
+    const readOnly = join(dir, "ro");
+    mkdirSync(readOnly);
+    chmodSync(readOnly, 0o555);
+    const loop = join(dir, "loop.json");
+    symlinkSync("loop.json", loop);
+    const danglingIntoMissing = join(dir, "away.json");
+    symlinkSync("missing/x.json", danglingIntoMissing);
+    const cases: Array<[string[], RegExp]> = [
+      [["-o", join(dir, "missing", "x.json")], /the directory ".*missing" does not exist\./],
+      [["-o", join(file, "x.json")], /".*file\.json" is not a directory\./],
+      [["-o", join(readOnly, "x.json")], /no permission to create files in ".*ro"\./],
+      [["-o", danglingIntoMissing, "--force"], /the directory ".*missing" does not exist\./],
+      [["-o", loop, "--force"], /too many levels of symbolic links/],
+    ];
+    try {
+      for (const [argv, message] of cases) {
+        const cli = realFilesCli();
+        assert.equal(await run([...argv, "search", "x"], cli.deps), 2, argv.join(" "));
+        assert.equal(cli.mt.calls.length, 0, `${argv.join(" ")} sent a request`);
+        const err = untimed(cli.err.join("\n"));
+        assert.match(err, /^ERROR \[ddb\.output\] Cannot write to "/, argv.join(" "));
+        assert.match(err, message, argv.join(" "));
+      }
+    } finally {
+      chmodSync(readOnly, 0o755);
+    }
+  });
+});
+
+test("a file name of up to 255 bytes is written: the temporary name stays within NAME_MAX (T1, D5)", async () => {
+  await inTempDir(async (dir) => {
+    for (const name of [`${"x".repeat(250)}.json`, `${"ü".repeat(125)}.json`, `${"😀".repeat(62)}.json`]) {
+      assert.ok(Buffer.byteLength(name) <= 255, name);
+      const path = join(dir, name);
+      const cli = realFilesCli();
+      assert.equal(await run(["--compact", "-o", path, "search", "x"], cli.deps), 0, cli.err.join("\n"));
+      assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), fx.solrExact);
+      assert.equal(await run(["--compact", "-o", path, "--force", "search", "x"], realFilesCli().deps), 0);
+    }
+    assert.equal(readdirSync(dir).length, 3, "no temporary file is left");
+  });
+});
+
+test("a stream target (/dev/null) needs no --force and is written in place, JSON and raw parts (T1, D5)", async () => {
+  for (const argv of [["-o", "/dev/null", "search", "x"], ["-o", "/dev/null", "--force", "search", "x"], ["-o", "/dev/null", "item", ID, "--part", "edm"]]) {
+    const cli = realFilesCli((req) => (req.url.includes("/edm") ? rawResponse("<rdf/>", "application/rdf+xml") : jsonResponse(fx.solrExact)));
+    assert.equal(await run(argv, cli.deps), 0, cli.err.join("\n"));
+    assert.equal(cli.mt.calls.length, 1);
+    assert.match(untimed(cli.err.join("\n")), /^INFO  \[ddb\.output\] Wrote \d+ bytes to \/dev\/null$/);
+  }
+  assert.ok(statSync("/dev/null").isCharacterDevice(), "/dev/null is still the device");
+});
+
+test("a write the file system refuses names the file, not the temporary one; exit 1 (T1, D5)", async () => {
+  await inTempDir(async (dir) => {
+    const sub = join(dir, "gone");
+    mkdirSync(sub);
+    const path = join(sub, "out.json");
+    // The directory is there when -o is checked, and gone when the answer is written.
+    const cli = realFilesCli(() => {
+      rmSync(sub, { recursive: true });
+      return jsonResponse(fx.solrExact);
+    });
+    assert.equal(await run(["-o", path, "search", "x"], cli.deps), 1);
+    assert.equal(cli.err.length, 1);
+    assert.match(untimed(cli.err[0]!), new RegExp(`^ERROR \\[ddb\\.output\\] Could not write to ".*out\\.json": ENOENT: no such file or directory$`));
+  });
 });

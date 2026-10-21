@@ -188,7 +188,7 @@ collect every value.
 | Code | Meaning |
 | --- | --- |
 | `0` | Success (also `--help` / `--version`) |
-| `2` | Bad usage / invalid argument, or an `-o` path that exists (without `--force`) or is a directory (nothing was sent) |
+| `2` | Bad usage / invalid argument, or an `-o` path that exists (without `--force`), is a directory or lies in a directory that is missing or not writable (nothing was sent) |
 | `4` | Not found (`404` from the API) |
 | `6` | Network / transport failure (DNS, connection, timeout, size cap) |
 | `1` | Any other runtime error (including an unexpected `403`, or a `414` for a query or filter list too long for a URL) |
@@ -225,8 +225,8 @@ These may be given **before or after** the command, e.g.
 | `-h, --help` | Show help for the program or a command |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [ddb.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
-| `-o, --output <file>` | Write output to this file instead of stdout (`-` = stdout; any other value that starts with a dash is refused as the next option, a usage error — write `./-name` for such a file; refuses to overwrite an existing file (a dangling link too) unless `--force`, and a directory always, checked before any request is made: a usage error, exit `2`. The new file replaces the old one only once it is complete, so a write that fails part-way, a full disk, leaves the old file as it was and no half-written one) |
-| `--force` | Overwrite the `--output` file if it already exists (needs `--output`) |
+| `-o, --output <file>` | Write output to this file instead of stdout (`-` = stdout; any other value that starts with a dash is refused as the next option, a usage error — write `./-name` for such a file; refuses to overwrite an existing file (a dangling link too) unless `--force`, a directory always, and a file whose directory is missing, not a directory or not writable, checked before any request is made: a usage error, exit `2`. The new file replaces the old one only once it is complete, so a write that fails part-way, a full disk, leaves the old file as it was and no half-written one; Ctrl-C or a SIGTERM/SIGHUP during the write leaves neither a half-written nor an empty file (exit 130, 143, 129). A device, a FIFO or a descriptor path (`/dev/null`, `/dev/stdout`, `>(gzip > x.gz)`) is written in place and needs no `--force`) |
+| `--force` | Overwrite the `--output` file if it already exists (needs `--output`); through a symlink it writes the file the link names, and creates it if the link dangles |
 | `--base-url <url>` | API base URL (default `https://api.deutsche-digitale-bibliothek.de/2`). A `user:password@` in it is sent as Basic auth and never printed: every message, usage errors included, shows `***@`, and echoed back by a server (the `Basic` value, `user:password`, the password) it is shown as `***`; write a literal `%` in it as `%25`. A plain `http:` URL to a host other than loopback (`localhost`, `127.0.0.0/8`, `::1`) logs one warning per run on stderr (a `WARN` record of `ddb.http`: `… sent unencrypted to <host> (http:, not https:)`), naming the credentials when the URL carries some (never their value); stdout and the exit code are unchanged |
 | `--timeout <ms>` | Per-request timeout (default `30000`; at most `2147483647`) |
 | `--user-agent <ua>` | `User-Agent` header value |

@@ -565,14 +565,24 @@ as `true`/`false`, and encodes spaces as `%20` (not `+`).
 (`out`/`err`/`writeFile`/`outBinary`, optional `checkOutput`/`isTerminal`). Lets the
 whole CLI run in tests with a mocked client and captured output — no subprocess.
 `checkOutput` runs in `action()` before the client is built: an existing `-o` path
-(without `--force`; a dangling link too) or a directory is a usage error there
-(`OutputRefusedError`, a `DdbUsageError`: exit 2, an ERROR of `ddb.output`) with the message
-`writeFile` would raise, so a refused write costs no request. `writeFile` is atomic: without
-`--force` it claims the name with an exclusive create (so a file that appears meanwhile is still
-refused, an `OutputError`, exit 1), writes a temporary file beside the target and renames it over
-it; a write that fails part-way removes both, so no half-written file and no claimed name is left,
-and with `--force` the old file stays as it was. `--force` keeps the old file's mode and writes
-through a symlink to the file it points at. `-o -` (stdout) skips both.
+(without `--force`; a dangling link too), a directory, and a file whose directory is missing, not
+a directory or not writable (or a link loop with `--force`: "Cannot write to "<path>": the
+directory "<dir>" does not exist.") are a usage error there (`OutputRefusedError`, a
+`DdbUsageError`: exit 2, an ERROR of `ddb.output`), so a refused write costs no request. A
+**stream** — a character device (`/dev/null`), a FIFO, a socket, or a descriptor path
+(`/dev/stdout`, `/dev/stderr`, `/dev/fd/N`, `/proc/self/fd/N`, as `>(…)` makes) — needs no
+`--force` and is written in place (opened for append, every byte written), with no claim and no
+temporary file: a rename over `/dev/null` failed, and one over a FIFO turned it into a file
+its reader never saw. A regular file is written atomically: without
+`--force` `writeFile` claims the name with an exclusive create (so a file that appears meanwhile is still
+refused, an `OutputError`, exit 1), writes a temporary file beside the target
+(`.<name>.<pid>-<hex>.tmp`, the name shortened to stay within NAME_MAX, 255 bytes) and renames it
+over it; a write that fails part-way removes both, so no half-written file and no claimed name is
+left, and with `--force` the old file stays as it was. From the first file write on, SIGINT,
+SIGTERM and SIGHUP remove the claim and the temporary file, then exit 130, 143 or 129. `--force`
+keeps the old file's mode and writes through a symlink, or a chain of them, to the file it names
+(`linkTarget`), creating that file when the link dangles; the link stays. An error names the
+user's path, never the temporary file. `-o -` (stdout) skips both.
 
 **Error types.** [`errors.ts`](packages/client/src/errors.ts): `DdbApiError` (non-2xx,
 carries `status`/`apiName`/`detail`/`url`/`method`/`body`, with `isRetryable`),
@@ -633,8 +643,13 @@ the CLI is in `apps/cli/test/`.
   absolute GitHub URL), P23 the stderr log format, P24 the input corpus (the query and
 `--filter` go out trimmed and in NFC or are refused; an item id in its canonical form or refused),
 P25 the response corpus (a number a double can't carry exactly, or an empty answer, is an error),
-P26 `-o` integrity (a write cut short under `ulimit -f` leaves the old file and no half-written one;
-an existing file without `--force` is refused before any request; both start the built bin).
+P26 `-o` integrity (a write cut short under `ulimit -f` leaves the old file and no half-written one,
+and a cut-short redirected stdout is an error; an existing file without `--force` and a missing
+directory are refused before any request; `/dev/null`, a FIFO and `/dev/stdout` are written in
+place; `--force` through a dangling link creates the file it names; a signal leaves no claim and no
+temporary file; all start the built bin), P27 big and odd answers (a large flat answer and 20 MB of
+DEL print within a small heap, 90 MB of DEL is an ERROR record, a lone surrogate or invalid bytes
+become U+FFFD with a WARN).
 
 ## Continuous integration
 
