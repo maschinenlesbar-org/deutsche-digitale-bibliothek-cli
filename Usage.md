@@ -149,7 +149,8 @@ selects which component to fetch — most are JSON, a few are XML / a plain file
 and print **raw** (so `> file.xml` and piping keep them intact). With `-o`, a
 redirect or a pipe you get the upstream bytes exactly — any charset, CRs included,
 nothing appended; only on a terminal is the body decoded (by its declared charset, so a
-Latin-1 record shows its umlauts) and control characters removed first:
+Latin-1 record shows its umlauts) and control characters and bidi controls (which reorder
+what a terminal shows) removed first:
 
 | `--part` | Returns | Format |
 |---|---|---|

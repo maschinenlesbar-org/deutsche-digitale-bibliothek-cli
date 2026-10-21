@@ -445,7 +445,7 @@ apps/cli/src/cli/
   `DdbParseError` naming it.
   The CLI writes those bytes unchanged with `-o` and to a non-terminal stdout
   (`CliIO.isTerminal()` false → `outBinary`); only a terminal gets the decoded text
-  with control characters stripped.
+  with control characters and bidi controls stripped (an override reordered what it showed).
 - JSON output (stdout and the `-o` file) escapes what `JSON.stringify` leaves raw although a
   terminal acts on it: DEL, C1 (U+0080–U+009F) and the bidi controls (`isBidiControl`: U+061C,
   U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) become `\uXXXX`, the same JSON

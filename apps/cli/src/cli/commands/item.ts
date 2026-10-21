@@ -16,7 +16,7 @@ import {
   type ItemOptions,
   type ItemPart,
 } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client";
-import { sanitizeServerText } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/engine";
+import { isBidiControl, sanitizeServerText } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/engine";
 import { action, parseSolrInt, renderJson, writeOutputFile } from "../shared.js";
 
 /** commander value-parser for --part: the library's rule (itemPartProblem). */
@@ -31,6 +31,19 @@ function parseLang(value: string): string {
   const problem = langProblem(value);
   if (problem !== undefined) throw new InvalidArgumentError(problem);
   return value;
+}
+
+/** Server text for a terminal: without C0/C1 controls (tab and newline kept) and bidi controls. */
+function forTerminal(text: string): string {
+  const clean = sanitizeServerText(text);
+  let out = "";
+  let from = 0;
+  for (let i = 0; i < clean.length; i++) {
+    if (!isBidiControl(clean.charCodeAt(i))) continue;
+    out += clean.slice(from, i);
+    from = i + 1;
+  }
+  return from === 0 ? clean : out + clean.slice(from);
 }
 
 export function registerItemCommand(program: Command, deps: CliDeps): void {
@@ -89,7 +102,9 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
  * The body is attacker-controlled (a hostile `--base-url` or a MITM'd upstream).
  * Only when stdout is a terminal is it decoded and stripped of C0/C1 control bytes
  * (keeping tab/newline) so it can't drive ANSI/OSC escape sequences into the
- * user's shell (DDB-01). The XML structure is not altered. Bytes that are not valid in the
+ * user's shell (DDB-01), and of the bidi controls, which reorder what the terminal shows
+ * ("Trojan Source"; JSON output and log records escape them). The XML structure is not
+ * altered. Bytes that are not valid in the
  * charset are shown as U+FFFD there, with a WARN of `ddb.api` saying how many.
  */
 function writeRaw(
@@ -114,6 +129,6 @@ function writeRaw(
           "in its charset and replaced with U+FFFD for the terminal; -o or a pipe gets the exact bytes.",
       );
     }
-    deps.io.out(sanitizeServerText(text).replace(/\n$/, ""));
+    deps.io.out(forTerminal(text).replace(/\n$/, ""));
   }
 }

@@ -1181,3 +1181,21 @@ test("item --lang outside de, en, fr is a usage error (exit 2) before any reques
   assert.equal(await run(["item", ID, "--lang", " de "], padded.deps), 0);
   assert.equal(queryOf(padded.mt.last()).get("lang"), "de");
 });
+
+test("a raw XML part shown on a terminal loses its bidi controls, as it loses C0/C1; a pipe gets the bytes (Bug 02-1)", async () => {
+  // U+202E and U+2066 reached the terminal and reordered what it showed ("Trojan Source").
+  const RLO = String.fromCharCode(0x202e);
+  const LRI = String.fromCharCode(0x2066);
+  const ESC = String.fromCharCode(0x1b);
+  const xml = `<a>abc${RLO}dcba ${LRI}x${ESC}[31m</a>`;
+  const tty = makeCli(() => rawResponse(xml, "application/rdf+xml"));
+  tty.deps.io.isTerminal = () => true;
+  assert.equal(await run(["item", ID, "--part", "edm"], tty.deps), 0);
+  assert.deepEqual(tty.out, ["<a>abcdcba x[31m</a>"]);
+  const pipe = makeCli(() => rawResponse(xml, "application/rdf+xml"));
+  const binary: Buffer[] = [];
+  pipe.deps.io.outBinary = (d) => binary.push(d);
+  pipe.deps.io.isTerminal = () => false;
+  assert.equal(await run(["item", ID, "--part", "edm"], pipe.deps), 0);
+  assert.equal(Buffer.concat(binary).toString("utf8"), xml);
+});
