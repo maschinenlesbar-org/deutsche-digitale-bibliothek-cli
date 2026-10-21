@@ -723,7 +723,10 @@ of the log in either format. `CliDeps.now` makes the timestamps testable. stdout
 happens outside `run()`, in the bin shim, is logged too, through `processLogger(argv)`
 (the format argv asks for, the run's redaction): a stdout write error
 (`handleOutputErrors`, e.g. EBADF) is an ERROR of `ddb.output`, `Could not write to
-stdout: …`, and exits 1; Node's own process warnings (`NODE_TLS_REJECT_UNAUTHORIZED=0`)
+stdout: …`, and exits 1. When stdout is a regular file (`> out.json`), `stdoutWriter` writes every
+byte with `writeSync` in a loop (Node's stream ignored a short count, so a file-size limit or a
+full disk cut the output short with exit 0); a failure (EFBIG, ENOSPC) is that same ERROR and
+exit 1, never "success". A pipe or a terminal goes through the stream as before; Node's own process warnings (`NODE_TLS_REJECT_UNAUTHORIZED=0`)
 are WARN records of `ddb.cli`: the bin shim installs `installWarningLog`, which removes
 Node's default `warning` listener and logs `(node) <name>: <message>`. In `defaultDeps` a
 record waits for stdout (`stderrAfterStdout`): it is held while stdout has a backlog and
