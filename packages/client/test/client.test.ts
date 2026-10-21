@@ -286,7 +286,7 @@ test("a body is decoded by its declared charset; an unknown one is a parse error
   }
   // A UTF-8 BOM is dropped rather than failing JSON.parse.
   const bom = new DdbClient({
-    transport: async () => ({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from("﻿" + JSON.stringify({ response: { numFound: 0, start: 0, docs: [] } })) }),
+    transport: async () => ({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from("\ufeff" + JSON.stringify({ response: { numFound: 0, start: 0, docs: [] } })) }),
   });
   await assert.doesNotReject(bom.search({ query: "x" }));
   const bogus = new DdbClient({ transport: async () => ({ status: 200, headers: { "content-type": "application/json; charset=x-bogus" }, body: Buffer.from("{}") }) });
@@ -566,6 +566,19 @@ test("every answer error of search, item and version names the request, method a
       assert.ok(err instanceof DdbParseError, label);
       assert.equal(err.message.startsWith(message.split(": ")[0]! + ": "), true, `${label}: ${err.message}`);
       assert.ok(err.message.startsWith(message), `${label}: ${err.message}`);
+      return true;
+    });
+  }
+});
+
+test("a refusal quotes the value visibly: invisible and format characters escaped, never raw (T10, D10, 2026-10-21)", async () => {
+  const c = new DdbClient({ transport: makeMockTransport(() => jsonResponse({})).transport });
+  for (const key of ["fil\u200bters", "a\u202eb", "x\u00ady", "q\u2028"]) {
+    await assert.rejects(c.search({ query: "x", [key]: ["y"] } as unknown as SearchParams), (err: unknown) => {
+      assert.ok(err instanceof DdbValidationError, key);
+      const ch = [...key].find((x) => /[\u200b\u202e\u00ad\u2028]/.test(x))!;
+      assert.ok(!err.message.includes(ch), `${JSON.stringify(key)}: raw in ${err.message}`);
+      assert.ok(err.message.includes(`\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`), err.message);
       return true;
     });
   }

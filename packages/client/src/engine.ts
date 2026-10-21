@@ -24,6 +24,7 @@ import {
   cutForMessage,
   echoedCredentialForms,
   messageUrl,
+  quoteValue,
   redactCredentials,
   redactSecrets,
   redactUrl,
@@ -690,8 +691,8 @@ export class RequestEngine {
     }
     this.#defaultHeaders = { ...(defaultHeaders as Record<string, string>) };
     for (const [name, value] of Object.entries(this.#defaultHeaders)) {
-      assertValid(`defaultHeaders name ${JSON.stringify(cutForMessage(name))}`, name, headerNameProblem);
-      assertValid(`defaultHeaders[${JSON.stringify(cutForMessage(name))}]`, value, headerValueProblem);
+      assertValid(`defaultHeaders name ${quoteValue(name)}`, name, headerNameProblem);
+      assertValid(`defaultHeaders[${quoteValue(name)}]`, value, headerValueProblem);
     }
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, 30_000, MAX_TIMEOUT_MS);
     this.maxRetries = intOption("maxRetries", options.maxRetries, 2, MAX_RETRIES);

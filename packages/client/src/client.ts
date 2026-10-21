@@ -13,7 +13,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
 import { RequestEngine, bigIntegerKeysOption, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
-import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage } from "./errors.js";
+import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage, quoteValue } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, normalizeText, pathNameProblem } from "./validate.js";
 import {
@@ -94,10 +94,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function invalid(name: string, expected: string, value: unknown): DdbValidationError {
-  // A string is quoted (cut at 50 characters), a number shown, anything else named by type.
+  // A string is quoted visibly (cut at 50 characters), a number shown, anything else named by type.
   const shown =
     typeof value === "string"
-      ? JSON.stringify(cutForMessage(value, 50))
+      ? quoteValue(value, 50)
       : typeof value === "number"
         ? String(value)
         : value === null
@@ -175,7 +175,7 @@ export const ITEM_OPTION_KEYS = Object.freeze(["lang", "rows", "offset"] as cons
 function assertKnownKeys(name: string, value: object, allowed: readonly string[]): void {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
-      const shown = JSON.stringify(cutForMessage(key, 50));
+      const shown = quoteValue(key, 50);
       throw new DdbValidationError(`Invalid ${name}: unknown key ${shown}; expected one of ${allowed.join(", ")}.`);
     }
   }

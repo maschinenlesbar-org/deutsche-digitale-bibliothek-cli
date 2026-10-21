@@ -987,7 +987,7 @@ test("printed JSON escapes the bidi controls, on stdout and in the -o file (kit 
   const printed = cli.out.join("\n");
   assert.ok(printed.includes("a\\u202eb"), printed);
   assert.ok(printed.includes("\\u061c\\u200e\\u200f\\u202a\\u202e\\u2066\\u2069"), printed);
-  assert.ok(!/[؜‎‏‪-‮⁦-⁩]/.test(printed), "a raw bidi control was printed");
+  assert.ok(!/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(printed), "a raw bidi control was printed");
   assert.deepEqual(JSON.parse(printed), body);
   const file = makeCli(() => jsonResponse(body));
   assert.equal(await run(["item", ID, "-o", "out.json"], file.deps), 0);
@@ -1030,7 +1030,7 @@ test("item raw XML with bytes invalid in its charset: exact to a pipe, U+FFFD on
   const tty = makeCli(() => rawResponse(body, "application/xml"));
   tty.deps.io.isTerminal = () => true;
   assert.equal(await run(["item", ID, "--part", "edm"], tty.deps), 0);
-  assert.deepEqual(tty.out, ["<a>�</a>"]);
+  assert.deepEqual(tty.out, ["<a>\ufffd</a>"]);
   assert.match(untimed(tty.err.join("\n")), /^WARN  \[ddb\.api\] 1 character of the answer was not valid text in its charset and replaced with U\+FFFD for the terminal/);
 });
 
@@ -1042,7 +1042,7 @@ test("terminal controls are escaped in chunks: the same text as one pass, across
   const text = ["a".repeat(65535), DEL, C1, "b".repeat(65534), RLO, DEL.repeat(70000), "ü😀", C1].join("");
   const { deps, out } = makeCli(() => jsonResponse({}));
   renderJson(deps, { compact: true }, { text });
-  const expected = JSON.stringify({ text }).replace(/[\u007f-\u009f؜‎‏‪-‮⁦-⁩]/g,
+  const expected = JSON.stringify({ text }).replace(/[\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
     (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
   assert.equal(out[0], expected);
   assert.deepEqual(JSON.parse(out[0]!), { text });
@@ -1159,4 +1159,15 @@ test("a write the file system refuses names the file, not the temporary one; exi
     assert.equal(cli.err.length, 1);
     assert.match(untimed(cli.err[0]!), new RegExp(`^ERROR \\[ddb\\.output\\] Could not write to ".*out\\.json": ENOENT: no such file or directory$`));
   });
+});
+
+test("commander's echo of a rejected value shows invisible and format characters escaped, never raw (T10, D10)", async () => {
+  for (const value of ["1\u200b", "5\u202e", "x\u00ad"]) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    assert.equal(await run(["search", "x", "--rows", value], cli.deps), 2);
+    const err = cli.err.join("\n");
+    const ch = value.slice(1);
+    assert.ok(!err.includes(ch), `${JSON.stringify(value)}: raw in ${err}`);
+    assert.ok(err.includes(`\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`), err);
+  }
 });

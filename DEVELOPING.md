@@ -144,7 +144,11 @@ its own parameters before any request: a `params`/`opts` that is not an object, 
 or non-string `query`/`lang`/`sort`/filter, a non-integer
 or negative `rows`/`start`/`offset` (at most `SOLR_MAX_INT`, 2^31−1), a `facetLimit` below −1 or
 without `facetFields` throw a `DdbValidationError` (`Invalid <name>: expected …, got …`;
-a value is quoted only when it is a short string, anything else is named by type).
+a value is quoted only when it is a short string, anything else is named by type). A refusal
+quotes a value visibly (`quoteValue`): DEL, C1, every format character (a zero-width space, a
+soft hyphen, a bidi control), U+2028/U+2029 and a lone surrogate are written as `\uXXXX`, so
+`"a\u200bb"` never reads as `"ab"`; commander's own echo of a rejected value is escaped the
+same way in its log record.
 No rejected input ever surfaces as a raw `TypeError`
 (`apps/cli/test/conformance-p8-p9-p13-responses-and-errors.test.ts`).
 

@@ -57,7 +57,7 @@ function writeCommanderErr(command: Command, deps: CliDeps, state: { errorLogged
   if (text.trim() === "") return;
   if (text.startsWith("error: ")) {
     state.errorLogged = true;
-    log.error("cli", text.slice("error: ".length).replace(/\n(\(Did you mean .*\?\))$/, " $1"));
+    log.error("cli", escapeCommanderError(text.slice("error: ".length)).replace(/\n(\(Did you mean .*\?\))$/, " $1"));
     return;
   }
   if (!state.errorLogged) {
@@ -65,6 +65,33 @@ function writeCommanderErr(command: Command, deps: CliDeps, state: { errorLogged
     log.error("cli", `missing command: \`${commandPath(command)} <subcommand>\``);
   }
   for (const line of text.split("\n")) if (line.trim() !== "") log.info("cli", line.trimEnd());
+}
+
+/**
+ * `text` with every control character but TAB, and every Unicode format character (a zero-width
+ * space, a soft hyphen, a bidi control), written as an escape: commander echoes a rejected value
+ * as typed (`argument 'a\u200bb' is invalid`), and the raw character is invisible or reorders the
+ * line. LF and CR as `\n`/`\r`, the rest as `\uXXXX`, per UTF-16 unit.
+ */
+function escapeTerminalText(text: string): string {
+  return text.replace(/[\u0000-\u0008\u000a-\u001f\u007f-\u009f]|\p{Cf}/gu, (ch) =>
+    ch === "\n"
+      ? "\\n"
+      : ch === "\r"
+        ? "\\r"
+        : Array.from({ length: ch.length }, (_, i) => `\\u${ch.charCodeAt(i).toString(16).padStart(4, "0")}`).join(""),
+  );
+}
+
+/**
+ * escapeTerminalText for one commander error message, except for the `\n(Did you mean …?)`
+ * line commander appends after an unknown command or option, which is built from this CLI's own
+ * names and can only end the message.
+ */
+function escapeCommanderError(message: string): string {
+  const hint = /\n\(Did you mean [^\n]*\?\)$/.exec(message);
+  if (hint === null) return escapeTerminalText(message);
+  return escapeTerminalText(message.slice(0, hint.index)) + hint[0];
 }
 
 /**
@@ -169,6 +196,7 @@ export function redactionFor(argv: readonly string[]): Redaction {
     for (const secret of credentialsIn(source)) {
       secrets.add(secret);
       secrets.add(sanitizeServerText(secret));
+      secrets.add(escapeTerminalText(secret));
       secrets.add(JSON.stringify(secret).slice(1, -1));
       // What a server echoes back: the Basic value and the decoded user:password on
       // stdout and stderr, the password alone (it may well occur in the data) on stderr.
