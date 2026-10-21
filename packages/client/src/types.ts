@@ -128,6 +128,11 @@ export interface ItemResult {
    */
   bytes?: Buffer;
   /**
+   * Set with `text` when bytes in the body were not valid in its charset: how many characters
+   * `text` has replaced with U+FFFD. `bytes` holds them as they came.
+   */
+  replaced?: number;
+  /**
    * Set when the item has no such component of its own and the API pointed to an
    * ancestor's (a section of a digitised book, a unit of an archive finding aid; seen for
    * `source-record`): the id of the item whose component this is. The record is then the

@@ -151,7 +151,8 @@ its digits, `"_version_": "1858054135406919680"`. Errors and diagnostics
 
 Each line on stderr is a **log record**: a timestamp (UTC), a level (`ERROR`, `WARN`,
 `INFO`) and a topic, the program and the area it comes from (`ddb.cli` for usage
-errors, `ddb.api` for the API's answers, a malformed one included, and the paging notes, `ddb.http` for the
+errors, `ddb.api` for the API's answers, a malformed one included, the paging notes and a WARN
+when characters of an answer were not valid text and were replaced with U+FFFD, `ddb.http` for the
 connection, `ddb.output` for `-o` and a failed write to stdout). By default it is written log4j style; `--log-format
 jsonl` writes one JSON object per line instead. A record is always one line: a line
 break, a control character or a bidi control in a message (a server's text, a value you

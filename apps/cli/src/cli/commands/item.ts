@@ -62,7 +62,7 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
         if (result.text !== undefined) {
           // XML / BIB file component: emit the raw body (no JSON quoting).
           const bytes = result.bytes ?? Buffer.from(result.text, "utf8");
-          writeRaw(deps, global.output, result.text, bytes, global.force);
+          writeRaw(deps, global.output, result.text, bytes, global.force, result.replaced);
         } else {
           renderJson(deps, global, result.json);
         }
@@ -79,7 +79,8 @@ export function registerItemCommand(program: Command, deps: CliDeps): void {
  * The body is attacker-controlled (a hostile `--base-url` or a MITM'd upstream).
  * Only when stdout is a terminal is it decoded and stripped of C0/C1 control bytes
  * (keeping tab/newline) so it can't drive ANSI/OSC escape sequences into the
- * user's shell (DDB-01). The XML structure is not altered.
+ * user's shell (DDB-01). The XML structure is not altered. Bytes that are not valid in the
+ * charset are shown as U+FFFD there, with a WARN of `ddb.api` saying how many.
  */
 function writeRaw(
   deps: CliDeps,
@@ -87,6 +88,7 @@ function writeRaw(
   text: string,
   bytes: Buffer,
   force: boolean | undefined,
+  replaced: number | undefined,
 ): void {
   if (output) {
     writeOutputFile(deps, output, bytes, force);
@@ -94,6 +96,14 @@ function writeRaw(
   } else if (deps.io.isTerminal?.() === false) {
     deps.io.outBinary(bytes);
   } else {
+    // Only the terminal gets decoded text: say when it differs from the bytes (D2).
+    if (replaced !== undefined) {
+      logOf(deps).warn(
+        "api",
+        `${replaced} ${replaced === 1 ? "character" : "characters"} of the answer ${replaced === 1 ? "was" : "were"} not valid text ` +
+          "in its charset and replaced with U+FFFD for the terminal; -o or a pipe gets the exact bytes.",
+      );
+    }
     deps.io.out(sanitizeServerText(text).replace(/\n$/, ""));
   }
 }

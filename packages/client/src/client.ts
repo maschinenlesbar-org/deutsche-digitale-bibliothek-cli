@@ -442,8 +442,9 @@ export class DdbClient {
     }
     // The raw XML/file parts keep their exact `bytes`; `text` falls back to UTF-8 for a charset
     // label Node doesn't know.
-    const text = decodeBody(res.data, res.contentType, request, "lenient");
-    return { part, contentType: res.contentType, text, bytes: res.data, ...heldBy };
+    // They are delivered as their exact bytes; `text` says how many characters it replaced.
+    const { text, replaced } = decodeBody(res.data, res.contentType, request, "lenient");
+    return { part, contentType: res.contentType, text, bytes: res.data, ...(replaced > 0 ? { replaced } : {}), ...heldBy };
   }
 
   /**

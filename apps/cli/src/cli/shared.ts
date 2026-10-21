@@ -296,6 +296,8 @@ export function action(
       ...toEngineOptions(global),
       warn: (message) => logOf(deps).warn("http", message.replace(/^warning: /i, "")),
       onRetry: (event) => logOf(deps).warn("http", retryMessage(event)),
+      // An answer delivered changed (invalid text replaced with U+FFFD) is never silent.
+      onWarning: (message) => logOf(deps).warn("api", message),
     });
     await fn({ client, global, opts: command.opts() }, positionals);
   };

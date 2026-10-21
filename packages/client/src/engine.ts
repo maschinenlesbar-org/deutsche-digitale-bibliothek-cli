@@ -175,6 +175,15 @@ export interface EngineOptions {
    */
   onRetry?: ((event: RetryEvent) => void) | undefined;
   /**
+   * Called with a one-line warning about an answer the engine delivered changed: characters
+   * that were not valid text — invalid bytes in the declared (or default UTF-8) charset, or a
+   * lone surrogate written as a JSON escape — replaced with U+FFFD. The message names the
+   * request and the count (`GET <url>: 2 characters of the answer were not valid text …`).
+   * Without it the replacement is silent. A throw is swallowed. The CLI logs it as a `WARN`
+   * record of `ddb.api` (`warn` above is for the connection, `ddb.http`).
+   */
+  onWarning?: ((message: string) => void) | undefined;
+  /**
    * Member names whose number values are known integers past 2^53 that a double can't carry
    * (Solr's 64-bit `_version_`). The value of a declared member, whatever its size, is
    * delivered as its exact literal as written, as a JSON string (`"_version_":5` becomes
@@ -646,6 +655,7 @@ export class RequestEngine {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly onRetry: ((event: RetryEvent) => void) | undefined;
   private readonly warn: (message: string) => void;
+  private readonly onWarning: ((message: string) => void) | undefined;
   /** `EngineOptions.bigIntegerKeys`, copied. */
   readonly bigIntegerKeys: ReadonlySet<string>;
 
@@ -696,7 +706,35 @@ export class RequestEngine {
     this.onRetry =
       options.onRetry === undefined ? undefined : functionOption("onRetry", options.onRetry, () => {});
     this.warn = functionOption("warn", options.warn, () => {});
+    this.onWarning =
+      options.onWarning === undefined ? undefined : functionOption("onWarning", options.onWarning, () => {});
     this.bigIntegerKeys = bigIntegerKeysOption(options.bigIntegerKeys);
+  }
+
+  /**
+   * Tell `onWarning` that `replaced` characters of the answer to `request` were replaced with
+   * U+FFFD (nothing when none were). A throwing callback never breaks the request.
+   */
+  private reportReplaced(request: string, replaced: number): void {
+    if (replaced === 0) return;
+    try {
+      this.onWarning?.(
+        `${request}: ${replaced} ${replaced === 1 ? "character" : "characters"} of the answer ${replaced === 1 ? "was" : "were"} ` +
+          "not valid text (invalid bytes or a lone surrogate) and replaced with U+FFFD.",
+      );
+    } catch {
+      // a logging hook is no reason to fail the request
+    }
+  }
+
+  /**
+   * The body of an answer as text, decoded by its charset ({@link decodeBody}); bytes that are
+   * not valid in it are replaced with U+FFFD and reported through `onWarning`, never silently.
+   */
+  private decodeText(res: RawResponse, request: string): string {
+    const decoded = decodeBody(res.data, res.contentType, request);
+    this.reportReplaced(request, decoded.replaced);
+    return decoded.text;
   }
 
   /** Tell `onRetry` about a retry, then wait. A throwing callback never breaks the request. */
@@ -1019,12 +1057,18 @@ export class RequestEngine {
    * let a script carry on as if the API had found nothing), a body that isn't JSON (naming its
    * Content-Type when that isn't JSON either: an HTML maintenance or proxy page), and a number
    * JSON.parse can't carry exactly. Declared big integers (`bigIntegerKeys`) are quoted first.
+   *
+   * The text is never changed silently: bytes that are not valid in the charset, and lone
+   * surrogates written as JSON escapes (`\ud800`), are replaced with U+FFFD, so the result is
+   * well-formed text (`jq` rejects a lone surrogate, and with it the whole output), and
+   * `onWarning` is told how many. One bad character never sinks a whole answer.
    */
   parseJson<T>(res: RawResponse, request: string): T {
-    const text = decodeBody(res.data, res.contentType, request);
-    if (text.trim() === "") throw new DdbParseError(`${request}: empty response body.`);
+    const decoded = decodeBody(res.data, res.contentType, request);
+    if (decoded.text.trim() === "") throw new DdbParseError(`${request}: empty response body.`);
+    const repaired = wellFormedEscapes(decoded.text);
     // Declared big integers are quoted first, so JSON.parse delivers them exactly.
-    const { json, inexact } = scanNumbers(text, this.bigIntegerKeys);
+    const { json, inexact } = scanNumbers(repaired.json, this.bigIntegerKeys);
     let parsed: T;
     try {
       parsed = JSON.parse(json) as T;
@@ -1036,13 +1080,14 @@ export class RequestEngine {
     if (inexact !== undefined) {
       throw new DdbParseError(`${request}: the number ${cutForMessage(inexact)} cannot be represented exactly.`);
     }
+    this.reportReplaced(request, decoded.replaced + repaired.replaced);
     return parsed;
   }
 
   /** Perform a GET returning the decoded response body as text (e.g. /version). */
   async getText(path: string, query?: QueryParams): Promise<string> {
     const res = await this.request("GET", path, { query, accept: "*/*" });
-    return decodeBody(res.data, res.contentType, `GET ${this.describeUrl(path, query)}`);
+    return this.decodeText(res, `GET ${this.describeUrl(path, query)}`);
   }
 
   /** Perform a GET returning the raw bytes (binary downloads). */
@@ -1064,7 +1109,7 @@ export class RequestEngine {
     locationHeader?: string,
     hint?: string,
   ): DdbApiError {
-    const text = this.scrub(decodeBody(body, contentType, url, "lenient"));
+    const text = this.scrub(decodeBody(body, contentType, url, "lenient").text);
     let detail: string | undefined;
     let apiName: string | undefined;
     try {
@@ -1118,18 +1163,98 @@ function typeHint(contentType: string): string {
  * as JSON requires). TextDecoder drops a leading byte order mark, which Buffer#toString
  * keeps and JSON.parse then rejects. An unknown charset label is a DdbParseError naming
  * it and `request` (`GET <url>`), or, with `"lenient"` (raw XML parts, error bodies),
- * decoded as UTF-8 — those callers keep the exact bytes anyway.
+ * decoded as UTF-8 — those callers keep the exact bytes anyway. Bytes that are not valid in the
+ * charset become U+FFFD, and `replaced` counts them: exactly for UTF-8 and the single-byte
+ * charsets; for UTF-16 a U+FFFD the server sent counts too.
  */
-export function decodeBody(body: Buffer, contentType: string, request: string, mode: "strict" | "lenient" = "strict"): string {
+export function decodeBody(
+  body: Buffer,
+  contentType: string,
+  request: string,
+  mode: "strict" | "lenient" = "strict",
+): { text: string; replaced: number } {
   const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1] ?? "utf-8";
   let decoder: TextDecoder;
   try {
-    decoder = new TextDecoder(charset);
+    decoder = new TextDecoder(charset, { fatal: true });
   } catch {
-    if (mode === "lenient") return new TextDecoder("utf-8").decode(body);
-    throw new DdbParseError(`${request}: unsupported response charset "${cutForMessage(cleanDetail(charset))}".`);
+    if (mode !== "lenient") {
+      throw new DdbParseError(`${request}: unsupported response charset "${cutForMessage(cleanDetail(charset))}".`);
+    }
+    decoder = new TextDecoder("utf-8", { fatal: true });
   }
-  return decoder.decode(body);
+  try {
+    return { text: decoder.decode(body), replaced: 0 };
+  } catch {
+    // Not valid in the charset: decode with replacement, and count what was replaced.
+    const text = new TextDecoder(decoder.encoding).decode(body);
+    const sent = decoder.encoding === "utf-8" ? countBytes(body, REPLACEMENT_UTF8) : 0;
+    return { text, replaced: countChar(text, 0xfffd) - sent };
+  }
+}
+
+/** U+FFFD in UTF-8. */
+const REPLACEMENT_UTF8 = Buffer.from([0xef, 0xbf, 0xbd]);
+
+/** How often `needle` occurs in `body`. */
+function countBytes(body: Buffer, needle: Buffer): number {
+  let n = 0;
+  for (let at = body.indexOf(needle); at !== -1; at = body.indexOf(needle, at + needle.length)) n++;
+  return n;
+}
+
+/** How often the UTF-16 unit `code` occurs in `text`. */
+function countChar(text: string, code: number): number {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === code) n++;
+  return n;
+}
+
+/** A JSON escape of a surrogate, `\uD800`–`\uDFFF`, anywhere in a text (a cheap pre-check). */
+const SURROGATE_ESCAPE = /\\u[dD][89a-fA-F][0-9a-fA-F]{2}/;
+
+/** The value of the four hex digits of a `\uXXXX` escape whose `u` is at `at`, or -1. */
+function escapeAt(json: string, at: number): number {
+  if (json.charCodeAt(at) !== 0x75) return -1;
+  const hex = json.slice(at + 1, at + 5);
+  return /^[0-9a-fA-F]{4}$/.test(hex) ? parseInt(hex, 16) : -1;
+}
+
+/**
+ * `json` (decoded answer text) with every lone surrogate written as a JSON escape (`\ud800` not
+ * followed by a low-surrogate escape, or a `\udc00` not preceded by a high one) rewritten as
+ * `\ufffd`, and how many. JSON.parse would make such an escape half a character, which a JSON
+ * printer writes back as `\ud800` and `jq` refuses (the whole output with it). A raw lone
+ * surrogate cannot occur: TextDecoder never makes one. One linear pass, and only when the text
+ * holds a surrogate escape at all; the text is copied only when one is lone.
+ */
+function wellFormedEscapes(json: string): { json: string; replaced: number } {
+  if (!SURROGATE_ESCAPE.test(json)) return { json, replaced: 0 };
+  let out = "";
+  let copied = 0;
+  let replaced = 0;
+  for (let i = 0; i < json.length; i++) {
+    if (json.charCodeAt(i) !== 0x5c) continue;
+    const code = escapeAt(json, i + 1);
+    if (code < 0xd800 || code > 0xdfff) {
+      i++; // an escape of another kind (\", \\, \n, \u0041): skip its second character
+      continue;
+    }
+    const pairedLow = code <= 0xdbff && json.charCodeAt(i + 6) === 0x5c && isLowSurrogate(escapeAt(json, i + 7));
+    if (pairedLow) {
+      i += 11;
+      continue;
+    }
+    out += json.slice(copied, i) + "\\ufffd";
+    copied = i + 6;
+    replaced++;
+    i += 5;
+  }
+  return replaced === 0 ? { json, replaced } : { json: out + json.slice(copied), replaced };
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
 }
 
 /**

@@ -137,7 +137,7 @@ the caller as a `DdbNetworkError` (`GET <url> failed: <reason>`, the original as
 The numeric options must be integers in range — `timeoutMs` 0..2^31−1, `maxRetries`
 0..`MAX_RETRIES` (10), `retryDelayMs` 0..30 000, `maxRedirects` 0..20,
 `maxResponseBytes` 0..`Number.MAX_SAFE_INTEGER` — or the constructor throws a
-`DdbValidationError` naming the option; so does a `transport`, `sleep` or `warn` that
+`DdbValidationError` naming the option; so does a `transport`, `sleep`, `warn`, `onRetry` or `onWarning` that
 is not a function, a `defaultHeaders` that is not an object and a `bigIntegerKeys` that is not
 a set or list of non-empty strings. The client also checks
 its own parameters before any request: a `params`/`opts` that is not an object, a blank
@@ -264,6 +264,17 @@ pass. Below 2^53 and above the subnormal range a decimal fraction keeps a double
 as written is compared with the number as printed (`String(value)`): a double a server wrote in its
 shortest form (`1E23`, `1.7976931348623157E308`) prints as the same number and passes;
 `12345678901234567890`, printed `12345678901234567000`, is refused.
+
+**Text is never changed silently** (engine option `onWarning`). Bytes that are not valid in the
+answer's charset (or UTF-8 without one), and a lone surrogate written as a JSON escape
+(`"\ud800"`, half a character, which a JSON printer writes back and `jq` refuses with the whole
+output), are replaced with U+FFFD, so the result is well-formed, and `onWarning` gets one line:
+`GET <url>: 2 characters of the answer were not valid text (invalid bytes or a lone surrogate)
+and replaced with U+FFFD.` It is not an error: one bad character never sinks a whole answer.
+The CLI logs it as a WARN of `ddb.api` (`warn`, the other hook, is for the connection and goes
+to `ddb.http`). It covers search, the JSON item parts and `/version`. A raw XML part is delivered
+as its exact `bytes`, so nothing is reported for it; `ItemResult.replaced` says how many
+characters its decoded `text` replaced, and the CLI warns when it shows that text on a terminal.
 
 **Known big integers are declared, and delivered as strings** (engine option `bigIntegerKeys`,
 a `ReadonlySet<string>` of member names, default none). The value of a declared member is

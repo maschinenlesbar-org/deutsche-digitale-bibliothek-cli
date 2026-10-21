@@ -705,3 +705,50 @@ test("an answer error names the request: method and URL, userinfo redacted (T9, 
   const text = new RequestEngine({ transport: makeMockTransport(() => rawResponse("7.5", "text/plain; charset=x-bogus")).transport });
   await assert.rejects(text.getText("/version"), /^DdbParseError: GET https:\/\/api\.deutsche-digitale-bibliothek\.de\/2\/version: unsupported response charset "x-bogus"\.$/);
 });
+
+test("text that is not valid is replaced with U+FFFD and reported through onWarning, never silently (T5, D2, 2026-10-21)", async () => {
+  const cases: Array<[string, Buffer, string, unknown, number]> = [
+    // A lone surrogate written as an escape (high alone, low alone); a real pair and an escaped backslash stay.
+    ["lone escapes", Buffer.from('{"a":"x\\ud800y","b":"\\udc00","c":"\\ud83d\\ude00","d":"\\\\ud800"}'), "application/json", { a: "x\ufffdy", b: "\ufffd", c: "\u{1f600}", d: "\\ud800" }, 2],
+    // A lone surrogate in a member name.
+    ["lone in a key", Buffer.from('{"\\udbff":1}'), "application/json", { "\ufffd": 1 }, 1],
+    // Invalid UTF-8 bytes; a U+FFFD the server sent is not counted.
+    ["invalid bytes", Buffer.concat([Buffer.from('{"a":"'), Buffer.from([0xff, 0xc3]), Buffer.from('","b":"\ufffd"}')]), "application/json", { a: "\ufffd\ufffd", b: "\ufffd" }, 2],
+    // A byte undefined in a single-byte charset.
+    ["iso-8859-3", Buffer.concat([Buffer.from('{"a":"'), Buffer.from([0xa5]), Buffer.from('"}')]), "application/json; charset=iso-8859-3", { a: "\ufffd" }, 1],
+  ];
+  for (const [label, body, type, expected, count] of cases) {
+    const warnings: string[] = [];
+    const e = new RequestEngine({ onWarning: (m) => warnings.push(m), transport: makeMockTransport(() => rawResponse(body, type)).transport });
+    const value = await e.getJson("/search", { q: "x" });
+    assert.deepEqual(value, expected, label);
+    assert.ok(!/[\ud800-\udfff]/u.test(JSON.stringify(value)), `${label}: well-formed`);
+    assert.deepEqual(warnings, [
+      `GET https://api.deutsche-digitale-bibliothek.de/2/search?q=x: ${count} ${count === 1 ? "character" : "characters"} of the answer ${count === 1 ? "was" : "were"} not valid text (invalid bytes or a lone surrogate) and replaced with U+FFFD.`,
+    ], label);
+  }
+  // Valid text: no warning; a throwing hook never fails the request.
+  const quiet: string[] = [];
+  const ok = new RequestEngine({ onWarning: (m) => quiet.push(m), transport: makeMockTransport(() => rawResponse('{"a":"\\u00fc\ufffd"}', "application/json")).transport });
+  assert.deepEqual(await ok.getJson("/x"), { a: "ü\ufffd" });
+  assert.deepEqual(quiet, []);
+  const throwing = new RequestEngine({ onWarning: () => { throw new Error("hook"); }, transport: makeMockTransport(() => rawResponse('"\\ud800"', "application/json")).transport });
+  assert.equal(await throwing.getJson("/x"), "\ufffd");
+  assert.throws(() => new RequestEngine({ onWarning: "log" as unknown as () => void }), DdbValidationError);
+  // /version (getText): replaced and reported the same way.
+  const versions: string[] = [];
+  const v = new RequestEngine({ onWarning: (m) => versions.push(m), transport: makeMockTransport(() => rawResponse(Buffer.from([0x37, 0xff]), "text/plain")).transport });
+  assert.equal(await v.getText("/version"), "7\ufffd");
+  assert.equal(versions.length, 1);
+  // A raw XML part is delivered as its exact bytes, so nothing is reported; its decoded `text`
+  // says how many characters it replaced (`replaced`), for whoever shows that text.
+  const xml = Buffer.concat([Buffer.from("<a>"), Buffer.from([0xff]), Buffer.from("</a>")]);
+  const seen: string[] = [];
+  const item = await new DdbClient({ onWarning: (m) => seen.push(m), transport: makeMockTransport(() => rawResponse(xml, "application/xml")).transport }).item("A".repeat(32), "edm");
+  assert.equal(item.text, "<a>\ufffd</a>");
+  assert.equal(item.replaced, 1);
+  assert.ok(item.bytes?.equals(xml));
+  assert.deepEqual(seen, []);
+  const clean = await new DdbClient({ transport: makeMockTransport(() => rawResponse("<a/>", "application/xml")).transport }).item("A".repeat(32), "edm");
+  assert.equal(clean.replaced, undefined);
+});

@@ -994,3 +994,19 @@ test("item: a JSON part answered with HTML is an error (exit 1, ERROR of ddb.api
     assert.match(untimed(cli.err.join("\n")), /^ERROR \[ddb\.api\] .*not valid JSON \(expected JSON, got Content-Type "text\/html"\)/, argv.join(" "));
   }
 });
+
+test("item raw XML with bytes invalid in its charset: exact to a pipe, U+FFFD on a terminal with a WARN (T5, D2)", async () => {
+  const body = Buffer.concat([Buffer.from("<a>"), Buffer.from([0xff]), Buffer.from("</a>")]);
+  const pipe = makeCli(() => rawResponse(body, "application/xml"));
+  const binary: Buffer[] = [];
+  pipe.deps.io.outBinary = (d) => binary.push(d);
+  pipe.deps.io.isTerminal = () => false;
+  assert.equal(await run(["item", ID, "--part", "edm"], pipe.deps), 0);
+  assert.ok(Buffer.concat(binary).equals(body));
+  assert.deepEqual(pipe.err, []);
+  const tty = makeCli(() => rawResponse(body, "application/xml"));
+  tty.deps.io.isTerminal = () => true;
+  assert.equal(await run(["item", ID, "--part", "edm"], tty.deps), 0);
+  assert.deepEqual(tty.out, ["<a>�</a>"]);
+  assert.match(untimed(tty.err.join("\n")), /^WARN  \[ddb\.api\] 1 character of the answer was not valid text in its charset and replaced with U\+FFFD for the terminal/);
+});
