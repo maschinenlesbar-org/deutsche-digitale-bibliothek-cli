@@ -579,3 +579,46 @@ test("onRetry is never called without a retry, and a throw in it is swallowed", 
 test("onRetry must be a function", () => {
   assert.throws(() => new RequestEngine({ onRetry: 5 as never }), DdbValidationError);
 });
+
+test("a timeout, the size cap, a refused connection and a DNS failure name the request, the original as the cause (kit rollout K3)", async () => {
+  const { createServer } = await import("node:net");
+  // A port nobody listens on (loopback only): a refused connection from the default transport.
+  const closed = createServer();
+  await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+  const closedPort = (closed.address() as { port: number }).port;
+  await new Promise<void>((resolve) => closed.close(() => resolve()));
+  // A server that accepts and never answers: the default transport's idle timeout.
+  const sockets: Array<import("node:net").Socket> = [];
+  const silent = createServer((socket) => void sockets.push(socket));
+  await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+  const silentPort = (silent.address() as { port: number }).port;
+  try {
+    const dns = Object.assign(new Error("getaddrinfo ENOTFOUND ddb.invalid"), { code: "ENOTFOUND" });
+    const cases: Array<[string, string, ConstructorParameters<typeof RequestEngine>[0], RegExp, unknown?]> = [
+      ["engine deadline", "http://127.0.0.1:9/2", { transport: () => new Promise<HttpResponse>(() => {}), timeoutMs: 20 }, /^Request exceeded the 20ms deadline$/],
+      ["size cap", "http://127.0.0.1:9/2", { transport: async () => rawResponse("x".repeat(100), "application/json"), maxResponseBytes: 10 }, /maxResponseBytes/],
+      ["DNS failure", "https://user:pw@ddb.invalid/2", { transport: async () => { throw dns; } }, /^getaddrinfo ENOTFOUND ddb\.invalid$/, dns],
+      ["refused connection", `http://127.0.0.1:${closedPort}/2`, {}, /ECONNREFUSED/],
+      ["transport timeout", `http://127.0.0.1:${silentPort}/2`, { timeoutMs: 50 }, /timed out|deadline/],
+    ];
+    for (const [name, base, options, reason, original] of cases) {
+      const e = new RequestEngine({ baseUrl: base, maxRetries: 0, ...options });
+      // The request URL never carries the base URL's userinfo (it goes as a header), so the
+      // message names the request without it.
+      const shown = `${base}/version`.replace("user:pw@", "");
+      await assert.rejects(e.getJson("/version"), (err) => {
+        assert.ok(err instanceof DdbNetworkError, name);
+        assert.ok(err.message.startsWith(`GET ${shown} failed: `), `${name}: ${err.message}`);
+        assert.ok(!err.message.includes("pw"), name);
+        assert.match(err.message.slice(`GET ${shown} failed: `.length), reason, name);
+        // The engine's own size check raises the error itself; everything else wraps an original.
+        if (name !== "size cap") assert.ok(err.cause !== undefined, `${name}: the original is the cause`);
+        if (original !== undefined) assert.equal(err.cause, original, name);
+        return true;
+      });
+    }
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => silent.close(() => resolve()));
+  }
+});
