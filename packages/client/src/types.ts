@@ -129,11 +129,11 @@ export interface ItemOptions {
    * `ITEM_LANG_PARTS` (view/aip/edm/binaries/source/source-description); any other
    * part rejects with a DdbValidationError.
    */
-  lang?: string;
+  lang?: string | undefined;
   /** Page size, for part `children` only (any other part rejects). */
-  rows?: number;
+  rows?: number | undefined;
   /** Offset of the first child, for part `children` only (any other part rejects). */
-  offset?: number;
+  offset?: number | undefined;
 }
 
 /**
@@ -145,28 +145,28 @@ export interface SearchParams {
   /** The Solr query (`q`). Use `*:*` to match everything. */
   query: string;
   /** Number of documents to return (`rows`). Defaults to `DEFAULT_SEARCH_ROWS` (10). */
-  rows?: number;
+  rows?: number | undefined;
   /** Offset of the first returned document (`start`), for paging. */
-  start?: number;
+  start?: number | undefined;
   /** Sort spec in Solr syntax, e.g. `score desc`, `id asc` (`sort`). */
-  sort?: string;
+  sort?: string | undefined;
   /** Field list to return, e.g. `id,title` (`fl`). */
-  fields?: string;
+  fields?: string | undefined;
   /** Filter queries in Solr syntax, e.g. `type_fct:mediatype_002` (`fq`, repeatable). */
-  filters?: string[];
+  filters?: string[] | undefined;
   /** Facet fields to compute counts for (`facet.field`; enables `facet=true`). */
-  facetFields?: string[];
+  facetFields?: string[] | undefined;
   /**
    * Cap the number of values returned per facet (`facet.limit`); `-1` = every value, still
    * sorted by count (the client sends `facet.sort=count` for it).
    */
-  facetLimit?: number;
+  facetLimit?: number | undefined;
   /** Solr collection to query. Defaults to `search`. */
-  collection?: string;
+  collection?: string | undefined;
   /**
    * Solr request handler. Defaults to `select`. Only handlers that return Solr's
    * standard `response` envelope (`numFound` and `docs`) are supported; any other
    * answer makes `search()` reject with a DdbParseError naming the handler.
    */
-  requestHandler?: string;
+  requestHandler?: string | undefined;
 }

@@ -74,14 +74,14 @@ export function cleartextProblem(baseUrl: string, secrets: readonly string[] = [
 
 /** Per-request options for {@link RequestEngine.request}. */
 export interface RequestOptions {
-  query?: QueryParams;
+  query?: QueryParams | undefined;
   accept: string;
   /**
    * Called for each redirect the engine would follow, with its resolved target. Returning
    * `false` stops there: the 3xx surfaces as a DdbApiError whose `location` names the target,
    * so the caller can decide (the client uses it for item redirects to another item).
    */
-  followRedirect?: (target: URL) => boolean;
+  followRedirect?: ((target: URL) => boolean) | undefined;
 }
 
 export interface RawResponse {
@@ -104,7 +104,7 @@ export interface EngineOptions {
    * only, no query or fragment; anything else makes the constructor throw a
    * DdbValidationError.
    */
-  baseUrl?: string;
+  baseUrl?: string | undefined;
   /**
    * Swappable transport. Defaults to the built-in node http/https transport.
    *
@@ -115,13 +115,13 @@ export interface EngineOptions {
    * engine sees the answer, which the library cannot prevent; it can only reject the
    * response afterwards (a `HttpResponse.url` on another origin is a DdbNetworkError).
    */
-  transport?: Transport;
+  transport?: Transport | undefined;
   /**
    * Value of the User-Agent header. Must be non-blank, without control characters
    * (tab allowed) and Latin-1 only (`headerValueProblem`), or the constructor
    * throws a DdbValidationError.
    */
-  userAgent?: string;
+  userAgent?: string | undefined;
   /**
    * Extra headers sent on every request to the configured origin. When a redirect
    * crosses to a different origin, all of them are dropped (only the engine's own
@@ -130,49 +130,49 @@ export interface EngineOptions {
    * arbitrary host named in Location. Names must be HTTP tokens and values pass
    * the same check as `userAgent`, or the constructor throws a DdbValidationError.
    */
-  defaultHeaders?: Record<string, string>;
+  defaultHeaders?: Record<string, string> | undefined;
   /**
    * Per-request timeout in milliseconds (0 disables; at most `MAX_TIMEOUT_MS`, 2^31 - 1 ms),
    * covering the whole response body. Enforced by the engine for every transport.
    */
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
   /**
    * Number of automatic retries for transient (429/503) responses and reset
    * connections, 0..`MAX_RETRIES` (10). Each waits `retryDelayMs * attempt`, or longer
    * if the response's `Retry-After` asks (up to `MAX_RETRY_AFTER_MS`; a longer one is
    * not retried, and the error names the requested wait).
    */
-  maxRetries?: number;
+  maxRetries?: number | undefined;
   /**
    * Base backoff between retries in milliseconds (grows linearly); used without a
    * Retry-After. At most `MAX_RETRY_AFTER_MS`.
    */
-  retryDelayMs?: number;
+  retryDelayMs?: number | undefined;
   /**
    * Number of HTTP redirects (301/302/303/307/308) to follow, 0..20. Defaults to 5. Any
    * other 3xx, one with a missing or malformed Location, and one past this limit
    * surface as a DdbApiError naming the target.
    */
-  maxRedirects?: number;
+  maxRedirects?: number | undefined;
   /**
    * Hard cap on response body size in bytes (defends against memory exhaustion
    * from a hostile/buggy endpoint). Defaults to 100 MiB; set to 0 for no limit.
    * Enforced by the engine for every transport.
    */
-  maxResponseBytes?: number;
+  maxResponseBytes?: number | undefined;
   /** Injectable sleep, primarily for deterministic tests. */
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: ((ms: number) => Promise<void>) | undefined;
   /**
    * Optional diagnostic sink for non-fatal warnings (e.g. a followed
    * `https:`->`http:` redirect downgrade). Defaults to a no-op so the client
    * stays silent as a library; the CLI wires it to stderr.
    */
-  warn?: (message: string) => void;
+  warn?: ((message: string) => void) | undefined;
   /**
    * Called once per retry, right before the backoff sleep, for each retried 429/503
    * and reset connection; never when there is no retry. A throw is swallowed.
    */
-  onRetry?: (event: RetryEvent) => void;
+  onRetry?: ((event: RetryEvent) => void) | undefined;
 }
 
 /** What `EngineOptions.onRetry` is told about one retry. */

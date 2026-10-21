@@ -73,6 +73,11 @@ new DdbClient({
 });
 ```
 
+Every option, of the client and of `search()`/`item()` (`SearchParams`, `ItemOptions`), may be
+omitted or given as `undefined`, which means the same (the default), so
+`new DdbClient({ baseUrl: process.env.DDB_BASE_URL })` compiles under
+`exactOptionalPropertyTypes` too.
+
 `timeoutMs` and `maxResponseBytes` hold for every transport, a custom one included: the
 engine races each transport call against the deadline (and passes an `AbortSignal` as
 `HttpRequest.signal`, which a fetch transport hands on: `fetch(url, { signal })`), and
@@ -516,7 +521,7 @@ npm run coverage  # the same tests in one run, with a coverage report
 node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
 
-The client's tests are in `packages/client/test/` (`query`, `http`, `engine`, `client`),
+The client's tests are in `packages/client/test/` (`query`, `http`, `engine`, `client`, `types`),
 with the transport helpers (`helpers.ts`, which `apps/cli/test/helpers.ts` re-exports next
 to the CLI's own helpers) and the canned responses (`fixtures.ts`); everything that drives
 the CLI is in `apps/cli/test/`.
@@ -530,6 +535,9 @@ the CLI is in `apps/cli/test/`.
 - **`client.test.ts`** — the Solr passthrough path and params, `fq`/`facet.field`
   forwarding, content-type-aware `item` decoding (JSON vs XML), the item sub-paths,
   and that no `Authorization` header is sent — mocked transport.
+- **`types.test.ts`** — a consumer file compiled with `exactOptionalPropertyTypes` against
+  the built declarations (it starts `tsc`, so it gets 30 s), and every option given as
+  `undefined` meaning its default.
 - **`validate.test.ts`** — `assertValid`, the `DdbValidationError` → exit 2
   mapping and the `parity()` helper (`apps/cli/test/helpers.ts`), which sends one input
   through `run()` and through the library on one recording mock transport.
