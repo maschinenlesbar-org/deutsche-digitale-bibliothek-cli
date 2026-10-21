@@ -21,7 +21,7 @@ The v2 read routes are **public — no API key**. Just run the commands.
 | `--max-response-bytes <n>` | cap the response body size in bytes (0 = unlimited; default 100 MiB) |
 | `--compact` | print JSON on a single line (for piping to `jq`) |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [ddb.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
-| `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; refuses to overwrite an existing file (a dangling link too) unless `--force`, and a directory always — checked before any request, a usage error, exit 2; the file replaces the old one only once complete, so a write that fails part-way (a full disk) leaves the old file as it was and no half-written one, exit 1) |
+| `-o, --output <file>` | write output to a file instead of stdout (`-` = stdout; any other value that starts with a dash is refused as the next option, a usage error — write `./-name` for such a file; refuses to overwrite an existing file (a dangling link too) unless `--force`, and a directory always — checked before any request, a usage error, exit 2; the file replaces the old one only once complete, so a write that fails part-way (a full disk) leaves the old file as it was and no half-written one, exit 1) |
 | `--force` | overwrite the `--output` file if it already exists (needs `--output`) |
 | `-V, --version` / `-h, --help` | version / help |
 

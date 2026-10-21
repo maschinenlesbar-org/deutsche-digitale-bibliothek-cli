@@ -357,6 +357,21 @@ test("a blank -o path is a usage error, before any request", async () => {
   }
 });
 
+test("-o refuses the next option as its file name: a dash-leading value is a usage error before any request (T13)", async () => {
+  // `-o --compact` wrote a pretty-printed file named "--compact" with exit 0.
+  for (const argv of [["-o", "--compact", "search", "x"], ["--output=-v", "search", "x"], ["search", "x", "-o", "--force"]]) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0, argv.join(" "));
+    assert.deepEqual(cli.files, [], argv.join(" "));
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[ddb\.cli\] .*is the next option.*write \.\/-name/, argv.join(" "));
+  }
+  // A file whose name starts with a dash is written as ./-name.
+  const cli = makeCli(() => jsonResponse(fx.solr));
+  assert.equal(await run(["-o", "./-v", "search", "x"], cli.deps), 0);
+  assert.equal(cli.files[0]?.path, "./-v");
+});
+
 test("-o - writes to stdout, not to a file named -", async () => {
   const cli = makeCli(() => jsonResponse(fx.solrExact));
   const code = await run(["--compact", "-o", "-", "search", "x"], cli.deps);
@@ -883,13 +898,14 @@ test("the log format is the one commander parsed, where an option's value looks 
   const back = makeCli(notFound);
   assert.equal(await run(["--log-format", "jsonl", "--user-agent", "--log-format", "version"], back.deps), 4);
   assert.ok(back.err.length === 1 && isJsonl(back.err[0] as string), back.err.join("\n"));
+  // -o refuses a dash-leading value (T13): the refusal is a jsonl record too.
   const output = makeCli(() => rawResponse("7.5", "text/plain"));
-  assert.equal(await run(["--log-format", "jsonl", "-o", "--log-format", "version"], output.deps), 0);
-  assert.ok(output.err.length === 1 && isJsonl(output.err[0] as string), output.err.join("\n"));
+  assert.equal(await run(["--log-format", "jsonl", "-o", "--log-format", "version"], output.deps), 2);
+  assert.ok(output.err.every(isJsonl) && /"level":"ERROR".*is the next option/.test(output.err[0] ?? ""), output.err.join("\n"));
   // A parse error after such a value is logged in the format commander would have used:
-  // -o takes --log-format as its path, so jsonl is the unknown command (text record).
+  // --user-agent takes --log-format as its value, so jsonl is the unknown command (text record).
   const parse = makeCli(() => rawResponse("7.5", "text/plain"));
-  assert.equal(await run(["-o", "--log-format", "jsonl", "version"], parse.deps), 2);
+  assert.equal(await run(["--user-agent", "--log-format", "jsonl", "version"], parse.deps), 2);
   assert.ok(parse.err.length > 0 && !parse.err.some(isJsonl), parse.err.join("\n"));
   assert.match(untimed(parse.err[0] ?? ""), /^ERROR \[ddb\.cli\] unknown command 'jsonl'/);
 });
