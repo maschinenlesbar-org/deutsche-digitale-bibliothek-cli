@@ -241,9 +241,10 @@ object or an array (not `null`, an empty body or a scalar); and an error documen
 with a 2xx status (Solr's `{ error: { msg } }`, the DDB `{ name: "…Exception", message }`
 envelope) is reported with its message. So is a body (search or a JSON item part) holding a
 number JSON.parse cannot carry exactly — one out of a double's range (`1e400`, which printed as
-`null`) or an integer literal beyond 2^53 that it rounds (`12345678901234567890`): "the number …
-cannot be represented exactly", never a changed value; a decimal fraction keeps a double's usual
-precision.
+`null`), one past 2^53 that it rounds, in any form (`12345678901234567890`,
+`12345678901234567890.0`, `9007199254740993e0`, `9007199254740992.5`), or a non-zero one too small
+for a double (`1e-400`, which became `0`): "the number … cannot be represented exactly", never a
+changed value; below 2^53 a decimal fraction keeps a double's usual precision.
 
 ## No authentication
 

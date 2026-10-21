@@ -411,3 +411,37 @@ test("a number the answer cannot carry exactly is a parse error in search and it
   const res = await new DdbClient({ transport: ok.transport }).search({ query: "x" });
   assert.equal((res.response.docs[0] as Record<string, unknown>)["begin_time"], 9007199254740991);
 });
+
+test("a big number written as a decimal or an exponent, a fraction past 2^53 and an underflow are parse errors too (kit rollout K1, 2026-10-21)", async () => {
+  // These passed the check and printed 12345678901234567000, 9007199254740992 and 0, exit 0.
+  const ID = "A".repeat(32);
+  for (const n of ["12345678901234567890.0", "9007199254740993e0", "90071992547409930E-1", "9007199254740992.5", "-9007199254740992.5", "1e-400", "-0.0001e-399", "1e23"]) {
+    const search = makeMockTransport(() =>
+      rawResponse(`{"response":{"numFound":1,"docs":[{"id":"x","begin_time":${n}}]}}`, "application/json"),
+    );
+    await assert.rejects(new DdbClient({ transport: search.transport }).search({ query: "x" }), (err) => {
+      assert.ok(err instanceof DdbParseError, n);
+      assert.equal(err.message, `Unexpected response from /search/index/search/select: the number ${n} cannot be represented exactly.`);
+      return true;
+    });
+    const item = makeMockTransport(() => rawResponse(`{"item":{"pages":${n}}}`, "application/json"));
+    await assert.rejects(new DdbClient({ transport: item.transport }).item(ID), (err) => {
+      assert.ok(err instanceof DdbParseError, n);
+      assert.equal(err.message, `Unexpected response for item ${ID} (view): the number ${n} cannot be represented exactly.`);
+      return true;
+    });
+  }
+  // The same values in other forms, zero in any form, and a decimal fraction below 2^53 pass.
+  const ok: Array<[string, number]> = [
+    ["9007199254740992.0", 2 ** 53], ["9007199254740992e0", 2 ** 53], ["90071992547409920E-1", 2 ** 53], ["1.2e21", 1.2e21],
+    ["0", 0], ["0.0e-500", 0], ["0e5", 0], ["-0", -0], ["1.00000000000000001", 1], ["5e-324", 5e-324], ["1e2", 100],
+  ];
+  for (const [n, value] of ok) {
+    const mt = makeMockTransport(() => rawResponse(`{"response":{"numFound":1,"docs":[{"id":"x","begin_time":${n}}]}}`, "application/json"));
+    const res = await new DdbClient({ transport: mt.transport }).search({ query: "x" });
+    assert.equal((res.response.docs[0] as Record<string, unknown>)["begin_time"], value, n);
+    const item = makeMockTransport(() => rawResponse(`{"item":{"pages":${n}}}`, "application/json"));
+    const got = await new DdbClient({ transport: item.transport }).item(ID);
+    assert.equal(((got.json as Record<string, Record<string, unknown>>)["item"]!)["pages"], value, n);
+  }
+});
