@@ -445,3 +445,24 @@ test("a big number written as a decimal or an exponent, a fraction past 2^53 and
     assert.equal(((got.json as Record<string, Record<string, unknown>>)["item"]!)["pages"], value, n);
   }
 });
+
+test("the query and every filter go out trimmed, a Solr-escaped trailing space kept (kit rollout K6)", async () => {
+  // A value pasted with a trailing space or no-break space went out as typed: on a string facet
+  // field (`place_fct`) `München` + U+00A0 is another value and matched nothing.
+  const NBSP = String.fromCharCode(0xa0);
+  const mt = makeMockTransport(() => jsonResponse(fx.solr));
+  const client = new DdbClient({ transport: mt.transport });
+  await client.search({
+    query: `  München${NBSP}\n`,
+    filters: [` place_fct:München${NBSP}`, "\ttype_fct:mediatype_002 ", "label:foo\\ ", "label:foo\\\\ "],
+  });
+  const q = queryOf(mt.calls[0]!);
+  assert.equal(q.get("q"), "München");
+  assert.deepEqual(q.getAll("fq"), ["place_fct:München", "type_fct:mediatype_002", "label:foo\\ ", "label:foo\\\\"]);
+  // A value blank once trimmed (U+00A0 included) is refused before any request.
+  for (const params of [{ query: `${NBSP} ` }, { query: "x", filters: ["a:b", ` ${NBSP}`] }]) {
+    await assert.rejects(client.search(params), DdbValidationError);
+  }
+  assert.equal(mt.calls.length, 1);
+  assert.equal(lib.normalizeText(" Müller "), "Müller");
+});

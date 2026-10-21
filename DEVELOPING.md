@@ -172,6 +172,9 @@ parsers call the same functions and turn a reason into commander's
 What the library rejects with `DdbValidationError` (every rejected input, the checks
 above included):
 
+- **Query and filters** (`search({ query, filters })`): blank (once trimmed, U+00A0 included)
+  is rejected; otherwise each goes out through `normalizeText` (exported): surrounding
+  whitespace trimmed, a Solr-escaped trailing space (`foo\ `) kept, composed Unicode (NFC).
 - **Item ids** (`item(id)`): the id is trimmed (`normalizeItemId`) and must then
   be exactly 32 upper-case letters and digits (`itemIdProblem`); a lower-case id
   gets the upper-case form as a hint (`Invalid id: Item ids are upper case: try

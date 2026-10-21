@@ -15,7 +15,7 @@
 import { RequestEngine, decodeBody, firstInexactNumber, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
 import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage } from "./errors.js";
 import type { QueryParams } from "./query.js";
-import { assertValid, itemPartProblem, normalizeItemId, pathNameProblem } from "./validate.js";
+import { assertValid, itemPartProblem, normalizeItemId, normalizeText, pathNameProblem } from "./validate.js";
 import {
   ITEM_LANG_PARTS,
   SOLR_MAX_INT,
@@ -311,14 +311,15 @@ export class DdbClient {
     const collection = params.collection ?? "search";
     const handler = params.requestHandler ?? "select";
     // The index matches composed text only: `München` with U+0308 (as pasted from a macOS file
-    // name) found 231 documents instead of 2.77 million, and as a facet filter none. The query and
-    // the filters go out in NFC; field names, sort and paging are ASCII and left alone.
-    const query: QueryParams = { q: params.query.normalize("NFC"), wt: "json" };
+    // name) found 231 documents instead of 2.77 million, and as a facet filter none; a trailing
+    // no-break space made another facet value. The query and the filters go out trimmed and in
+    // NFC (normalizeText); field names, sort and paging are ASCII and left alone.
+    const query: QueryParams = { q: normalizeText(params.query), wt: "json" };
     query["rows"] = params.rows ?? DEFAULT_SEARCH_ROWS;
     if (params.start !== undefined) query["start"] = params.start;
     if (params.sort !== undefined) query["sort"] = params.sort;
     if (params.fields !== undefined) query["fl"] = params.fields;
-    if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters.map((fq) => fq.normalize("NFC"));
+    if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters.map(normalizeText);
     if (params.facetFields !== undefined && params.facetFields.length > 0) {
       query["facet"] = "true";
       query["facet.field"] = params.facetFields;

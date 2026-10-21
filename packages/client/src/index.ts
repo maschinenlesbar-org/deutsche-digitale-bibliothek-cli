@@ -39,6 +39,7 @@ export {
   itemIdProblem,
   itemPartProblem,
   normalizeItemId,
+  normalizeText,
   pathNameProblem,
 } from "./validate.js";
 export type { Problem } from "./validate.js";

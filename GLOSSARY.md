@@ -100,9 +100,11 @@ that field (so you can see what to narrow to). `--filter` takes a raw Solr
 **filter query (`fq`)** that *restricts* the result set, e.g.
 `--filter place_fct:"Berlin"` or `--filter type_fct:mediatype_002`. Repeat
 `--filter` to AND several constraints; express OR inside one fq
-(`--filter 'place_fct:("Berlin" OR "Dessau")'`). The query and every filter go out in composed
-Unicode (NFC), the only form the index matches: a `München` pasted with a combining umlaut found
-231 documents instead of 2.77 million, and as a facet filter none.
+(`--filter 'place_fct:("Berlin" OR "Dessau")'`). The query and every filter go out without
+surrounding whitespace and in composed Unicode (NFC), the only form the index matches: a `München`
+pasted with a combining umlaut found 231 documents instead of 2.77 million, and as a facet filter
+none; one pasted with a trailing no-break space was another facet value. A trailing space Solr
+escapes (`foo\ `) is kept.
 
 **sort.** Solr sort syntax: `<field> asc|desc`, e.g. `--sort "score desc"`
 (relevance, the default when omitted) or `--sort "id asc"`. Comma-separate for

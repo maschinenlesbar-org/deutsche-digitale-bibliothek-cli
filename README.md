@@ -94,7 +94,7 @@ fields? The **[Glossary](https://github.com/maschinenlesbar-org/deutsche-digital
 Query strings and `--filter` use **Solr syntax**; pass `'*:*'` to match
 everything. `--filter` restricts the set (repeat to AND; OR inside one fq like
 `'place_fct:("Berlin" OR "Dessau")'`), while `--facet` only *counts* values. Both
-go out in composed Unicode (NFC), the only form the index matches (a `München` pasted with a
+go out trimmed and in composed Unicode (NFC), the only form the index matches (a `München` pasted with a
 combining umlaut found far fewer documents, as a filter none).
 When more documents match than were returned, `ddb` prints a short paging hint to
 stderr (not for `--rows 0`, which asks for counts and facets only). An `--offset` at or

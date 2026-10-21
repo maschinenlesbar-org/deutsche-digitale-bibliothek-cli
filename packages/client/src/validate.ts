@@ -53,6 +53,23 @@ export function normalizeItemId(id: string): string {
 }
 
 /**
+ * A query or filter as the index matches it: without surrounding whitespace (U+00A0
+ * included; a value pasted with a trailing no-break space was another facet value and
+ * matched nothing) and in composed Unicode, NFC (a `München` pasted with a combining
+ * umlaut found 231 documents instead of 2.77 million, as a facet filter none). Inner
+ * whitespace is kept, and so is a trailing space Solr escapes (`label:foo\ `), which
+ * belongs to the term. Idempotent.
+ */
+export function normalizeText(value: string): string {
+  const start = value.length - value.trimStart().length;
+  let end = value.trimEnd().length;
+  let backslashes = 0;
+  while (end - backslashes - 1 >= start && value[end - backslashes - 1] === "\\") backslashes += 1;
+  if (backslashes % 2 === 1 && end < value.length) end += 1;
+  return value.slice(start, end).normalize("NFC");
+}
+
+/**
  * A Solr collection or request-handler name (`search({ collection,
  * requestHandler })`): letters, digits, `.`, `_` and `-` only. These go into the
  * request path, so anything else (a `/`, `?`, space or non-ASCII letter) cannot
