@@ -248,7 +248,10 @@ exit 1). Every such error names the request, `GET <url>: …` (the absolute URL,
 as `***@`, cut at 300 characters: `RequestEngine.describeUrl`), like a network error: an unknown
 charset, an empty body, a body that isn't JSON (naming its Content-Type when that isn't JSON
 either: `GET <url>: the answer is not valid JSON (expected JSON, got Content-Type "text/html").`),
-a wrong shape, an error document, an inexact number and a `/version` body that is no version.
+a wrong shape, an error document, an inexact number, a `/version` body that is no version, and
+an answer too large to read as text at all (512 MB and more, possible with `--max-response-bytes 0`:
+V8's longest string is 536 870 888 characters; with an error status the `DdbApiError` stays, its
+`body` left empty).
 `search` needs the documented Solr shape — a JSON object with a `response`
 object holding an integer `numFound` and a `docs` array; a JSON item part must be an
 object or an array (not `null`, an empty body or a scalar); and an error document sent

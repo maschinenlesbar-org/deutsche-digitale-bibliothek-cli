@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { TextDecoder } from "node:util";
 import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/engine.js";
 import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, redactUrl, toWellFormed } from "../src/errors.js";
 import { DdbClient } from "../src/client.js";
@@ -751,4 +752,31 @@ test("text that is not valid is replaced with U+FFFD and reported through onWarn
   assert.deepEqual(seen, []);
   const clean = await new DdbClient({ transport: makeMockTransport(() => rawResponse("<a/>", "application/xml")).transport }).item("A".repeat(32), "edm");
   assert.equal(clean.replaced, undefined);
+});
+
+test("an answer longer than V8's longest string is a DdbParseError naming the request, not a plain Error (T14, 2026-10-21)", async (t) => {
+  // A real one needs a body of 512 MB and more (possible with maxResponseBytes 0): V8's own
+  // error is stood in for, for the body marked by its length.
+  const huge = Buffer.from('{"response":{"numFound":0,"docs":[]}}   ');
+  const tooLong = Object.assign(new Error("Cannot create a string longer than 0x1fffffe8 characters"), { code: "ERR_STRING_TOO_LONG" });
+  const decode = TextDecoder.prototype.decode;
+  t.mock.method(TextDecoder.prototype, "decode", function (this: InstanceType<typeof TextDecoder>, input?: Uint8Array, options?: { stream?: boolean }) {
+    if (input !== undefined && input.byteLength === huge.length) throw tooLong;
+    return decode.call(this, input, options);
+  });
+  const e = new RequestEngine({ maxResponseBytes: 0, transport: makeMockTransport(() => rawResponse(huge, "application/json")).transport });
+  await assert.rejects(e.getJson("/search", { q: "x" }), (err: unknown) => {
+    assert.ok(err instanceof DdbParseError, String(err));
+    assert.equal(
+      err.message,
+      `GET https://api.deutsche-digitale-bibliothek.de/2/search?q=x: the answer is too large to read as text (${huge.length} bytes; the longest string is 536870888 characters).`,
+    );
+    return true;
+  });
+  // A raw XML part too.
+  const raw = new DdbClient({ maxResponseBytes: 0, transport: makeMockTransport(() => rawResponse(huge, "application/xml")).transport });
+  await assert.rejects(raw.item("A".repeat(32), "edm"), (err: unknown) => err instanceof DdbParseError && /too large to read as text/.test(err.message));
+  // An error status with such a body is still the API error, without the unreadable body.
+  const failing = new RequestEngine({ maxResponseBytes: 0, transport: makeMockTransport(() => rawResponse(huge, "text/plain", 500)).transport });
+  await assert.rejects(failing.getJson("/x"), (err: unknown) => err instanceof DdbApiError && err.status === 500 && err.body === "");
 });
