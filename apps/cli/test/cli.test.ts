@@ -984,3 +984,13 @@ test("search prints documents with Solr's _version_ as a string and exits 0 (Bug
   const docs = JSON.parse(cli.out.join("\n")).response.docs as Array<Record<string, unknown>>;
   assert.deepEqual(docs.map((d) => d["_version_"]), ["1858054135406919680", "5"]);
 });
+
+test("item: a JSON part answered with HTML is an error (exit 1, ERROR of ddb.api), nothing printed or written (Bug 04-1)", async () => {
+  for (const argv of [["item", ID], ["item", ID, "--part", "binaries"], ["-o", "view.json", "item", ID]]) {
+    const cli = makeCli(() => rawResponse("<html>portal</html>", "text/html"));
+    assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
+    assert.deepEqual(cli.out, [], argv.join(" "));
+    assert.deepEqual(cli.files, [], argv.join(" "));
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[ddb\.api\] .*not valid JSON \(expected JSON, got Content-Type "text\/html"\)/, argv.join(" "));
+  }
+});

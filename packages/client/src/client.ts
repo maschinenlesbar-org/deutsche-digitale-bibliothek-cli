@@ -18,6 +18,7 @@ import type { QueryParams } from "./query.js";
 import { assertValid, itemPartProblem, normalizeItemId, normalizeText, pathNameProblem } from "./validate.js";
 import {
   ITEM_LANG_PARTS,
+  ITEM_TEXT_PARTS,
   SOLR_MAX_INT,
   type ItemOptions,
   type ItemPart,
@@ -203,6 +204,16 @@ function assertSearchParams(params: SearchParams): void {
   if (params.facetLimit !== undefined && (params.facetFields ?? []).length === 0) {
     throw new DdbValidationError("Invalid facetLimit: it needs facetFields (it caps the values returned per facet field).");
   }
+}
+
+/**
+ * ` (expected JSON, got Content-Type "text/html")` for an answer that is not JSON when its type
+ * isn't either (an HTML maintenance or proxy page, the usual case), so it reads as an upstream
+ * problem rather than a client bug; "" otherwise.
+ */
+function typeHint(contentType: string): string {
+  const type = contentType.split(";")[0]?.trim() ?? "";
+  return type !== "" && !/json/i.test(type) ? ` (expected JSON, got Content-Type "${quoted(type)}")` : "";
 }
 
 function shapeError(path: string, expected: string): DdbParseError {
@@ -418,18 +429,21 @@ export class DdbClient {
       }
     }
     const heldBy = ancestors.length > 0 ? { heldBy: current } : {};
-    const json = /\bjson\b/i.test(res.contentType);
+    // Whether the answer is JSON is the part's, not the Content-Type's: an HTML page in place of
+    // `view` (a captive portal, a proxy login, a wrong --base-url) was returned as text and
+    // printed as data, exit 0 (Bug 04-1 of the 2026-10-21 round).
+    const jsonPart = !ITEM_TEXT_PARTS.includes(part);
     // JSON parts are decoded strictly by their charset; the raw XML/file parts keep their
     // exact `bytes`, and `text` falls back to UTF-8 for a charset label Node doesn't know.
-    const text = decodeBody(res.data, res.contentType, `/items/${id}`, json ? "strict" : "lenient");
-    if (json) {
+    const text = decodeBody(res.data, res.contentType, `/items/${id}`, jsonPart ? "strict" : "lenient");
+    if (jsonPart) {
       // Declared big integers (`_version_`) are quoted first, as in search.
       const scan = scanNumbers(text, this.engine.bigIntegerKeys);
       let json: unknown;
       try {
         json = text.trim().length === 0 ? null : JSON.parse(scan.json);
       } catch (cause) {
-        throw new DdbParseError(`Failed to parse JSON for item ${id} (${part})`, { cause });
+        throw new DdbParseError(`Unexpected response for item ${id} (${part}): the answer is not valid JSON${typeHint(res.contentType)}.`, { cause });
       }
       const inexact = scan.inexact;
       if (inexact !== undefined) {

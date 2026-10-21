@@ -18,7 +18,7 @@ the **public read routes** — search, item, version — which need **no API key
 - **One small dependency** for the CLI: [`commander`](https://github.com/tj/commander.js).
 - **Faithful shapes** — search returns a native **Solr** response typed as
   `SolrResponse`; item components are returned as parsed JSON or raw text
-  (`ItemResult`) depending on the response Content-Type.
+  (`ItemResult`) depending on the part.
 - **Well tested** — unit tests on Node's built-in test runner (`node --test`),
   every HTTP response mocked.
 
@@ -394,8 +394,12 @@ apps/cli/src/cli/
   (`Unexpected response shape from <path>: expected …`, exit 1). The CLI's
   `--filter`/`--facet`/`--sort`/`--fields` map straight onto `fq`/`facet.field`/
   `sort`/`fl`.
-- `item()` fetches raw via the engine and **branches on Content-Type**: JSON is
-  parsed into `ItemResult.json`; anything else (RDF/XML, XML, BIB) is returned as
+- `item()` fetches raw via the engine and **branches on the part**: the raw parts
+  (`ITEM_TEXT_PARTS`: `edm`, `source-record`, `citation`) are returned as text, every other part
+  is parsed as JSON whatever its Content-Type says, so an HTML page in its place (a captive
+  portal, a proxy login, a wrong base URL) is a `DdbParseError` ("the answer is not valid JSON
+  (expected JSON, got Content-Type "text/html")", exit 1), never data. JSON is
+  parsed into `ItemResult.json`; the raw parts (RDF/XML, XML, BIB) are returned as
   `ItemResult.text` (decoded by the Content-Type's charset, UTF-8 when none is given or
   the label is unknown) plus the exact upstream `ItemResult.bytes`. Every JSON body —
   search, JSON item parts, `version` — is decoded by its declared charset too
@@ -433,7 +437,7 @@ open index signature for the Solr fields.
 
 **ItemResult.** The decoded body of an item component
 ([`types.ts`](packages/client/src/types.ts)): `{ part, contentType, json? , text? }` —
-exactly one of `json`/`text` is set, chosen by Content-Type.
+exactly one of `json`/`text` is set, chosen by the part (`ITEM_TEXT_PARTS` are text).
 
 **Transport.** A single function `(HttpRequest) => Promise<HttpResponse>`
 ([`http.ts`](packages/client/src/http.ts)). The default uses Node's built-in

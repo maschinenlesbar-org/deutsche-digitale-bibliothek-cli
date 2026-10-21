@@ -91,6 +91,14 @@ export const ITEM_LANG_PARTS: readonly ItemPart[] = Object.freeze([
 ] as const);
 
 /**
+ * The item parts the API serves as XML or a plain file (edm RDF/XML, the source record's XML,
+ * the citation's BIB file): `item()` returns them as `text` (and `bytes`). Every other part is
+ * JSON, whatever the answer's Content-Type says, so an HTML page in its place (a captive portal,
+ * a wrong base URL) is a DdbParseError, never data. Frozen.
+ */
+export const ITEM_TEXT_PARTS: readonly ItemPart[] = Object.freeze(["edm", "source-record", "citation"] as const);
+
+/**
  * The largest value Solr accepts for an int parameter (search `rows`/`start`/
  * `facetLimit`, item `rows`/`offset`): Java's Integer.MAX_VALUE. Beyond it Solr
  * fails with HTTP 500, so the client rejects a larger value before any request.
@@ -100,16 +108,17 @@ export const SOLR_MAX_INT = 2_147_483_647;
 /**
  * The decoded body of an item component. Exactly one of `json` / `text` is set:
  * `json` for JSON components (view, aip, binaries, ...), `text` for the ones the
- * API serves as XML or a plain file (edm RDF/XML, source record XML, citation BIB).
+ * API serves as XML or a plain file ({@link ITEM_TEXT_PARTS}: edm RDF/XML, source record XML,
+ * citation BIB). Which one is set depends on the part, not on the Content-Type.
  */
 export interface ItemResult {
   part: ItemPart;
-  /** The response Content-Type the decoding was based on. */
+  /** The response's Content-Type (its charset decodes the body). */
   contentType: string;
-  /** Parsed JSON body, when the component returned JSON. */
+  /** Parsed JSON body, for a JSON component. */
   json?: JsonValue;
   /**
-   * Text body, when the component returned XML / a plain file: the bytes decoded by
+   * Text body, for an XML / plain-file component ({@link ITEM_TEXT_PARTS}): the bytes decoded by
    * the Content-Type's charset (UTF-8 when none is given or the label is unknown).
    */
   text?: string;

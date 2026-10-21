@@ -517,3 +517,28 @@ test("a caller's bigIntegerKeys are added to _version_, and a bad value is refus
   assert.deepEqual(res.response.docs[0], { id: "a", _version_: "1", begin_time: "2" });
   assert.throws(() => new DdbClient({ bigIntegerKeys: "begin_time" as unknown as ReadonlySet<string> }), DdbValidationError);
 });
+
+test("a JSON item part answered with a non-JSON body is a parse error, never data (Bug 04-1, 2026-10-21)", async () => {
+  // A captive portal, a proxy login page or a wrong base URL answered `view` with 200 text/html:
+  // item() resolved { contentType: "text/html", text: "<html>…" } and the CLI printed it, exit 0.
+  // Whether a part is JSON is the part's, not the Content-Type's.
+  const ID = "A".repeat(32);
+  for (const part of ["view", "aip", "binaries", "children", "parents", "source", "source-description", "iiif"] as const) {
+    const mt = makeMockTransport(() => rawResponse("<html>portal</html>", "text/html"));
+    await assert.rejects(new DdbClient({ transport: mt.transport }).item(ID, part), (err: unknown) => {
+      assert.ok(err instanceof DdbParseError, part);
+      assert.match(err.message, /not valid JSON \(expected JSON, got Content-Type "text\/html"\)/, `${part}: ${err.message}`);
+      return true;
+    });
+  }
+  // A JSON part with a JSON body under another type is still read as JSON.
+  const plain = makeMockTransport(() => rawResponse('{"a":1}', "text/plain"));
+  assert.deepEqual((await new DdbClient({ transport: plain.transport }).item(ID)).json, { a: 1 });
+  // The raw parts stay text, whatever their type says.
+  for (const part of ["edm", "source-record", "citation"] as const) {
+    const mt = makeMockTransport(() => rawResponse('{"a":1}', "application/json"));
+    const r = await new DdbClient({ transport: mt.transport }).item(ID, part);
+    assert.equal(r.text, '{"a":1}', part);
+    assert.equal(r.json, undefined, part);
+  }
+});
