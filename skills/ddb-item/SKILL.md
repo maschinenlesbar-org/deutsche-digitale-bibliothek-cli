@@ -65,6 +65,14 @@ archival record from Staatsarchiv München returned 7 (itself, four series, the
 Archivtektonik, the archive). For "what is this part of?", skip `hierarchy[0]`, and
 present the institution as the holder rather than as a parent record.
 
+> **Trap: `parents` can be empty.** Some objects answer `{"numberOfResults":0,"hierarchy":[]}`
+> although they are part of something: a section of a digitised book
+> (`JG3YAM7VLFJPVGMAWK4IBCJVFHNFZ5NP`, seen 2026-10-21), whose `source-record` the API serves
+> as its volume's (`JY7HJBJAUBYMG437RSIFJNUPMMSAHT26`). An empty `parents` is not "no parent
+> and no institution": say the API lists no hierarchy for it, take the holding institution from
+> `view` (its provider fields), and for the containing work fetch `--part source-record`, whose
+> stderr note names the ancestor the API points to.
+
 ## Recipes
 
 ```bash

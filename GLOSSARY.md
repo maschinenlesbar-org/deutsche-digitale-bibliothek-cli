@@ -136,7 +136,7 @@ object. Most are JSON; a few are served as XML or a plain file and are printed
 | `aip` | the Archive Information Package (the full record) | JSON |
 | `edm` | the **Europeana Data Model** record — the standardised, interoperable profile the DDB shares with [Europeana](https://www.europeana.eu) | RDF/**XML** |
 | `binaries` | related binary files (thumbnails, media) with their URLs | JSON |
-| `children` / `parents` | the direct children one level down / the whole chain up, starting with the object itself and ending with its institution (finding aids, multi-part works) | JSON |
+| `children` / `parents` | the direct children one level down / the whole chain up, starting with the object itself and ending with its institution (finding aids, multi-part works); empty for some objects that are part of something (a section of a digitised book) | JSON |
 | `source` | the ingest source metadata | JSON |
 | `source-description` | a description of the source record | JSON |
 | `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML, …); for a sub-item (a book section, an archive unit) often its ancestor's whole record, with a note naming it | **XML** |

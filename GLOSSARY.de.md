@@ -139,7 +139,7 @@ ausgegeben (damit sie bei `> file.xml` und in Pipes unverändert bleiben):
 | `aip` | das Archive Information Package (der vollständige Datensatz) | JSON |
 | `edm` | der Datensatz im **Europeana Data Model** – dem standardisierten, interoperablen Profil, das die DDB mit [Europeana](https://www.europeana.eu) teilt | RDF/**XML** |
 | `binaries` | zugehörige Binärdateien (Vorschaubilder, Medien) mit ihren URLs | JSON |
-| `children` / `parents` | die direkten Kind-Objekte eine Ebene tiefer / die ganze Kette nach oben, beginnend mit dem Objekt selbst und endend mit seiner Einrichtung (Findmittel, mehrteilige Werke) | JSON |
+| `children` / `parents` | die direkten Kind-Objekte eine Ebene tiefer / die ganze Kette nach oben, beginnend mit dem Objekt selbst und endend mit seiner Einrichtung (Findmittel, mehrteilige Werke); leer bei manchen Objekten, die Teil von etwas sind (ein Abschnitt eines digitalisierten Buchs) | JSON |
 | `source` | die Metadaten der Ingest-Quelle | JSON |
 | `source-description` | eine Beschreibung des Quelldatensatzes | JSON |
 | `source-record` | der rohe Datensatz der liefernden Einrichtung (METS/MODS, LIDO, MARCXML, …); bei einem Teilobjekt (Abschnitt eines Buchs, Verzeichnungseinheit eines Findbuchs) oft der ganze Datensatz eines übergeordneten Objekts, mit einem Hinweis, der es nennt | **XML** |

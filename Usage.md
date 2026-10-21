@@ -159,7 +159,7 @@ what a terminal shows) removed first:
 | `edm` | the Europeana Data Model record | RDF/**XML** |
 | `binaries` | related binary files (thumbnails, media) and their URLs | JSON |
 | `children` | child items (accepts `--rows`/`--offset`, the only part that does) | JSON |
-| `parents` | the chain up the hierarchy: the object itself first, the institution last | JSON |
+| `parents` | the chain up the hierarchy: the object itself first, the institution last; empty for some objects that are part of something (a section of a digitised book: see its `source-record`) | JSON |
 | `source` | the ingest source metadata | JSON |
 | `source-description` | a description of the source record | JSON |
 | `source-record` | the raw provider record (METS/MODS, LIDO, MARCXML); see below for sub-items | **XML** |
