@@ -431,11 +431,16 @@ apps/cli/src/cli/
   terminal acts on it: DEL, C1 (U+0080–U+009F) and the bidi controls (`isBidiControl`: U+061C,
   U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) become `\uXXXX`, the same JSON
   (`escapeControlChars`).
-- JSON output (`renderJson` in `apps/cli/src/cli/shared.ts`) is pretty by default; an answer
-  nested too deeply for that is an ERROR ("… nested too deeply to pretty-print; try
-  --compact.", exit 1). `--compact` takes V8's fast `JSON.stringify` path, the only one that
+- JSON output (`renderJson` in `apps/cli/src/cli/shared.ts`) is pretty by default. Printing can
+  fail two ways, each an `OutputError` (an ERROR of `ddb.output`, exit 1) that names the cause:
+  an answer nested too deeply ("The answer is nested too deeply to pretty-print[; try --compact].")
+  and one whose text would pass V8's longest string ("The answer is too large (more than 536870888
+  characters of JSON) to pretty-print[; try --compact]."). "try --compact" is added only when the
+  compact form of that very answer prints: probed, never assumed from the Node version.
+  `--compact` takes V8's fast `JSON.stringify` path, the only one that
   prints very deep nesting on Node 26, unless the answer holds a string or key of 64 Mi
-  characters or more (`holdsHugeString`): on Node 26 that path aborts the process on a
+  characters or more (`holdsHugeString`, iterative, linear and without an allocation per value):
+  on Node 26 that path aborts the process on a
   ~250 MB string from JSON.parse, so such an answer goes through an empty gap (the same text).
 - The engine accepts `defaultHeaders` merged into every request — the read routes
   need none; it's the injection seam for a caller that reaches an authed endpoint.
