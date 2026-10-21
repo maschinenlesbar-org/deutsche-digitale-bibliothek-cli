@@ -433,6 +433,23 @@ function engineHeadersOnly(headers: Record<string, string>): Record<string, stri
   return Object.fromEntries(Object.entries(headers).filter(([key]) => ENGINE_HEADERS.has(key)));
 }
 
+/**
+ * Whether the UTF-16 code unit `code` is a bidi formatting control: the Arabic letter mark
+ * U+061C, the marks U+200E/U+200F, the embeddings and overrides U+202A–U+202E and the isolates
+ * U+2066–U+2069. A terminal applies them to the text that follows, so an override in server
+ * data can reorder what the user sees ("Trojan Source" spoofing). The CLI escapes them in its
+ * JSON output.
+ */
+export function isBidiControl(code: number): boolean {
+  return (
+    code === 0x061c ||
+    code === 0x200e ||
+    code === 0x200f ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x2069)
+  );
+}
+
 /** A JSON number token, matched at a given position (sticky). */
 const JSON_NUMBER = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 

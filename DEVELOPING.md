@@ -385,6 +385,10 @@ apps/cli/src/cli/
   The CLI writes those bytes unchanged with `-o` and to a non-terminal stdout
   (`CliIO.isTerminal()` false → `outBinary`); only a terminal gets the decoded text
   with control characters stripped.
+- JSON output (stdout and the `-o` file) escapes what `JSON.stringify` leaves raw although a
+  terminal acts on it: DEL, C1 (U+0080–U+009F) and the bidi controls (`isBidiControl`: U+061C,
+  U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) become `\uXXXX`, the same JSON
+  (`escapeControlChars`).
 - JSON output (`renderJson` in `apps/cli/src/cli/shared.ts`) is pretty by default; an answer
   nested too deeply for that is an ERROR ("… nested too deeply to pretty-print; try
   --compact.", exit 1). `--compact` takes V8's fast `JSON.stringify` path, the only one that

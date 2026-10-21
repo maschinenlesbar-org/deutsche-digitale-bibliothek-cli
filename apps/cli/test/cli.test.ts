@@ -913,3 +913,22 @@ test("a subcommand's value option does not swallow the program's --log-format, i
   assert.ok(cli.err.length > 0 && cli.err.every((line) => line.startsWith("{")), cli.err.join("\n"));
   assert.match((JSON.parse(cli.err[0] ?? "") as Record<string, unknown>)["msg"] as string, /--rows <n>' argument missing/);
 });
+
+test("printed JSON escapes the bidi controls, on stdout and in the -o file (kit rollout K10)", async () => {
+  // JSON.stringify leaves U+202E (right-to-left override) raw, and a terminal reorders the text
+  // after it ("Trojan Source" spoofing). DEL and C1 were escaped already.
+  const RLO = String.fromCharCode(0x202e);
+  const bidi = [0x061c, 0x200e, 0x200f, 0x202a, 0x202e, 0x2066, 0x2069].map((c) => String.fromCharCode(c)).join("");
+  const body = { edm: { id: ID, title: `a${RLO}b`, all: bidi } };
+  const cli = makeCli(() => jsonResponse(body));
+  assert.equal(await run(["--compact", "item", ID], cli.deps), 0);
+  const printed = cli.out.join("\n");
+  assert.ok(printed.includes("a\\u202eb"), printed);
+  assert.ok(printed.includes("\\u061c\\u200e\\u200f\\u202a\\u202e\\u2066\\u2069"), printed);
+  assert.ok(!/[؜‎‏‪-‮⁦-⁩]/.test(printed), "a raw bidi control was printed");
+  assert.deepEqual(JSON.parse(printed), body);
+  const file = makeCli(() => jsonResponse(body));
+  assert.equal(await run(["item", ID, "-o", "out.json"], file.deps), 0);
+  const written = file.files[0]!.data.toString("utf8");
+  assert.ok(written.includes("a\\u202eb") && !written.includes(RLO), written);
+});
