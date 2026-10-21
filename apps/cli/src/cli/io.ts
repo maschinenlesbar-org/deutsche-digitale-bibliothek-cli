@@ -1,9 +1,11 @@
 // I/O seam for the CLI. Everything the CLI writes goes through a CliIO object so
 // tests can capture output instead of hitting the real stdout/stderr/filesystem.
 
-import { lstatSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { chmodSync, closeSync, lstatSync, openSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { DdbClient, DdbClientOptions } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
-import { DdbError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
+import { DdbError, DdbUsageError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
 import { createLogger, type Logger } from "./log.js";
 
 /**
@@ -13,13 +15,21 @@ import { createLogger, type Logger } from "./log.js";
  */
 export class OutputError extends DdbError {}
 
+/**
+ * The `-o` target was refused before any request (an existing path without `--force`, a
+ * dangling link too, or a directory): a usage error, exit 2, logged as an ERROR of
+ * `ddb.output` like every other `-o` refusal.
+ */
+export class OutputRefusedError extends DdbUsageError {}
+
 export interface CliIO {
   out(text: string): void;
   err(text: string): void;
   /**
-   * Persist raw bytes to a file. Refuses to clobber an existing file unless
-   * `force` is set, and surfaces any filesystem failure as an `OutputError` (a
-   * `DdbError`) with a clean message rather than a bare Node fs error.
+   * Persist raw bytes to a file, atomically: the old file stays as it was until the new
+   * one is complete. Refuses to clobber an existing file unless `force` is set, and
+   * surfaces any filesystem failure as an `OutputError` (a `DdbError`) with a clean
+   * message rather than a bare Node fs error.
    */
   writeFile(path: string, data: Buffer, force?: boolean): void;
   /**
@@ -134,6 +144,44 @@ function existingFileError(path: string, cause?: unknown): OutputError {
   return new OutputError(`Refusing to overwrite existing file "${path}"; pass --force to overwrite.`, { cause });
 }
 
+/**
+ * Replace `target` with `data` atomically: a temporary file beside it, created exclusively,
+ * renamed over it. A write cut short (a full disk, a quota, a killed process) leaves the old
+ * file as it was, never half of the new one. An existing file's mode is kept.
+ */
+function replaceFile(target: string, data: Buffer): void {
+  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}-${randomBytes(4).toString("hex")}.tmp`);
+  try {
+    writeFileSync(temporary, data, { flag: "wx" });
+    const mode = modeOf(target);
+    if (mode !== undefined) chmodSync(temporary, mode);
+    renameSync(temporary, target);
+  } catch (err) {
+    rmSync(temporary, { force: true });
+    throw err;
+  }
+}
+
+function modeOf(path: string): number | undefined {
+  try {
+    return statSync(path).mode & 0o7777;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The file a path names, through any symlinks, so `--force` replaces the file a link points
+ * at rather than the link. A dangling link is replaced itself.
+ */
+function throughLinks(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
 /** What `stderrAfterStdout` needs of stdout: its backlog, and the events that end one. */
 export interface StdoutBacklog {
   readonly writableLength: number;
@@ -181,15 +229,24 @@ export const defaultIO: CliIO = {
   // A record never lands inside the data when both streams share a pipe.
   err: stderrLine,
   writeFile: (path, data, force = false) => {
+    if (isDirectory(path)) throw directoryError(path);
+    let claimed = false;
     try {
-      // `wx` fails if the path already exists, so `-o` never silently clobbers a
-      // file. `--force` opts back into overwriting (plain `w`).
-      writeFileSync(path, data, { flag: force ? "w" : "wx" });
+      // Without --force the name is claimed first with an exclusive create, which fails if
+      // the path exists (a dangling symlink included, since it never follows one), so `-o`
+      // never silently clobbers a file. The data then replaces it atomically.
+      if (!force) {
+        closeSync(openSync(path, "wx"));
+        claimed = true;
+      }
+      replaceFile(force ? throughLinks(path) : path, data);
     } catch (cause) {
+      // A write cut short (a full disk) leaves no file under the new name either, so the
+      // next run isn't refused for a file that holds half a result.
+      if (claimed) rmSync(path, { force: true });
       const code = (cause as NodeJS.ErrnoException | undefined)?.code;
-      // `wx` answers EEXIST and `w` EISDIR for a directory; --force cannot help there.
-      if ((code === "EEXIST" || code === "EISDIR") && isDirectory(path)) throw directoryError(path, cause);
-      if (code === "EEXIST") throw existingFileError(path, cause);
+      if (code === "EISDIR" && isDirectory(path)) throw directoryError(path, cause);
+      if (code === "EEXIST" && !claimed) throw existingFileError(path, cause);
       const reason = cause instanceof Error ? cause.message : String(cause);
       throw new OutputError(`Could not write to "${path}": ${reason}`, { cause });
     }

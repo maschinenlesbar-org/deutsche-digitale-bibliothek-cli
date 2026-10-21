@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import { DdbClient } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
 import { credentialsIn } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultIO, type CliDeps } from "../src/cli/io.js";
@@ -366,12 +366,16 @@ test("-o - writes to stdout, not to a file named -", async () => {
   assert.ok(!cli.err.some((line) => line.startsWith("Wrote")));
 });
 
-test("an existing -o file or a directory is refused before any request, for every command, as an ERROR of ddb.output", async () => {
+test("an existing -o file, a dangling link or a directory is a usage error before any request, for every command, as an ERROR of ddb.output (kit rollout K7)", async () => {
+  // They exited 1, like a write that failed after the request; a refused target is a usage error.
   const dir = mkdtempSync(join(tmpdir(), "ddb-cli-o-"));
   try {
     const existing = join(dir, "exists.json");
     writeFileSync(existing, "original");
+    const dangling = join(dir, "dangling.json");
+    symlinkSync(join(dir, "missing.json"), dangling);
     const cases: [string[], string][] = [
+      [["search", "x", "-o", dangling], `ERROR [ddb.output] Refusing to overwrite existing file "${dangling}"; pass --force to overwrite.`],
       [["search", "x", "-o", existing], `ERROR [ddb.output] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
       [["item", ID, "-o", existing], `ERROR [ddb.output] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
       [["version", "-o", existing], `ERROR [ddb.output] Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
@@ -381,7 +385,7 @@ test("an existing -o file or a directory is refused before any request, for ever
     for (const [args, message] of cases) {
       const cli = makeCli(() => jsonResponse(fx.solr));
       cli.deps.io.checkOutput = defaultIO.checkOutput;
-      assert.equal(await run(args, cli.deps), 1, args.join(" "));
+      assert.equal(await run(args, cli.deps), 2, args.join(" "));
       assert.equal(cli.mt.calls.length, 0, args.join(" "));
       assert.equal(cli.files.length, 0);
       assert.deepEqual(cli.out, []);

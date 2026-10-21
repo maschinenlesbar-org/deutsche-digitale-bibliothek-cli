@@ -3,7 +3,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { OutputError, logOf, type CliDeps } from "./io.js";
+import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
 import type { DdbClientOptions } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
 import { DdbError, DdbUsageError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
 import { baseUrlProblem, headerValueProblem } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/validate";
@@ -260,11 +260,16 @@ export function action(
     }
     // `-o -` means stdout: from here on it is the same as no -o.
     if (global.output === "-") delete global.output;
-    // An -o file that exists (without --force), or a directory, is refused before any
-    // request, with the error the write would raise afterwards — no traffic for nothing.
+    // An -o path that exists (without --force; a dangling link too), or a directory, is a
+    // usage error before any request, with the message the write would give afterwards —
+    // no traffic for nothing.
     if (global.output !== undefined) {
       const output = global.output;
-      asOutputError(() => deps.io.checkOutput?.(output, global.force));
+      try {
+        deps.io.checkOutput?.(output, global.force);
+      } catch (cause) {
+        throw new OutputRefusedError(cause instanceof Error ? cause.message : String(cause), { cause });
+      }
     }
     // One warning per run (a WARN record of `ddb.http`), before the first request, when
     // the base URL is plain http: to a host other than loopback. Help, version and usage

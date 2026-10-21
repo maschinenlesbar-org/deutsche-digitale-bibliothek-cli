@@ -4,7 +4,7 @@
 
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
-import { OutputError, logOf, type CliDeps } from "./io.js";
+import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
 import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat, type Logger } from "./log.js";
 import {
   DdbApiError,
@@ -291,8 +291,9 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     if (err instanceof DdbValidationError || err instanceof DdbUsageError) {
       // A usage error detected in an action, or the library rejecting an input
       // before any request (DdbValidationError, which extends DdbUsageError; named
-      // here for clarity): exit 2, matching commander's own usage/parse errors.
-      log.error("cli", err.message);
+      // here for clarity): exit 2, matching commander's own usage/parse errors. A refused
+      // -o target is logged with the other -o errors.
+      log.error(err instanceof OutputRefusedError ? "output" : "cli", err.message);
       return 2;
     }
     if (err instanceof DdbNetworkError) {

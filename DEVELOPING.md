@@ -510,10 +510,15 @@ as `true`/`false`, and encodes spaces as `%20` (not `+`).
 ([`io.ts`](apps/cli/src/cli/io.ts)): a client factory plus an I/O object
 (`out`/`err`/`writeFile`/`outBinary`, optional `checkOutput`/`isTerminal`). Lets the
 whole CLI run in tests with a mocked client and captured output — no subprocess.
-`checkOutput` runs in `action()` before the client is built: an existing `-o` file
-(without `--force`) or a directory fails there with the same `DdbError` (exit 1) that
-`writeFile` raises, so a refused write costs no request. `writeFile` keeps its own
-`wx` check for a file that appears meanwhile; `-o -` (stdout) skips both.
+`checkOutput` runs in `action()` before the client is built: an existing `-o` path
+(without `--force`; a dangling link too) or a directory is a usage error there
+(`OutputRefusedError`, a `DdbUsageError`: exit 2, an ERROR of `ddb.output`) with the message
+`writeFile` would raise, so a refused write costs no request. `writeFile` is atomic: without
+`--force` it claims the name with an exclusive create (so a file that appears meanwhile is still
+refused, an `OutputError`, exit 1), writes a temporary file beside the target and renames it over
+it; a write that fails part-way removes both, so no half-written file and no claimed name is left,
+and with `--force` the old file stays as it was. `--force` keeps the old file's mode and writes
+through a symlink to the file it points at. `-o -` (stdout) skips both.
 
 **Error types.** [`errors.ts`](packages/client/src/errors.ts): `DdbApiError` (non-2xx,
 carries `status`/`apiName`/`detail`/`url`/`method`/`body`, with `isRetryable`),
