@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import { DdbClient } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
 import { credentialsIn } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultIO, type CliDeps } from "../src/cli/io.js";
@@ -401,6 +401,29 @@ test("an existing -o file, a dangling link or a directory is a usage error befor
       assert.equal(cli.mt.calls.length, 1);
       assert.equal(cli.files.length, 1);
     }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a file that appears during the request is not overwritten: exit 1, an ERROR of ddb.output (not a usage error)", async () => {
+  // The target was free when checked; another process created it while the request ran. That
+  // is a write failure after the request, not something the user typed wrong: exit 1.
+  const dir = mkdtempSync(join(tmpdir(), "ddb-cli-o-"));
+  try {
+    const path = join(dir, "result.json");
+    const cli = makeCli(() => {
+      writeFileSync(path, "theirs");
+      return jsonResponse(fx.solrExact);
+    });
+    cli.deps.io.checkOutput = defaultIO.checkOutput;
+    cli.deps.io.writeFile = defaultIO.writeFile;
+    assert.equal(await run(["search", "x", "-o", path], cli.deps), 1);
+    assert.equal(cli.mt.calls.length, 1);
+    assert.deepEqual(cli.out, []);
+    assert.equal(untimed(cli.err.join("\n")), `ERROR [ddb.output] Refusing to overwrite existing file "${path}"; pass --force to overwrite.`);
+    assert.equal(readFileSync(path, "utf8"), "theirs");
+    assert.deepEqual(readdirSync(dir), ["result.json"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
