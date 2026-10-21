@@ -672,3 +672,14 @@ test("bigIntegerKeys must be a set or list of non-empty strings", () => {
   }
   assert.doesNotThrow(() => new RequestEngine({ bigIntegerKeys: new Set() }));
 });
+
+test("a header named __proto__ is an ordinary header, never the prototype of the headers read (T12, 2026-10-21)", async () => {
+  // A JavaScript transport may return any object; JSON.parse makes "__proto__" an own key. Copied
+  // with `record[name] = value` it became the record's prototype, and its entries read as headers.
+  const headers = JSON.parse('{"__proto__":{"content-type":"application/json; charset=x-bogus"}}') as Record<string, string>;
+  const e = new RequestEngine({ transport: async () => ({ status: 200, headers, body: Buffer.from('{"a":1}') }) });
+  assert.deepEqual(await e.getJson("/x"), { a: 1 });
+  const fetchLike = new Headers([["__proto__", "x"], ["content-type", "application/json"]]);
+  const f = new RequestEngine({ transport: async () => ({ status: 200, headers: fetchLike as unknown as Record<string, string>, body: Buffer.from('{"a":1}') }) });
+  assert.deepEqual(await f.getJson("/x"), { a: 1 });
+});
