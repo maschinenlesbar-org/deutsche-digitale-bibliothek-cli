@@ -35,10 +35,17 @@ export interface CliOutcome {
   requests: HttpRequest[];
 }
 
-/** What the library did with the same input: its value or error, and requests. */
-export type LibOutcome =
-  | { ok: true; value: unknown; requests: HttpRequest[] }
-  | { ok: false; error: unknown; requests: HttpRequest[] };
+/**
+ * What the library did with the same input: its value or error (anything thrown that is not
+ * an Error is wrapped in one), and requests. The kit's shape, which the shared conformance
+ * bodies (P24, P25) read.
+ */
+export interface LibOutcome {
+  ok: boolean;
+  value?: unknown;
+  error?: Error;
+  requests: HttpRequest[];
+}
 
 export interface ParityResult {
   cli: CliOutcome;
@@ -82,7 +89,7 @@ export async function parity(
     const value = await call(mt.transport);
     lib = { ok: true, value, requests: mt.calls.splice(0) };
   } catch (error) {
-    lib = { ok: false, error, requests: mt.calls.splice(0) };
+    lib = { ok: false, error: error instanceof Error ? error : new Error(String(error)), requests: mt.calls.splice(0) };
   }
   return { cli, lib };
 }

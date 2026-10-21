@@ -576,7 +576,11 @@ the CLI is in `apps/cli/test/`.
   for a plain-`http:` base URL (follow-up round `.reviews/2026-10-06-followup/round.md`; the
   environment and API-key cases skipped: `ddb` reads neither), P21 README links (a relative
   link must point at a file `files` ships — npmjs.com shows the README; anything else is an
-  absolute GitHub URL).
+  absolute GitHub URL), P23 the stderr log format, P24 the input corpus (the query and
+`--filter` go out trimmed and in NFC or are refused; an item id in its canonical form or refused),
+P25 the response corpus (a number a double can't carry exactly, or an empty answer, is an error),
+P26 `-o` integrity (a write cut short under `ulimit -f` leaves the old file and no half-written one;
+an existing file without `--force` is refused before any request; both start the built bin).
 
 ## Continuous integration
 
