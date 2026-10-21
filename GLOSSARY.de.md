@@ -109,6 +109,12 @@ umgebende Leerzeichen und in zusammengesetztem Unicode (NFC) hinaus, der einzige
 Index findet: Ein mit kombinierendem Trema kopiertes `München` fand 231 statt 2,77 Millionen
 Dokumente, als Facettenfilter keines; eines mit angehängtem geschütztem Leerzeichen war ein
 anderer Facettenwert. Ein von Solr maskiertes Leerzeichen am Ende (`foo\ `) bleibt erhalten.
+Eine Abfrage oder ein Filter mit einem unsichtbaren oder Steuerzeichen (ein Leerzeichen der
+Breite null, ein bedingter Trennstrich, ein Bidi-Steuerzeichen; ZWJ und ZWNJ sind erlaubt) oder
+einem halben Zeichen (einem einzelnen Surrogat), oder nur aus solchen Zeichen und kombinierenden
+Zeichen, wird vor jeder Anfrage abgelehnt (Exit 2), das Zeichen maskiert gezeigt (`\u200b`).
+Dasselbe gilt für jeden anderen Wert, den die CLI als Token sendet (eine Objekt-ID, einen Teil,
+einen Collection- oder Handler-Namen); er wird ohne umgebende Leerzeichen gesendet.
 
 **sort.** Solr-Sortiersyntax: `<field> asc|desc`, z. B. `--sort "score desc"` (Relevanz, der
 Standard, wenn nichts angegeben ist) oder `--sort "id asc"`. Weitere Kriterien für Gleichstände

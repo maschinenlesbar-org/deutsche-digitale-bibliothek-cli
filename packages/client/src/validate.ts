@@ -10,7 +10,7 @@
 //   Methods that return a promise call it inside the async body, so they reject
 //   rather than throw synchronously; constructors throw.
 
-import { DdbValidationError } from "./errors.js";
+import { DdbValidationError, quoteValue } from "./errors.js";
 import { ITEM_PARTS } from "./types.js";
 
 /** A validation rule: the reason `value` is invalid, or `undefined` when it is valid. */
@@ -30,9 +30,13 @@ export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
 /**
  * A DDB item id is exactly 32 upper-case letters and digits (`[A-Z0-9]{32}`). Ids
  * are case sensitive upstream, so a lower-cased paste gets the upper-case form as
- * a hint. Checks the value as given; {@link normalizeItemId} trims it first.
+ * a hint. The {@link tokenProblem} rules come first, so an invisible character is named
+ * (escaped) rather than counted. Checks the value as given; {@link normalizeItemId} trims it
+ * first.
  */
 export const itemIdProblem: Problem = (id) => {
+  const token = tokenProblem(id);
+  if (token !== undefined) return token;
   if (typeof id !== "string") return "Expected a string.";
   if (id.length !== 32) {
     return `Expected exactly 32 characters (got ${id.length}). Copy the \`id\` from a search result.`;
@@ -71,15 +75,17 @@ export function normalizeText(value: string): string {
 
 /**
  * A Solr collection or request-handler name (`search({ collection,
- * requestHandler })`): letters, digits, `.`, `_` and `-` only. These go into the
- * request path, so anything else (a `/`, `?`, space or non-ASCII letter) cannot
- * name a Solr core or handler. "." and ".." are rejected too: URL parsing would
- * resolve them as dot segments and leave the route.
+ * requestHandler })`): a token ({@link tokenProblem}; sent trimmed, `normalizeToken`) of
+ * letters, digits, `.`, `_` and `-` only. These go into the request path, so anything else
+ * (a `/`, `?`, inner space or non-ASCII letter) cannot name a Solr core or handler. "." and
+ * ".." are rejected too: URL parsing would resolve them as dot segments and leave the route.
  */
 export const pathNameProblem: Problem = (value) => {
-  if (typeof value !== "string") return "Expected a string.";
-  if (!/^[A-Za-z0-9._-]+$/.test(value)) return "Expected letters, digits, '.', '_' or '-' only.";
-  if (value === "." || value === "..") return '"." and ".." are path navigation, not a name.';
+  const token = tokenProblem(value);
+  if (token !== undefined) return token;
+  const name = (value as string).trim();
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) return "Expected letters, digits, '.', '_' or '-' only.";
+  if (name === "." || name === "..") return '"." and ".." are path navigation, not a name.';
   return undefined;
 };
 
@@ -154,11 +160,116 @@ export const baseUrlProblem: Problem = (value) => {
 };
 
 /**
- * An item component (`item(id, part)`): one of {@link ITEM_PARTS}. Only the
- * listed names count, so an inherited property name such as "toString" is
- * rejected too.
+ * An item component (`item(id, part)`): a token ({@link tokenProblem}) that is, trimmed
+ * (`normalizeToken`), one of {@link ITEM_PARTS}. Only the listed names count, so an inherited
+ * property name such as "toString" is rejected too.
  */
-export const itemPartProblem: Problem = (part) =>
-  typeof part === "string" && (ITEM_PARTS as readonly string[]).includes(part)
+export const itemPartProblem: Problem = (part) => {
+  if (typeof part !== "string") return `Expected one of: ${ITEM_PARTS.join(", ")}.`;
+  const token = tokenProblem(part);
+  if (token !== undefined) return token;
+  return (ITEM_PARTS as readonly string[]).includes(normalizeToken(part))
     ? undefined
     : `Expected one of: ${ITEM_PARTS.join(", ")}.`;
+};
+
+/** Characters that never make a value non-blank: whitespace, controls, format characters, combining marks. */
+const INVISIBLE = /[\s\p{Cc}\p{Cf}\p{M}]/gu;
+
+/** A lone surrogate: half of a character, which URLSearchParams would send as U+FFFD. */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+
+/**
+ * True when nothing in `value` would match anything: it holds only whitespace, control and
+ * format characters (a zero-width space, a soft hyphen) and combining marks. Such a value reads
+ * as "no filter" upstream, or matches nothing, so it is refused as blank.
+ */
+function isBlank(value: string): boolean {
+  return value.replace(INVISIBLE, "") === "";
+}
+
+/** `U+200B` for the first character of `text` that `pattern` matches. */
+function codePointOf(text: string, pattern: RegExp): string {
+  const ch = pattern.exec(text)?.[0] ?? "";
+  return `U+${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+/** A control character inside a text filter: C0 and C1, but not TAB, LF or CR (whitespace in a pasted phrase). */
+const TEXT_CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/;
+
+/** A format character inside a text filter, but not ZWNJ/ZWJ (U+200C/U+200D), which some scripts and emoji need. */
+const TEXT_FORMAT = /(?![‌‍])\p{Cf}/u;
+
+/**
+ * Why `value` cannot be sent as a text filter (the Solr query, a filter query), or undefined
+ * when it can. Refused, before any request, as the index would match nothing or everything:
+ * - a value that is blank once trimmed (Unicode whitespace, U+00A0 included), or that holds only
+ *   invisible characters and combining marks (`isBlank`): an empty `q`/`fq` reads as "no
+ *   filter", or matches nothing;
+ * - a lone surrogate (half of a character, sent as U+FFFD);
+ * - a control character (but TAB, LF and CR) or a format character (a zero-width space, a soft
+ *   hyphen, a bidi control; ZWNJ and ZWJ are allowed): pasted along, it makes the search find
+ *   nothing.
+ * The reason quotes the value with every invisible character escaped (`quoteValue`).
+ */
+export const textProblem: Problem = (value) => {
+  if (typeof value !== "string") return "Expected a string.";
+  if (isBlank(value)) return "Expected a non-empty value.";
+  if (LONE_SURROGATE.test(value)) return `${quoteValue(value)} contains half of a character (a lone surrogate).`;
+  if (TEXT_CONTROL.test(value)) return `${quoteValue(value)} contains a control character (${codePointOf(value, TEXT_CONTROL)}).`;
+  if (TEXT_FORMAT.test(value)) return `${quoteValue(value)} contains an invisible character (${codePointOf(value, TEXT_FORMAT)}).`;
+  return undefined;
+};
+
+/** A control or format character in a token (after trimming): every Cc and every Cf. */
+const TOKEN_INVISIBLE = /[\p{Cc}\p{Cf}]/u;
+
+/**
+ * Why `value` cannot be sent as a token, or undefined when it can. A token is an id, a code, an
+ * enum value, a field name or a sort key: a value the API compares exactly. The rules apply to
+ * the value with surrounding whitespace trimmed, as it is sent ({@link normalizeToken}): not
+ * blank (and not only invisible characters or combining marks), no lone surrogate, and no
+ * control or format character at all (a zero-width space, ZWJ, a soft hyphen, a bidi control),
+ * since an invisible character in an id or a field name only ever makes it match nothing. The
+ * reason quotes the value visibly.
+ */
+export const tokenProblem: Problem = (value) => {
+  if (typeof value !== "string") return "Expected a string.";
+  if (isBlank(value)) return "Expected a non-empty value.";
+  const token = value.trim();
+  if (LONE_SURROGATE.test(token)) return `${quoteValue(value)} contains half of a character (a lone surrogate).`;
+  if (TOKEN_INVISIBLE.test(token)) {
+    return `${quoteValue(value)} contains an invisible or control character (${codePointOf(token, TOKEN_INVISIBLE)}).`;
+  }
+  return undefined;
+};
+
+/** A token as it is sent: trimmed and in composed Unicode (NFC). Check it with {@link tokenProblem} first. */
+export function normalizeToken(value: string): string {
+  return value.trim().normalize("NFC");
+}
+
+/**
+ * The items of a comma-separated list (`--fields id,label`), as typed: each item is checked
+ * (`listProblem`) and canonicalised (`normalizeToken`) on its own, so `"id, label"` sends `label`,
+ * and `"id,,label"`, `"id,"` and `","` are refused rather than sent with an empty item.
+ */
+export function splitList(value: string): string[] {
+  return value.split(",");
+}
+
+/**
+ * Why `items` cannot be sent as a list, or undefined when it can: not an array of strings, no
+ * item at all, or an item that `itemProblem` refuses (by default {@link tokenProblem}: a blank
+ * item is refused, never dropped). The reason names the item.
+ */
+export function listProblem(items: readonly string[], itemProblem: Problem = tokenProblem): string | undefined {
+  if (!Array.isArray(items)) return "Expected a list of strings.";
+  if (items.length === 0) return "Expected at least one value.";
+  for (let i = 0; i < items.length; i++) {
+    const problem = itemProblem(items[i] as string);
+    if (problem !== undefined) return items.length === 1 ? problem : `item ${i + 1} of ${items.length}: ${problem}`;
+  }
+  return undefined;
+}
+

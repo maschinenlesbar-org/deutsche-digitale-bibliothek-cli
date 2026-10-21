@@ -10,6 +10,7 @@ import {
   ITEM_LANG_PARTS,
   ITEM_PARTS,
   itemPartProblem,
+  normalizeToken,
   type ItemOptions,
   type ItemPart,
 } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client";
@@ -20,7 +21,7 @@ import { action, parseNonEmpty, parseSolrInt, renderJson, writeOutputFile } from
 function parsePart(value: string): ItemPart {
   const problem = itemPartProblem(value);
   if (problem !== undefined) throw new InvalidArgumentError(problem);
-  return value as ItemPart;
+  return normalizeToken(value) as ItemPart;
 }
 
 export function registerItemCommand(program: Command, deps: CliDeps): void {

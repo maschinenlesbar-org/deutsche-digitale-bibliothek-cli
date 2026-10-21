@@ -107,7 +107,12 @@ that field (so you can see what to narrow to). `--filter` takes a raw Solr
 surrounding whitespace and in composed Unicode (NFC), the only form the index matches: a `München`
 pasted with a combining umlaut found 231 documents instead of 2.77 million, and as a facet filter
 none; one pasted with a trailing no-break space was another facet value. A trailing space Solr
-escapes (`foo\ `) is kept.
+escapes (`foo\ `) is kept. A query or filter that holds an invisible or control character (a
+zero-width space, a soft hyphen, a bidi control; ZWJ and ZWNJ are fine) or a half character (a
+lone surrogate), or nothing but such characters and combining marks, is refused before any
+request (exit 2), the character shown escaped (`\u200b`). The same goes for every other value
+the CLI sends as a token (an item id, a part, a collection or handler name), which is sent
+trimmed.
 
 **sort.** Solr sort syntax: `<field> asc|desc`, e.g. `--sort "score desc"`
 (relevance, the default when omitted) or `--sort "id asc"`. Comma-separate for

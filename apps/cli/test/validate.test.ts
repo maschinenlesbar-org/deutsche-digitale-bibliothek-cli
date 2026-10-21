@@ -75,7 +75,9 @@ test("itemIdProblem: 32 upper-case letters and digits, with a hint for lower cas
   const ID = "TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK";
   assert.equal(itemIdProblem(ID), undefined);
   assert.equal(itemIdProblem("ABC"), "Expected exactly 32 characters (got 3). Copy the `id` from a search result.");
-  assert.equal(itemIdProblem(""), "Expected exactly 32 characters (got 0). Copy the `id` from a search result.");
+  // Blank, invisible or control characters are named first (T8), the value quoted visibly (T10).
+  assert.equal(itemIdProblem(""), "Expected a non-empty value.");
+  assert.equal(itemIdProblem(`${ID.slice(1)}\u200b`), `"${ID.slice(1)}\\u200b" contains an invisible or control character (U+200B).`);
   assert.equal(itemIdProblem(ID.toLowerCase()), `Item ids are upper case: try "${ID}".`);
   for (const bad of [`${ID.slice(0, 31)}!`, ".".repeat(32), "/".repeat(32), ` ${ID.slice(1)}`]) {
     assert.equal(
@@ -103,7 +105,10 @@ test("normalizeItemId trims, validates and is idempotent", () => {
 
 test("pathNameProblem: letters, digits, '.', '_' and '-', but not '.' or '..'", () => {
   for (const ok of ["search", "select", "news_paper-1.0", "a..b"]) assert.equal(pathNameProblem(ok), undefined, ok);
-  for (const bad of ["", " search ", "a/b", "ü", "%2e", "select?x=1"]) {
+  // A token: sent trimmed (" search " is "search"); blank is named.
+  assert.equal(pathNameProblem(" search "), undefined);
+  assert.equal(pathNameProblem(""), "Expected a non-empty value.");
+  for (const bad of ["a/b", "\u00fc", "%2e", "select?x=1", "a b"]) {
     assert.equal(pathNameProblem(bad), "Expected letters, digits, '.', '_' or '-' only.", bad);
   }
   for (const dots of [".", ".."]) {
@@ -173,7 +178,10 @@ test("baseUrlProblem: the CLI's --base-url reasons", () => {
 test("itemPartProblem: one of ITEM_PARTS, nothing inherited", () => {
   for (const part of ITEM_PARTS) assert.equal(itemPartProblem(part), undefined, part);
   const reason = `Expected one of: ${ITEM_PARTS.join(", ")}.`;
-  for (const bad of ["bogus", "", "View", "toString", "__proto__", 1]) assert.equal(itemPartProblem(bad), reason, String(bad));
+  for (const bad of ["bogus", "View", "toString", "__proto__", 1]) assert.equal(itemPartProblem(bad), reason, String(bad));
+  // A token: blank or invisible is named; surrounding whitespace is trimmed (normalizeToken).
+  assert.equal(itemPartProblem(""), "Expected a non-empty value.");
+  assert.equal(itemPartProblem(" view "), undefined);
   assert.equal(lib.itemPartProblem, itemPartProblem);
 });
 

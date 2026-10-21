@@ -8,7 +8,7 @@ import { InvalidArgumentError } from "commander";
 import { logOf, type CliDeps } from "../io.js";
 import type { SearchParams } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/types";
 import { DdbUsageError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
-import { pathNameProblem } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/validate";
+import { pathNameProblem, textProblem } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/validate";
 import { DEFAULT_SEARCH_ROWS } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
 import { action, parseFacetLimit, parseNonEmpty, parseSolrInt, renderJson } from "../shared.js";
 
@@ -19,6 +19,16 @@ import { action, parseFacetLimit, parseNonEmpty, parseSolrInt, renderJson } from
  */
 function collect(value: string, previous: string[] = []): string[] {
   return previous.concat([parseNonEmpty(value)]);
+}
+
+/**
+ * commander accumulator for `--filter`: the library's text-filter rule (`textProblem`: not
+ * blank, no invisible, control or half character), as a usage error before any request.
+ */
+function collectFilter(value: string, previous: string[] = []): string[] {
+  const problem = textProblem(value);
+  if (problem !== undefined) throw new InvalidArgumentError(problem);
+  return previous.concat([value]);
 }
 
 /**
@@ -43,7 +53,7 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
     .option(
       "--filter <fq>",
       "Solr filter query (fq), repeatable, e.g. type_fct:mediatype_002",
-      collect,
+      collectFilter,
     )
     .option("--facet <field>", "compute counts for this facet field (repeatable), e.g. type_fct", collect)
     .option(

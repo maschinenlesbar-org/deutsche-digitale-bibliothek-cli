@@ -15,7 +15,7 @@
 import { RequestEngine, bigIntegerKeysOption, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
 import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage, quoteValue } from "./errors.js";
 import type { QueryParams } from "./query.js";
-import { assertValid, itemPartProblem, normalizeItemId, normalizeText, pathNameProblem } from "./validate.js";
+import { assertValid, itemPartProblem, normalizeItemId, normalizeText, normalizeToken, pathNameProblem, textProblem } from "./validate.js";
 import {
   ITEM_LANG_PARTS,
   ITEM_TEXT_PARTS,
@@ -115,6 +115,12 @@ function assertText(name: string, value: unknown): void {
   }
 }
 
+/** {@link assertText}, then the text-filter rules (`textProblem`: no invisible, control or half character). */
+function assertTextFilter(name: string, value: unknown): void {
+  assertText(name, value);
+  assertValid(name, value, textProblem);
+}
+
 /** Throw unless `value` is undefined or an integer in [min, SOLR_MAX_INT]. */
 function assertInt(name: string, value: number | undefined, min = 0): void {
   if (value === undefined) return;
@@ -184,7 +190,7 @@ function assertKnownKeys(name: string, value: object, allowed: readonly string[]
 function assertSearchParams(params: SearchParams): void {
   if (!isObject(params)) throw invalid("params", "an object such as { query: \"Goethe\" }", params);
   assertKnownKeys("search params", params, SEARCH_PARAM_KEYS);
-  assertText("query", params.query);
+  assertTextFilter("query", params.query);
   assertInt("rows", params.rows);
   assertInt("start", params.start);
   // facet.limit -1 is Solr's "no limit".
@@ -199,7 +205,7 @@ function assertSearchParams(params: SearchParams): void {
     const list: unknown = params[key];
     // A string here would be read character by character; an object not at all.
     if (list !== undefined && !Array.isArray(list)) throw invalid(key, "an array of strings", list);
-    for (const value of params[key] ?? []) assertText(`${key} entry`, value);
+    for (const value of params[key] ?? []) (key === "filters" ? assertTextFilter : assertText)(`${key} entry`, value);
   }
   if (params.facetLimit !== undefined && (params.facetFields ?? []).length === 0) {
     throw new DdbValidationError("Invalid facetLimit: it needs facetFields (it caps the values returned per facet field).");
@@ -321,8 +327,8 @@ export class DdbClient {
    */
   async search(params: SearchParams): Promise<SolrResponse> {
     assertSearchParams(params);
-    const collection = params.collection ?? "search";
-    const handler = params.requestHandler ?? "select";
+    const collection = normalizeToken(params.collection ?? "search");
+    const handler = normalizeToken(params.requestHandler ?? "select");
     // The index matches composed text only: `München` with U+0308 (as pasted from a macOS file
     // name) found 231 documents instead of 2.77 million, and as a facet filter none; a trailing
     // no-break space made another facet value. The query and the filters go out trimmed and in
@@ -362,13 +368,14 @@ export class DdbClient {
    * body is not an object or array (`null`, empty, a scalar) or is an error document is a
    * DdbParseError.
    */
-  async item(rawId: string, part: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
+  async item(rawId: string, rawPart: ItemPart = "view", opts: ItemOptions = {}): Promise<ItemResult> {
     // A JavaScript caller may pass null for "no options".
     opts = opts ?? {};
     if (typeof opts !== "object" || Array.isArray(opts)) throw invalid("options", "an object", opts);
     assertKnownKeys("item options", opts, ITEM_OPTION_KEYS);
     const id = normalizeItemId(rawId);
-    assertValid("part", part, itemPartProblem);
+    assertValid("part", rawPart, itemPartProblem);
+    const part = normalizeToken(rawPart) as ItemPart;
     if (opts.lang !== undefined) assertText("lang", opts.lang);
     assertInt("rows", opts.rows);
     assertInt("offset", opts.offset);

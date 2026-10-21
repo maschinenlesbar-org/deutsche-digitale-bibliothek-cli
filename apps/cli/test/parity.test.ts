@@ -60,10 +60,10 @@ test("parity: a malformed item id is rejected on both sides before any request (
 
 test("parity: search collection and handler names are checked on both sides (finding #5)", async () => {
   const cases: [string, string, Record<string, string>][] = [];
-  for (const v of [" search ", "a/b", "ü", "%2e%2e", " .. ", "..", ".", ""]) {
+  for (const v of ["a/b", "\u00fc", "%2e%2e", " .. ", "..", ".", "", "se\u200barch"]) {
     cases.push(["--collection", v, { collection: v }]);
   }
-  for (const v of ["sel/ect", "select?x=1", " select", ".."]) cases.push(["--handler", v, { requestHandler: v }]);
+  for (const v of ["sel/ect", "select?x=1", "sel ect", ".."]) cases.push(["--handler", v, { requestHandler: v }]);
   for (const [flag, value, params] of cases) {
     const r = await parity(
       ["--compact", "search", "Goethe", flag, value, "--rows", "10"],
@@ -83,6 +83,14 @@ test("parity: search collection and handler names are checked on both sides (fin
     () => jsonResponse(fx.solrExact),
   );
   assertSameRequests(ok, "valid names");
+  // Surrounding whitespace is trimmed on both sides (a token, T8).
+  const padded = await parity(
+    ["--compact", "search", "Goethe", "--collection", " search ", "--rows", "10"],
+    (t) => new DdbClient({ transport: t }).search({ query: "Goethe", rows: 10, collection: " search " }),
+    () => jsonResponse(fx.solrExact),
+  );
+  assertSameRequests(padded, "padded collection");
+  assert.ok(padded.cli.requests[0]!.url.includes("/search/index/search/select?"), padded.cli.requests[0]!.url);
 });
 
 test("parity: search sends the same default page size on both sides (finding #6)", async () => {

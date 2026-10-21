@@ -218,7 +218,7 @@ test("the client rejects a blank id, an unknown part and bad item options withou
   const cases: [() => Promise<unknown>, RegExp][] = [];
   const mt = makeMockTransport(() => jsonResponse(fx.itemView));
   const c = new DdbClient({ transport: mt.transport });
-  cases.push([() => c.item(""), /^Invalid id: Expected exactly 32 characters \(got 0\)\. /]);
+  cases.push([() => c.item(""), /^Invalid id: Expected a non-empty value\.$/]);
   cases.push([() => c.item(id, "foo" as ItemPart), /^Invalid part: Expected one of: view, aip, edm, .*, citation\.$/]);
   cases.push([() => c.item(id, "toString" as ItemPart), /^Invalid part: /]);
   cases.push([() => c.item(id, "children", { rows: -1 }), /^Invalid rows: /]);

@@ -38,9 +38,14 @@ export {
   headerValueProblem,
   itemIdProblem,
   itemPartProblem,
+  listProblem,
   normalizeItemId,
   normalizeText,
+  normalizeToken,
   pathNameProblem,
+  splitList,
+  textProblem,
+  tokenProblem,
 } from "./validate.js";
 export type { Problem } from "./validate.js";
 

@@ -177,15 +177,24 @@ parsers call the same functions and turn a reason into commander's
 What the library rejects with `DdbValidationError` (every rejected input, the checks
 above included):
 
-- **Query and filters** (`search({ query, filters })`): blank (once trimmed, U+00A0 included)
-  is rejected; otherwise each goes out through `normalizeText` (exported): surrounding
+- **Query and filters** (`search({ query, filters })`): `textProblem` (exported) refuses a
+  value that is blank once trimmed (U+00A0 included) or holds nothing but whitespace, control and
+  format characters and combining marks (`"\u200b"`, `"\u0301"`), a lone surrogate, a control
+  character other than TAB/LF/CR, and a format character other than ZWNJ/ZWJ (a zero-width
+  space, a soft hyphen, a bidi control): pasted along, they made the search match nothing.
+  Otherwise each goes out through `normalizeText` (exported): surrounding
   whitespace trimmed, a Solr-escaped trailing space (`foo\ `) kept, composed Unicode (NFC).
+- **Tokens** — every value the API compares exactly (an item id, a part, a collection or handler
+  name): `tokenProblem` (exported) refuses blank, a lone surrogate and every control and format
+  character; the value is sent as `normalizeToken` gives it (trimmed, NFC). A comma-separated
+  list is split with `splitList` and checked item by item with `listProblem` (an empty item is
+  refused, never dropped). Every reason quotes the value visibly (`quoteValue`).
 - **Item ids** (`item(id)`): the id is trimmed (`normalizeItemId`) and must then
   be exactly 32 upper-case letters and digits (`itemIdProblem`); a lower-case id
   gets the upper-case form as a hint (`Invalid id: Item ids are upper case: try
   "…".`).
-- **Solr collection and request handler** (`search({ collection, requestHandler })`):
-  letters, digits, `.`, `_` and `-` only, and not `.` or `..` (`pathNameProblem`).
+- **Solr collection and request handler** (`search({ collection, requestHandler })`): a token,
+  sent trimmed, of letters, digits, `.`, `_` and `-` only, and not `.` or `..` (`pathNameProblem`).
   The CLI's `--collection`/`--handler` parsers use the same rule. The engine's
   dot-segment guard in `buildUrl` stays as a backstop for any other path. Only
   handlers that return Solr's standard `response` envelope are supported: the P9
@@ -206,7 +215,7 @@ above included):
   `validateItemOptions`): `lang` outside `ITEM_LANG_PARTS` and `rows`/`offset` for
   any part but `children` (`Invalid lang: applies only to part …`). The API would
   silently ignore them.
-- **Item part** (`item(id, part)`): one of `ITEM_PARTS` (`itemPartProblem`,
+- **Item part** (`item(id, part)`): a token that is, trimmed, one of `ITEM_PARTS` (`itemPartProblem`,
   `Invalid part: Expected one of: view, aip, …`); an inherited name such as
   `toString` is rejected too. `--part` uses the same rule.
 
