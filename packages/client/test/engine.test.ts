@@ -646,6 +646,22 @@ test("bigIntegerKeys: a declared member's number arrives as its literal, as writ
   assert.deepEqual(await engine.getJson("/x"), { n: "1", m: 2 });
 });
 
+test("a subnormal number that does not print as written is refused; one that does passes (Bug 02-2, D4, 2026-10-21)", async () => {
+  // Below the smallest normal double a double has fewer significant digits: 3e-324 printed as
+  // 5e-324 and 1.2345678901234567e-320 as 1.2347e-320, exit 0.
+  const answer = (n: string) => new RequestEngine({ transport: makeMockTransport(() => rawResponse(`{"n":${n}}`, "application/json")).transport });
+  for (const n of ["3e-324", "4e-324", "-4.9e-324", "1.2345678901234567e-310", "2.225073858507201e-309", "1.2345678901234567e-320"]) {
+    await assert.rejects(answer(n).getJson("/x"), (err: unknown) => {
+      assert.ok(err instanceof DdbParseError, n);
+      assert.match(err.message, new RegExp(`the number ${n.replace(/[.+]/g, "\\$&")} cannot be represented exactly`), n);
+      return true;
+    });
+  }
+  for (const [n, value] of [["5e-324", 5e-324], ["-5e-324", -5e-324], ["1e-310", 1e-310], ["2.2250738585072014e-308", 2.2250738585072014e-308]] as const) {
+    assert.equal((await answer(n).getJson<{ n: number }>("/x")).n, value, n);
+  }
+});
+
 test("bigIntegerKeys must be a set or list of non-empty strings", () => {
   for (const bad of ["n", 5, null, [""], [1], new Set([2])] as unknown[]) {
     assert.throws(
