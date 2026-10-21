@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultIO, type CliDeps } from "../src/cli/io.js";
+import { renderJson } from "../src/cli/shared.js";
 import type { HttpRequest, HttpResponse } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/http";
 import { makeMockTransport, jsonResponse, rawResponse, queryOf, untimed } from "./helpers.js";
 import * as fx from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/test/fixtures";
@@ -433,6 +434,25 @@ test("a deeply nested response fails pretty-printing cleanly and still prints wi
   const code = await run(["--compact", "item", ID], compact.deps);
   if (code === 0) assert.equal(compact.out.join(""), body);
   else assert.equal(untimed(compact.err.join("\n")), "ERROR [ddb.cli] The response is nested too deeply to print.");
+});
+
+test("--compact takes the gap path only for an answer holding a huge string, the fast path otherwise (kit rollout K4)", (t) => {
+  // On Node 26 V8's fast stringifier (no gap) aborts the process on a ~250 MB string that
+  // JSON.parse made ("Zone Allocation failed", exit 134); the gap path prints it. Only the fast
+  // path is iterative there, though, and prints nesting the gap path refuses at ~7,000 levels.
+  // So the path is chosen per answer. Too big a body for this suite: this pins the calls.
+  const { deps, out } = makeCli(() => jsonResponse({}));
+  const stringify = t.mock.method(JSON, "stringify", () => '"stub"');
+  const huge = "x".repeat(64 * 1024 * 1024);
+  renderJson(deps, { compact: true }, { id: "a1", text: huge });
+  renderJson(deps, { compact: true }, { id: "a1", x: [[["Rede"]]], text: huge.slice(1) });
+  renderJson(deps, { compact: true }, { [huge]: 1 });
+  renderJson(deps, { compact: true }, [[huge]]);
+  renderJson(deps, {}, { id: "a1" });
+  const calls = stringify.mock.calls.map((call) => call.arguments);
+  stringify.mock.restore();
+  assert.deepEqual(calls.map((args) => (args.length >= 3 ? args[2] : "none")), ["", "none", "", "", 2]);
+  assert.deepEqual(out, ['"stub"', '"stub"', '"stub"', '"stub"', '"stub"']);
 });
 
 test("-o does not pass force by default; --force threads through (DDB-02)", async () => {

@@ -382,6 +382,12 @@ apps/cli/src/cli/
   The CLI writes those bytes unchanged with `-o` and to a non-terminal stdout
   (`CliIO.isTerminal()` false → `outBinary`); only a terminal gets the decoded text
   with control characters stripped.
+- JSON output (`renderJson` in `apps/cli/src/cli/shared.ts`) is pretty by default; an answer
+  nested too deeply for that is an ERROR ("… nested too deeply to pretty-print; try
+  --compact.", exit 1). `--compact` takes V8's fast `JSON.stringify` path, the only one that
+  prints very deep nesting on Node 26, unless the answer holds a string or key of 64 Mi
+  characters or more (`holdsHugeString`): on Node 26 that path aborts the process on a
+  ~250 MB string from JSON.parse, so such an answer goes through an empty gap (the same text).
 - The engine accepts `defaultHeaders` merged into every request — the read routes
   need none; it's the injection seam for a caller that reaches an authed endpoint.
 - The HTTP layer is a single `Transport` function; the default uses

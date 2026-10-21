@@ -140,10 +140,17 @@ export function escapeControlChars(json: string): string {
  * which is why the message suggests --compact. The RangeError becomes a DdbError so
  * the CLI prints a clear message instead of "Unexpected error: Maximum call stack
  * size exceeded".
+ *
+ * Compact output takes V8's fast path (no gap) unless the answer holds a huge string: on
+ * Node 26 the fast path aborts the process ("Zone Allocation failed", exit 134, a native
+ * dump on stderr) on a string of some 250 MB that JSON.parse made, while the gap path (an
+ * empty gap, the same text) prints it. The fast path stays the default because on Node 26
+ * only it is iterative and prints nesting the gap path refuses (~7,000 levels).
  */
 function stringifyJson(value: unknown, compact: boolean): string {
   try {
-    return compact ? JSON.stringify(value) : JSON.stringify(value, null, 2);
+    if (!compact) return JSON.stringify(value, null, 2);
+    return holdsHugeString(value) ? JSON.stringify(value, null, "") : JSON.stringify(value);
   } catch (err) {
     if (err instanceof RangeError) {
       throw new DdbError(
@@ -155,6 +162,26 @@ function stringifyJson(value: unknown, compact: boolean): string {
     }
     throw err;
   }
+}
+
+/** A string or key this long sends --compact through the gap path: a quarter of where Node 26's fast path aborts. */
+const HUGE_STRING_LENGTH = 64 * 1024 * 1024;
+
+/** Whether `value` holds a string or key of HUGE_STRING_LENGTH or more. Iterative, so nesting costs no stack. */
+function holdsHugeString(value: unknown): boolean {
+  const stack: unknown[] = [value];
+  while (stack.length > 0) {
+    const item = stack.pop();
+    if (typeof item === "string") {
+      if (item.length >= HUGE_STRING_LENGTH) return true;
+    } else if (typeof item === "object" && item !== null) {
+      for (const [key, element] of Object.entries(item)) {
+        if (key.length >= HUGE_STRING_LENGTH) return true;
+        if (typeof element === "string" || (typeof element === "object" && element !== null)) stack.push(element);
+      }
+    }
+  }
+  return false;
 }
 
 /** `fn`, with any failure an `OutputError` (message and cause kept). */
