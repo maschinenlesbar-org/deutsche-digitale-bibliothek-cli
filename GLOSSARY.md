@@ -116,10 +116,13 @@ trimmed.
 
 **sort.** Solr sort syntax: `<field> asc|desc`, e.g. `--sort "score desc"`
 (relevance, the default when omitted) or `--sort "id asc"`. Comma-separate for
-tie-breakers (`--sort "score desc, id asc"`).
+tie-breakers (`--sort "score desc, id asc"`). A clause without `asc` or `desc` (`--sort score`)
+is refused before any request (Solr would answer with an error).
 
 **fields (`fl`).** `--fields id,label,type` restricts each returned document to
-those fields (Solr `fl`) — the cleanest way to tame verbose docs.
+those fields (Solr `fl`) — the cleanest way to tame verbose docs. Each field name goes out trimmed
+(`" id , label "` is `id,label`); an empty one (`id,,label`) is refused. A `--facet` field name goes
+out trimmed too: Solr answered `" type_fct "` with HTTP 500, "undefined field".
 
 ## Item components
 

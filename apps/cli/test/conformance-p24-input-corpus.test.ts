@@ -48,17 +48,22 @@ const textInputs: Input[] = [
 ];
 /**
  * Every token: the item id (`/items/{id}/view`; DDB ids are exactly 32 upper-case letters and
- * digits, so every value of the shared corpus is refused), the item part, and the Solr
- * collection and request handler (path segments).
+ * digits, so every value of the shared corpus is refused), the item part, the Solr collection
+ * and request handler (path segments), a facet field and the sort (`<field> asc|desc`, so the
+ * corpus's bare values are refused).
  */
 const idInputs: Input[] = [
   { name: "item", argv: (v) => ["item", v], lib: (c, v) => c.item(v), sent: (u) => segment(u, 3) },
   { name: "item --part", argv: (v) => ["item", ID, "--part", v], lib: (c, v) => c.item(ID, v as never), sent: (u) => segment(u, 4) },
   { name: "search --collection", argv: (v) => ["search", "x", "--collection", v], lib: (c, v) => c.search({ query: "x", collection: v }), sent: (u) => segment(u, 4) },
   { name: "search --handler", argv: (v) => ["search", "x", "--handler", v], lib: (c, v) => c.search({ query: "x", requestHandler: v }), sent: (u) => segment(u, 5) },
+  { name: "search --facet", argv: (v) => ["search", "x", "--facet", v], lib: (c, v) => c.search({ query: "x", facetFields: [v] }), sent: (u) => u.searchParams.get("facet.field") },
+  { name: "search --sort", argv: (v) => ["search", "x", "--sort", v], lib: (c, v) => c.search({ query: "x", sort: v }), sent: (u) => u.searchParams.get("sort") },
 ];
 /** Every comma-separated list option; `sent` gives the items as they went out. Empty when the repo has none. */
-const listInputs: Array<Input<string[] | null>> = [];
+const listInputs: Array<Input<string[] | null>> = [
+  { name: "search --fields", argv: (v) => ["search", "x", "--fields", v], lib: (c, v) => c.search({ query: "x", fields: v }), sent: (u) => u.searchParams.get("fl")?.split(",") ?? null },
+];
 /** The id as the repo sends it (trimmed, NFC). */
 const canonicalId = (value: string): string => value.trim().normalize("NFC");
 /** A valid answer to any of these requests: a Solr response for search, an item part otherwise. */

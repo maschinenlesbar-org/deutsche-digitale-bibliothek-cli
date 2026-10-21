@@ -583,3 +583,31 @@ test("a refusal quotes the value visibly: invisible and format characters escape
     });
   }
 });
+
+test("a facet field, the sort and the field list go out trimmed or are refused; never sent raw (Bug 01-2, 2026-10-21)", async () => {
+  // `--facet ' type_fct '` went out as `facet.field=%20type_fct%20`: live, HTTP 500
+  // `undefined field: " type_fct "`. The sort and the field list were sent raw too.
+  const mt = makeMockTransport(() => jsonResponse(fx.solrExact));
+  const c = new DdbClient({ transport: mt.transport });
+  await c.search({ query: "x", facetFields: [" type_fct ", "place_fct\n"], sort: " score desc ", fields: " id , label " });
+  const q = queryOf(mt.last());
+  assert.deepEqual(q.getAll("facet.field"), ["type_fct", "place_fct"]);
+  assert.equal(q.get("sort"), "score desc");
+  assert.equal(q.get("fl"), "id,label");
+  // A sort clause names a direction; a function with commas inside is one clause.
+  await c.search({ query: "x", sort: "sum(a_i,b_i) desc, id ASC" });
+  assert.equal(queryOf(mt.last()).get("sort"), "sum(a_i,b_i) desc, id ASC");
+  mt.calls.length = 0;
+  const refused: Array<[SearchParams, RegExp]> = [
+    [{ query: "x", facetFields: ["type​_fct"] }, /^Invalid facetFields entry: "type\\u200b_fct" contains an invisible/],
+    [{ query: "x", facetFields: [" "] }, /^Invalid facetFields entry: /],
+    [{ query: "x", sort: "score" }, /^Invalid sort: "score": a Solr sort is/],
+    [{ query: "x", sort: "score desc," }, /^Invalid sort: /],
+    [{ query: "x", fields: "id,,label" }, /^Invalid fields: item 2 of 3: Expected a non-empty value\.$/],
+    [{ query: "x", fields: "id,la­bel" }, /^Invalid fields: item 2 of 2: "la\\u00adbel" contains/],
+  ];
+  for (const [params, message] of refused) {
+    await assert.rejects(c.search(params), (err: unknown) => err instanceof DdbValidationError && message.test(err.message), JSON.stringify(params));
+  }
+  assert.equal(mt.calls.length, 0);
+});

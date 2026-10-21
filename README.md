@@ -93,11 +93,12 @@ fields? The **[Glossary](https://github.com/maschinenlesbar-org/deutsche-digital
 
 Query strings and `--filter` use **Solr syntax**; pass `'*:*'` to match
 everything. `--filter` restricts the set (repeat to AND; OR inside one fq like
-`'place_fct:("Berlin" OR "Dessau")'`), while `--facet` only *counts* values. Both
-go out trimmed and in composed Unicode (NFC), the only form the index matches (a `München` pasted with a
+`'place_fct:("Berlin" OR "Dessau")'`), while `--facet` only *counts* values. The query and
+every `--filter` go out trimmed and in composed Unicode (NFC), the only form the index matches (a `München` pasted with a
 combining umlaut found far fewer documents, as a filter none). A value that holds an invisible
 or control character (a zero-width space, a soft hyphen, a bidi control) is refused before any
-request, the character shown escaped (`\u200b`).
+request, the character shown escaped (`\u200b`). Field names (`--facet`, `--fields`) and `--sort`
+go out trimmed; a sort clause without `asc` or `desc` is refused.
 When more documents match than were returned, `ddb` prints a short paging hint to
 stderr (not for `--rows 0`, which asks for counts and facets only). An `--offset` at or
 past the total gets a stderr note naming both instead (an `INFO` record of `ddb.api`: `754 documents match;

@@ -8,17 +8,26 @@ import { InvalidArgumentError } from "commander";
 import { logOf, type CliDeps } from "../io.js";
 import type { SearchParams } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/types";
 import { DdbUsageError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
-import { pathNameProblem, textProblem } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/validate";
+import { facetFieldProblem, fieldsProblem, pathNameProblem, sortProblem, textProblem } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/validate";
 import { DEFAULT_SEARCH_ROWS } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
-import { action, parseFacetLimit, parseNonEmpty, parseSolrInt, renderJson } from "../shared.js";
+import { action, parseFacetLimit, parseSolrInt, renderJson } from "../shared.js";
 
 /**
- * commander accumulator for repeatable string options. Each value must be
- * non-blank: an empty `fq=`/`facet.field=` is never meaningful, so a blank
- * value (often an unset shell variable) is a usage error, not a silent no-op.
+ * commander accumulator for `--facet`: the library's `facetFieldProblem` (a field name: not
+ * blank, no invisible, control or half character, sent trimmed), as a usage error before any
+ * request.
  */
-function collect(value: string, previous: string[] = []): string[] {
-  return previous.concat([parseNonEmpty(value)]);
+function collectFacet(value: string, previous: string[] = []): string[] {
+  return previous.concat([parseWith(facetFieldProblem)(value)]);
+}
+
+/** A commander value-parser from one of the library's rules. */
+function parseWith(problem: (value: string) => string | undefined): (value: string) => string {
+  return (value) => {
+    const reason = problem(value);
+    if (reason !== undefined) throw new InvalidArgumentError(reason);
+    return value;
+  };
 }
 
 /**
@@ -48,14 +57,14 @@ export function registerSearchCommand(program: Command, deps: CliDeps): void {
     .argument("<query>", "Solr query (q); use '*:*' to match everything")
     .option("--rows <n>", `number of documents to return (Solr rows; default ${DEFAULT_SEARCH_ROWS})`, parseSolrInt)
     .option("--offset <n>", "offset of the first document (Solr start), for paging", parseSolrInt)
-    .option("--sort <spec>", "Solr sort, e.g. \"score desc\" or \"id asc\"", parseNonEmpty)
-    .option("--fields <list>", "comma-separated fields to return (Solr fl), e.g. id,title", parseNonEmpty)
+    .option("--sort <spec>", "Solr sort, <field> asc|desc, comma-separated, e.g. \"score desc\" or \"id asc\"", parseWith(sortProblem))
+    .option("--fields <list>", "comma-separated fields to return (Solr fl), e.g. id,title", parseWith(fieldsProblem))
     .option(
       "--filter <fq>",
       "Solr filter query (fq), repeatable, e.g. type_fct:mediatype_002",
       collectFilter,
     )
-    .option("--facet <field>", "compute counts for this facet field (repeatable), e.g. type_fct", collect)
+    .option("--facet <field>", "compute counts for this facet field (repeatable), e.g. type_fct", collectFacet)
     .option(
       "--facet-limit <n>",
       "cap the number of values returned per facet (Solr default 100; -1 = all, still sorted by count)",

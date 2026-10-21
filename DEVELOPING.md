@@ -189,6 +189,12 @@ above included):
   character; the value is sent as `normalizeToken` gives it (trimmed, NFC). A comma-separated
   list is split with `splitList` and checked item by item with `listProblem` (an empty item is
   refused, never dropped). Every reason quotes the value visibly (`quoteValue`).
+- **Facet fields, sort and field list** (`search({ facetFields, sort, fields })`): a facet field
+  is a field name (`facetFieldProblem`: a token of letters, digits, `_`, `.`, `-`, `*`, optional
+  local params `{!…}`; a padded `" type_fct "` was HTTP 500 "undefined field"), the sort is
+  comma-separated `<field or function> asc|desc` clauses (`sortProblem`; a function's inner commas
+  don't split), the field list a comma list of tokens (`fieldsProblem`, sent as
+  `normalizeFields`: `" id , label "` is `id,label`). All go out trimmed.
 - **Item ids** (`item(id)`): the id is trimmed (`normalizeItemId`) and must then
   be exactly 32 upper-case letters and digits (`itemIdProblem`); a lower-case id
   gets the upper-case form as a hint (`Invalid id: Item ids are upper case: try
@@ -424,8 +430,8 @@ apps/cli/src/cli/
   top-level shape only: a 2xx body that is not a JSON object (empty, `null`, an
   array) or whose `response` is not an object raises `DdbParseError`
   (`GET <url>: unexpected response shape: expected …`, exit 1). The CLI's
-  `--filter`/`--facet`/`--sort`/`--fields` map straight onto `fq`/`facet.field`/
-  `sort`/`fl`.
+  `--filter`/`--facet`/`--sort`/`--fields` map onto `fq`/`facet.field`/
+  `sort`/`fl` (canonicalised as "Library input validation" says).
 - `item()` fetches raw via the engine and **branches on the part**: the raw parts
   (`ITEM_TEXT_PARTS`: `edm`, `source-record`, `citation`) are returned as text, every other part
   is parsed as JSON whatever its Content-Type says, so an HTML page in its place (a captive

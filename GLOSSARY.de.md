@@ -118,10 +118,14 @@ einen Collection- oder Handler-Namen); er wird ohne umgebende Leerzeichen gesend
 
 **sort.** Solr-Sortiersyntax: `<field> asc|desc`, z. B. `--sort "score desc"` (Relevanz, der
 Standard, wenn nichts angegeben ist) oder `--sort "id asc"`. Weitere Kriterien für Gleichstände
-trennen Sie mit Komma ab (`--sort "score desc, id asc"`).
+trennen Sie mit Komma ab (`--sort "score desc, id asc"`). Ein Kriterium ohne `asc` oder `desc`
+(`--sort score`) wird vor jeder Anfrage abgelehnt (Solr würde mit einem Fehler antworten).
 
 **fields (`fl`).** `--fields id,label,type` beschränkt jedes zurückgegebene Dokument auf diese
-Felder (Solr `fl`) – der sauberste Weg, ausführliche Dokumente zu bändigen.
+Felder (Solr `fl`) – der sauberste Weg, ausführliche Dokumente zu bändigen. Jeder Feldname geht
+ohne umgebende Leerzeichen hinaus (`" id , label "` wird `id,label`); ein leerer (`id,,label`) wird
+abgelehnt. Auch ein Feldname für `--facet` geht ohne umgebende Leerzeichen hinaus: Solr hatte
+`" type_fct "` mit HTTP 500 beantwortet, „undefined field“.
 
 ## Objektbestandteile
 

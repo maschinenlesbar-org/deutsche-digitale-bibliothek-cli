@@ -15,7 +15,19 @@
 import { RequestEngine, bigIntegerKeysOption, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
 import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage, quoteValue } from "./errors.js";
 import type { QueryParams } from "./query.js";
-import { assertValid, itemPartProblem, normalizeItemId, normalizeText, normalizeToken, pathNameProblem, textProblem } from "./validate.js";
+import {
+  assertValid,
+  facetFieldProblem,
+  fieldsProblem,
+  itemPartProblem,
+  normalizeFields,
+  normalizeItemId,
+  normalizeText,
+  normalizeToken,
+  pathNameProblem,
+  sortProblem,
+  textProblem,
+} from "./validate.js";
 import {
   ITEM_LANG_PARTS,
   ITEM_TEXT_PARTS,
@@ -195,8 +207,13 @@ function assertSearchParams(params: SearchParams): void {
   assertInt("start", params.start);
   // facet.limit -1 is Solr's "no limit".
   assertInt("facetLimit", params.facetLimit, -1);
-  for (const key of ["sort", "fields"] as const) {
-    if (params[key] !== undefined) assertText(key, params[key]);
+  if (params.sort !== undefined) {
+    assertText("sort", params.sort);
+    assertValid("sort", params.sort, sortProblem);
+  }
+  if (params.fields !== undefined) {
+    assertText("fields", params.fields);
+    assertValid("fields", params.fields, fieldsProblem);
   }
   for (const key of ["collection", "requestHandler"] as const) {
     if (params[key] !== undefined) assertValid(key, params[key], pathNameProblem);
@@ -205,7 +222,14 @@ function assertSearchParams(params: SearchParams): void {
     const list: unknown = params[key];
     // A string here would be read character by character; an object not at all.
     if (list !== undefined && !Array.isArray(list)) throw invalid(key, "an array of strings", list);
-    for (const value of params[key] ?? []) (key === "filters" ? assertTextFilter : assertText)(`${key} entry`, value);
+    for (const value of params[key] ?? []) {
+      if (key === "filters") assertTextFilter(`${key} entry`, value);
+      else {
+        // A facet field is a token: compared exactly, sent trimmed.
+        assertText(`${key} entry`, value);
+        assertValid(`${key} entry`, value, facetFieldProblem);
+      }
+    }
   }
   if (params.facetLimit !== undefined && (params.facetFields ?? []).length === 0) {
     throw new DdbValidationError("Invalid facetLimit: it needs facetFields (it caps the values returned per facet field).");
@@ -332,16 +356,18 @@ export class DdbClient {
     // The index matches composed text only: `München` with U+0308 (as pasted from a macOS file
     // name) found 231 documents instead of 2.77 million, and as a facet filter none; a trailing
     // no-break space made another facet value. The query and the filters go out trimmed and in
-    // NFC (normalizeText); field names, sort and paging are ASCII and left alone.
+    // NFC (normalizeText).
     const query: QueryParams = { q: normalizeText(params.query), wt: "json" };
     query["rows"] = params.rows ?? DEFAULT_SEARCH_ROWS;
     if (params.start !== undefined) query["start"] = params.start;
-    if (params.sort !== undefined) query["sort"] = params.sort;
-    if (params.fields !== undefined) query["fl"] = params.fields;
+    // Field names, the sort and the facet fields are tokens: trimmed and in NFC (normalizeToken);
+    // a padded facet field was an HTTP 500 ("undefined field").
+    if (params.sort !== undefined) query["sort"] = normalizeToken(params.sort);
+    if (params.fields !== undefined) query["fl"] = normalizeFields(params.fields);
     if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters.map(normalizeText);
     if (params.facetFields !== undefined && params.facetFields.length > 0) {
       query["facet"] = "true";
-      query["facet.field"] = params.facetFields;
+      query["facet.field"] = params.facetFields.map(normalizeToken);
       if (params.facetLimit !== undefined) query["facet.limit"] = params.facetLimit;
       // Solr sorts facet values by count, except when facet.limit is -1 ("no limit"): then
       // its facet.sort default flips to index (alphabetical) order, and "the top of the

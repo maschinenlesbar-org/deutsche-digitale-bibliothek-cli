@@ -250,6 +250,71 @@ export function normalizeToken(value: string): string {
 }
 
 /**
+ * The clauses of a Solr sort, split at the commas outside parentheses (a function such as
+ * `sum(a_i,b_i) desc` is one clause).
+ */
+function sortClauses(sort: string): string[] {
+  const clauses: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < sort.length; i++) {
+    const c = sort[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    else if (c === "," && depth === 0) {
+      clauses.push(sort.slice(from, i));
+      from = i + 1;
+    }
+  }
+  clauses.push(sort.slice(from));
+  return clauses;
+}
+
+/**
+ * A Solr sort (`search({ sort })`, `--sort`): a token ({@link tokenProblem}; sent trimmed) of
+ * comma-separated clauses, each `<field or function> asc|desc`, the documented syntax. Solr
+ * answers a clause without a direction ("score") or an empty one with an error status; refused
+ * here before any request instead.
+ */
+export const sortProblem: Problem = (value) => {
+  const token = tokenProblem(value);
+  if (token !== undefined) return token;
+  const sort = normalizeToken(value as string);
+  if (sortClauses(sort).some((clause) => !/^\S.*\s(?:asc|desc)$/i.test(clause.trim()))) {
+    return `${quoteValue(sort)}: a Solr sort is "<field> asc|desc", comma-separated, e.g. "score desc" or "id asc".`;
+  }
+  return undefined;
+};
+
+/**
+ * A Solr facet field (`search({ facetFields })`, `--facet`): a token ({@link tokenProblem}; sent
+ * trimmed) that names a field: letters, digits, `_`, `.`, `-` and `*`, optionally after Solr local
+ * params (`{!key=types}type_fct`), and not `.` or `..`. Anything else (a space, a `/`, a `?`) names
+ * no field, and Solr answers it with an error status ("undefined field").
+ */
+export const facetFieldProblem: Problem = (value) => {
+  const token = tokenProblem(value);
+  if (token !== undefined) return token;
+  const field = normalizeToken(value as string);
+  if (field === "." || field === ".." || !/^(?:\{![^}]*\})?[\p{L}\p{N}_.*-]+$/u.test(field)) {
+    return `${quoteValue(field)}: expected a field name (letters, digits, '_', '.', '-'), e.g. "type_fct".`;
+  }
+  return undefined;
+};
+
+/**
+ * A Solr field list (`search({ fields })`, `--fields`, `fl`): comma-separated field names, each a
+ * token ({@link listProblem} over {@link splitList}; an empty item is refused, never dropped).
+ * Sent as {@link normalizeFields} gives it.
+ */
+export const fieldsProblem: Problem = (value) => (typeof value === "string" ? listProblem(splitList(value)) : "Expected a string.");
+
+/** A field list as it is sent: each item trimmed and in NFC, joined with commas (`" id , label "` is `id,label`). */
+export function normalizeFields(value: string): string {
+  return splitList(value).map(normalizeToken).join(",");
+}
+
+/**
  * The items of a comma-separated list (`--fields id,label`), as typed: each item is checked
  * (`listProblem`) and canonicalised (`normalizeToken`) on its own, so `"id, label"` sends `label`,
  * and `"id,,label"`, `"id,"` and `","` are refused rather than sent with an empty item.
