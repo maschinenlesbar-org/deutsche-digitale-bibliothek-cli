@@ -108,11 +108,16 @@ for the default transport's per-hop scheme check and real transport failures.
 
 Userinfo is never printed. Messages show URLs through `redactUrl` (`https://***@host/…`),
 which also cuts the userinfo out of a value that doesn't parse. The CLI goes further:
-`withRedactedOutput` in `run.ts` collects the exact userinfo of every argument that is a
-URL with a scheme (and of the value part of `--opt=value`, `redactionFor`; the
+`withRedactedOutput` in `run.ts` collects the exact userinfo of every URL with a scheme in
+every argument (and in the value part of `--opt=value`, `redactionFor`; the
 `--base-url` value counts with or without its scheme) with the exported `credentialsIn` and
 redacts it with `redactCredentials` from every line printed on stdout and from every log
-record's *message*. The forms a server echoes a userinfo back in are replaced too: the
+record's *message*. A URL counts wherever it starts inside an argument (`urlsWithin`): inside a
+Solr phrase (`title:Goethe https://…`, `type_fct:"https://…"`), padded (a value is sent
+trimmed) or after a dash; each `://` is found with `indexOf` and its scheme by walking back, so
+the search stays linear in a long argument, and at most 64 URLs are read from one argument. Its
+percent-encoded form with the `@` (`bob%3Apw%40`), as the request URL of an error record carries
+it, is replaced too. The forms a server echoes a userinfo back in are replaced too: the
 `Basic` value and the decoded `user:password` on stdout and stderr, the password alone
 (4 characters or more) on stderr only, since it may well occur in the data. The log
 replaces them before the record is cut and escaped; the record is then written to
@@ -122,7 +127,7 @@ rejected value as typed, and the unknown-command message for a URL typed where a
 command goes, included. Exact strings, not a pattern, so a password with spaces,
 quotes, `#`, `?` or `/` is covered too (`apps/cli/test/conformance-p1-cli-redaction.test.ts`).
 A bare `a:b@c` anywhere else (`-o run:2026-10-09@x.json`, a query, a User-Agent) is no
-credential: `credentialsIn` reads userinfo only from a value that starts with a scheme.
+credential: `credentialsIn` reads userinfo only from a URL with a scheme.
 
 The library keeps them out of logged objects too: the engine holds the base URL and
 `defaultHeaders` in real `#private` fields, so `console.log(client)`,

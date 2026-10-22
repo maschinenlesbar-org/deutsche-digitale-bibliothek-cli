@@ -1199,3 +1199,69 @@ test("a raw XML part shown on a terminal loses its bidi controls, as it loses C0
   assert.equal(await run(["item", ID, "--part", "edm"], pipe.deps), 0);
   assert.equal(Buffer.concat(binary).toString("utf8"), xml);
 });
+
+// T15 of the 2026-10-21 fix round (jobsuche-cli 28be809, ladesaeulenregister-cli 001c48d,
+// abgeordnetenwatch-cli 6d136ad): a URL with a password anywhere in an argument — the query,
+// padded, after a dash, inside a phrase, an option value, the id, commander's echo — must never
+// reach stderr, neither raw in a refusal, a note or the server's message, nor percent-encoded in
+// the request URL of an error record.
+test("a password in a URL inside any argument is redacted on stderr, raw or percent-encoded (T15)", async () => {
+  const url = "https://bob:s3cretpw@host.example/x";
+  const argvs = [
+    ["search", url],
+    ["search", ` ${url}`],
+    ["search", `title:Goethe ${url}`],
+    ["search", ` -${url}`],
+    ["search", "Goethe", "--filter", ` ${url}`],
+    ["search", "Goethe", "--filter", `type_fct:"${url}"`],
+    ["search", "Goethe", "--sort", ` ${url}`],
+    ["search", "Goethe", "--fields", `id, ${url}`],
+    ["search", "Goethe", "--facet", ` ${url}`],
+    ["search", "Goethe", "--collection", ` ${url}`],
+    ["search", "Goethe", "--handler", ` ${url}`],
+    ["search", "Goethe", "--rows", ` ${url}`],
+    ["search", "Goethe", `--filter=${url}`],
+    ["search", "Goethe", "-o", ` -${url}`],
+    ["item", ` ${url}`],
+    ["item", url],
+    ["item", ID, "--part", ` ${url}`],
+    ["item", ID, "--lang", ` ${url}`],
+    ["item", ID, "--offset", ` ${url}`],
+    [` ${url}`],
+    [url],
+    ["search", "Goethe", "--filter", url, "--bogus"],
+  ];
+  const answers: Array<() => HttpResponse> = [
+    () => jsonResponse({ error: { msg: `undefined field ${url}`, code: 400 } }, 400),
+    () => rawResponse(`no such thing: ${url}`, "text/plain", 404),
+    () => jsonResponse({}, 500),
+    () => rawResponse("busy", "text/plain", 503),
+    () => rawResponse(`<html>${url}</html>`, "text/html", 200),
+    () => {
+      throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
+    },
+  ];
+  const leaks: string[] = [];
+  for (const argv of argvs) {
+    for (const answer of answers) {
+      const cli = makeCli(answer);
+      await run(["--max-retries", "0", ...argv], cli.deps);
+      const err = cli.err.join("\n");
+      if (/s3cretpw|bob%3As3|s3cretpw%40/.test(err)) leaks.push(`${JSON.stringify(argv)}: ${err}`);
+    }
+  }
+  assert.deepEqual(leaks, []);
+});
+
+// The URL search of T15 runs once per argument on every run: a pattern retried at every
+// position of a long argument without "://" took seconds; indexOf keeps it linear.
+test("the URL search of the redaction is linear: a 1 MB argument without :// is read fast (T15)", async () => {
+  // 40 000 scheme characters took ~3 s with the pattern: this one fails, not hangs, under it.
+  for (const big of ["b".repeat(40_000), "a:".repeat(512 * 1024), "b".repeat(1024 * 1024)]) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const started = performance.now();
+    await run(["search", "Goethe", "--filter", big], cli.deps);
+    const took = performance.now() - started;
+    assert.ok(took < 1000, `${big.length} characters took ${Math.round(took)} ms`);
+  }
+});
