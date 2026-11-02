@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TextDecoder } from "node:util";
 import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/engine.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, redactUrl, toWellFormed } from "../src/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, echoedCredentialForms, redactUrl, toWellFormed } from "../src/errors.js";
 import { DdbClient } from "../src/client.js";
 import type { HttpResponse } from "../src/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
@@ -495,6 +495,33 @@ test("credentials a server echoes are scrubbed from the error: Basic, user:passw
     for (const form of [basic, "alice:pa ss-pw", "pa ss-pw"]) assert.ok(!err.body.includes(form), err.body);
     return true;
   });
+});
+
+test("echoedCredentialForms treats a userinfo without a password as a token (Basic `TOKEN:`)", () => {
+  const basic = (pair: string): string => Buffer.from(pair, "utf8").toString("base64");
+  assert.deepEqual(echoedCredentialForms("alice:s3cret"), [basic("alice:s3cret"), "alice:s3cret", "s3cret"]);
+  assert.deepEqual(echoedCredentialForms("T0ken"), [basic("T0ken:"), "T0ken:", "T0ken"]);
+  assert.deepEqual(echoedCredentialForms("T0ken:"), [basic("T0ken:"), "T0ken:", "T0ken"]);
+  assert.deepEqual(echoedCredentialForms("T%C3%B6k"), [basic("Tök:"), "Tök:"]); // short: not alone
+  assert.deepEqual(echoedCredentialForms(":pw12"), [basic(":pw12"), ":pw12", "pw12"]);
+  assert.deepEqual(echoedCredentialForms(""), []);
+  assert.deepEqual(echoedCredentialForms(":"), []);
+});
+
+test("a token userinfo (no password) a server echoes is scrubbed from the error in every form (security audit E)", async () => {
+  const token = "DummyToken0123456789";
+  const basic = Buffer.from(`${token}:`, "utf8").toString("base64");
+  for (const baseUrl of [`http://${token}@mirror.test/2`, `http://${token}:@mirror.test/2`]) {
+    const mt = makeMockTransport(() => jsonResponse({ message: `rejected Authorization: Basic ${basic} (decoded ${token}:) token ${token}` }, 500));
+    const engine = new RequestEngine({ baseUrl, maxRetries: 0, transport: mt.transport });
+    await assert.rejects(engine.getText("/version"), (err: DdbApiError) => {
+      // The token is what the engine sent, as Basic `TOKEN:`.
+      assert.equal(mt.calls[0]!.headers?.["Authorization"], `Basic ${basic}`);
+      assert.match(err.message, /rejected Authorization: Basic \*\*\* \(decoded \*\*\*\) token \*\*\*/, err.message);
+      for (const text of [err.message, err.body]) assert.ok(!text.includes(token) && !text.includes(basic), text);
+      return true;
+    });
+  }
 });
 
 test("onRetry is called once per retry, with the event fields, right before the sleep", async () => {

@@ -119,7 +119,7 @@ the search stays linear in a long argument, and at most 64 URLs are read from on
 percent-encoded form with the `@` (`bob%3Apw%40`), as the request URL of an error record carries
 it, is replaced too. The forms a server echoes a userinfo back in are replaced too: the
 `Basic` value and the decoded `user:password` on stdout and stderr, the password alone
-(4 characters or more) on stderr only, since it may well occur in the data. The log
+(or, for a userinfo without a password, the token; 4 characters or more) on stderr only, since it may well occur in the data. The log
 replaces them before the record is cut and escaped; the record is then written to
 the raw stderr, so its frame (time, level, topic) is never touched and a password with
 DEL, C1 or bidi characters is matched in its raw form — commander's usage errors, which echo a
@@ -133,8 +133,9 @@ The library keeps them out of logged objects too: the engine holds the base URL 
 `defaultHeaders` in real `#private` fields, so `console.log(client)`,
 `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
 userinfo (raw and percent-decoded), and the forms a server echoes it back in (the
-`Basic` value, the decoded `user:password`, the password alone from 4 characters:
-`echoedCredentialForms`), from error bodies and details, redirect targets,
+`Basic` value, the decoded `user:password`, the password alone from 4 characters;
+for a userinfo without a password, `TOKEN@host` or `TOKEN:@host`, the user name is the
+secret, a token sent as Basic `TOKEN:`: `echoedCredentialForms`), from error bodies and details, redirect targets,
 transport error text and the `cause` chain. Whatever a custom transport throws reaches
 the caller as a `DdbNetworkError` (`GET <url> failed: <reason>`, the original as
 `cause`), never as a raw `TypeError` (`apps/cli/test/conformance-p2-library-redaction.test.ts`).

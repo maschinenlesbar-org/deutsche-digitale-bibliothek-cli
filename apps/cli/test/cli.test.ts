@@ -857,6 +857,24 @@ test("a server echoing the Authorization header never puts the credentials into 
   }
 });
 
+test("a token in --base-url (a userinfo without a password) never reaches stderr or stdout in an echoed form (security audit E)", async () => {
+  const token = "DummyToken0123456789";
+  const basic = Buffer.from(`${token}:`, "utf8").toString("base64");
+  for (const base of [`http://${token}@127.0.0.1:18431/2`, `http://${token}:@127.0.0.1:18431/2`]) {
+    // An error answer that echoes the token: the ERROR record on stderr.
+    const failed = makeCli(() => jsonResponse({ message: `rejected Authorization: Basic ${basic} (decoded ${token}:) token ${token}` }, 500));
+    assert.equal(await run(["--base-url", base, "--max-retries", "0", "version"], failed.deps), 1);
+    const err = failed.err.join("\n");
+    assert.match(err, /rejected Authorization: Basic \*\*\* \(decoded \*\*\*\) token \*\*\*/, err);
+    assert.ok(!err.includes(token) && !err.includes(basic), err);
+    // A 2xx answer that echoes the Basic value and `TOKEN:`: stdout.
+    const echoed = makeCli(() => jsonResponse({ responseHeader: { status: 0 }, response: { numFound: 1, start: 0, docs: [{ id: "1", label: `Basic ${basic} for ${token}:x` }] } }));
+    assert.equal(await run(["--base-url", base, "search", "x"], echoed.deps), 0, echoed.err.join("\n"));
+    const out = echoed.out.join("\n");
+    assert.ok(!out.includes(basic) && !out.includes(`${token}:`), out);
+  }
+});
+
 test("an a:b@c argument (a query, an -o path) is neither a credential in the log nor rewritten in the JSON on stdout (L14)", async () => {
   const body = { responseHeader: { status: 0 }, response: { numFound: 1, start: 0, docs: [{ id: "1", label: "run:2026-10-09@x" }] } };
   const cli = makeCli(() => jsonResponse(body));
