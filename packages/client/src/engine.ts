@@ -731,10 +731,15 @@ export class RequestEngine {
     // A JavaScript caller may pass null for "no options"; treat it like undefined.
     options = options ?? {};
     // Checked raw, before the trailing-slash strip (see validateBaseUrl).
-    this.#baseUrl = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
+    const typed = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
+    // Requests go to the base URL as WHATWG parses it, the reading every check of it makes (the
+    // host, the cleartext warning, the Authorization header), not to a text-based reading of the
+    // string: a transport that reads the URL as text reaches the same host.
+    const href = new URL(typed).href;
+    this.#baseUrl = href.replace(/\/+$/, "");
     // The userinfo as typed and as WHATWG writes it (it percent-encodes some of its characters,
     // `p"ä` as `p%22%C3%A4`), which is how a server echoes a request URL.
-    const userinfos = [...new Set([...credentialsIn(this.#baseUrl), ...credentialsIn(new URL(this.#baseUrl).href)])];
+    const userinfos = [...new Set([...credentialsIn(typed), ...credentialsIn(href)])];
     this.#credentials = userinfos.flatMap((raw) => {
       try {
         return [raw, decodeURIComponent(raw)];
@@ -938,7 +943,6 @@ export class RequestEngine {
    */
   private requestBase(): string {
     const parsed = new URL(this.#baseUrl);
-    if (parsed.username === "" && parsed.password === "") return this.#baseUrl;
     parsed.username = "";
     parsed.password = "";
     return parsed.href.replace(/\/+$/, "");

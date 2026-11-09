@@ -1303,3 +1303,22 @@ test("the redaction of stdout is linear in the answer and hides the userinfo of 
   assert.ok(out.includes("https://host://***@h and https://***@x://***@w"), out);
   for (const secret of ["u:p1", "u:p2", "v:q3"]) assert.ok(!out.includes(secret), out);
 });
+
+test("--base-url with a backslash or a mangled scheme is a usage error before any request, never echoing the password (security audit F, F3, F4)", async () => {
+  const pw = "s3cret-Pw1";
+  for (const base of [
+    `https://alice:${pw}@api.example\\@evil.example`,
+    `https:\\\\alice:${pw}@127.0.0.1:9`,
+    `http:///alice:${pw}@h.example/?q=1`,
+    `http:alice:${pw}@h.example`,
+    `http:/alice:${pw}@h.example`,
+    `T0kenS3cret:${pw}@h.example`,
+  ]) {
+    const cli = makeCli(() => jsonResponse(fx.solr));
+    const code = await run(["--base-url", base, "search", "x"], cli.deps);
+    assert.equal(code, 2, `${base}: ${cli.err.join("\n")}`);
+    assert.equal(cli.mt.calls.length, 0);
+    const text = [...cli.out, ...cli.err].join("\n");
+    assert.ok(!text.includes(pw) && !text.includes("T0kenS3cret"), `${base}: ${text}`);
+  }
+});

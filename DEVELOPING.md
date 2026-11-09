@@ -101,9 +101,17 @@ is stripped on cross-origin redirects, see below.)
 
 The base URL is checked raw by the exported `validateBaseUrl` before the
 trailing-slash strip: a blank value, surrounding whitespace, a URL that does not
-parse, a scheme other than `http:`/`https:` and a query or fragment make the
-constructor throw a `DdbValidationError` (`Invalid baseUrl: …`; userinfo is
-allowed). It is a configuration error, not a `DdbNetworkError`: that class is kept
+parse, a scheme other than `http:`/`https:`, a query or fragment, a backslash, a control
+character anywhere, and a scheme not followed by exactly `//` and the host (`http:host`,
+`http:/host`, `http:///host`, which WHATWG repairs silently) make the
+constructor throw a `DdbValidationError` (`Invalid baseUrl: …`, never repeating the value;
+userinfo is allowed). Requests go to the base URL as WHATWG parses it (host lower-cased, a
+default port dropped, the path percent-encoded where WHATWG does it): the reading every check
+of it makes, so a transport that reads the URL as text reaches the same host
+(`https://u:pw@a.example\@b.example` was checked as one host while text-based code read
+another). `credentialsIn` ends a special scheme's authority at a backslash too, and starts it
+after the slashes and backslashes WHATWG skips (`http:///u:pw@h`, `https:\\u:pw@h`), so a refused
+`--base-url` of that shape is echoed with `***` in place of the userinfo. It is a configuration error, not a `DdbNetworkError`: that class is kept
 for the default transport's per-hop scheme check and real transport failures.
 
 Userinfo is never printed. Messages show URLs through `redactUrl` (`https://***@host/…`),

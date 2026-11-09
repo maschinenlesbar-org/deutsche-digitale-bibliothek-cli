@@ -172,6 +172,18 @@ test("baseUrlProblem: the CLI's --base-url reasons", () => {
   assert.equal(baseUrlProblem("ftp://h.example"), "Only http: and https: base URLs are supported.");
   assert.equal(baseUrlProblem("https://h.example/2#f"), "A base URL cannot have a query (?) or fragment (#).");
   assert.equal(baseUrlProblem(3), "Expected a string.");
+  // Security audit F, F4: a backslash, a control character inside, and a scheme not followed by
+  // exactly "//" and the host are refused: WHATWG reads them otherwise than text-based code does.
+  const backslash = 'A base URL cannot contain a backslash (\\); write "/" instead.';
+  assert.equal(baseUrlProblem("https://alice:pw@api.example\\@evil.example"), backslash);
+  assert.equal(baseUrlProblem("https://api.example\\evil"), backslash);
+  assert.equal(baseUrlProblem("https:\\\\h.example"), backslash);
+  assert.equal(baseUrlProblem("https://h\t.example/2"), "A base URL cannot contain control characters.");
+  for (const value of ["http:h.example", "http:/h.example", "http:///h.example", "HTTPS:h.example"]) {
+    assert.equal(baseUrlProblem(value), 'Expected an absolute http(s) URL ("https://" and the host).', value);
+  }
+  assert.equal(baseUrlProblem("http:///h.example/?q=1"), "A base URL cannot have a query (?) or fragment (#).");
+  assert.equal(baseUrlProblem("HTTPS://H.example/2"), undefined);
   assert.equal(lib.baseUrlProblem, baseUrlProblem);
 });
 

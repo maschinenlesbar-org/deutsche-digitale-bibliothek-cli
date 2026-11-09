@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { TextDecoder } from "node:util";
 import { MAX_RETRY_AFTER_MS, RequestEngine, firstInexactNumber, parseRetryAfter, sanitizeServerText, serverTextForMessage, validateBaseUrl } from "../src/engine.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, TextBuilder, cutText, echoedCredentialForms, redactUrl, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, TextBuilder, credentialsIn, cutText, echoedCredentialForms, redactUrl, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
 import { DdbClient } from "../src/client.js";
 import type { HttpResponse } from "../src/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
@@ -1138,4 +1138,71 @@ test("a redirect whose Location echoes the base URL's credential is not followed
   const mt = makeMockTransport(() => (n++ === 0 ? { status: 302, headers: { location: "/2/y?pw=other" }, body: Buffer.alloc(0) } : jsonResponse({ ok: 1 })));
   assert.deepEqual(await new RequestEngine({ baseUrl: D_BASE, transport: mt.transport }).getJson("/x"), { ok: 1 });
   assert.equal(mt.calls.length, 2);
+});
+
+test("a backslash or a scheme not followed by // and the host in the base URL is refused at construction, never echoing the password (security audit F, F4)", () => {
+  const pw = "s3cret-Pw";
+  for (const base of [
+    `https://alice:${pw}@api.example\\@evil.example`,
+    `http://alice:${pw}@127.0.0.1\\@evil.example`,
+    `http:alice:${pw}@127.0.0.1:9`,
+    `http:/alice:${pw}@127.0.0.1:9`,
+    `http:///alice:${pw}@127.0.0.1:9`,
+    `HTTPS:alice:${pw}@mirror.example`,
+    `https:\\\\alice:${pw}@mirror.example`,
+  ]) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new RequestEngine({ baseUrl: base, transport: mt.transport }),
+      (err) => err instanceof DdbValidationError && !err.message.includes(pw),
+      base,
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+});
+
+test("requests go to the host of the parsed base URL, spelled as it parses, an @ in its path included (security audit F)", async () => {
+  for (const base of ["https://alice:pw@api.example/v1/@evil.example", "https://API.Example:443/v1", "https://api.example/a b"]) {
+    const parsed = new URL(base);
+    const mt = makeMockTransport(() => jsonResponse({}));
+    await new RequestEngine({ baseUrl: base, transport: mt.transport }).getJson("/x");
+    const url = mt.last().url;
+    assert.equal(new URL(url).origin, parsed.origin, `${base}: ${url}`);
+    // The URL as sent names that host in the text too, so a transport that reads the string
+    // (not the parsed URL) reaches the same host; the path as WHATWG writes it.
+    const authority = url.slice(url.indexOf("//") + 2).split("/")[0] ?? "";
+    assert.equal(authority, parsed.host, `${base}: ${url}`);
+    assert.ok(url.startsWith(`${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "")}/x`), url);
+  }
+});
+
+test("credentialsIn ends the authority of a special scheme at a backslash, as WHATWG does (security audit F)", () => {
+  for (const scheme of ["http", "https", "HTTPS", "ws", "wss", "ftp"]) {
+    assert.deepEqual(credentialsIn(`${scheme}://u:p@a.example\\@b.example/x`), ["u:p"], scheme);
+    assert.equal(new URL(`${scheme}://u:p@a.example\\@b.example/x`).password, "p", scheme);
+  }
+  // Another scheme's authority runs on to "/", "?" or "#".
+  assert.deepEqual(credentialsIn("foo://u:p@a.example\\@b.example/x"), ["u:p@a.example\\"]);
+  assert.deepEqual(credentialsIn("https://u:p@a.example/x\\@y"), ["u:p"]);
+});
+
+test("credentialsIn skips the slashes and backslashes WHATWG skips after a special scheme (security audit F3)", () => {
+  // `http:///u:pw@h`, `https:\\u:pw@h` and `http:u:pw@h` all carry `u:pw` for WHATWG; read
+  // after "://", the userinfo was missed, so a refused --base-url echoed the password in clear.
+  for (const value of [
+    "http:alice:pw@h.example",
+    "http:/alice:pw@h.example",
+    "http:///alice:pw@h.example/x",
+    "https:////alice:pw@h.example",
+    "HTTPS:\\\\alice:pw@h.example",
+    "wss:\\/alice:pw@h.example",
+    "ftp:alice:pw@h.example",
+  ]) {
+    assert.deepEqual(credentialsIn(value), ["alice:pw"], value);
+    assert.equal(new URL(value).password, "pw", value);
+  }
+  // Another scheme needs "//" before an authority: `foo:u:p@h` and `foo:///u:p@h` carry none.
+  assert.deepEqual(credentialsIn("foo:u:p@h.example"), []);
+  assert.deepEqual(credentialsIn("foo:///u:p@h.example"), []);
+  assert.equal(new URL("foo:///u:p@h.example").password, "");
 });

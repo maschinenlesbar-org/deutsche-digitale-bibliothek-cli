@@ -14,7 +14,7 @@ The v2 read routes are **public — no API key**. Just run the commands.
 
 | Option | Description |
 |---|---|
-| `--base-url <url>` | API base URL (default `…/2`; only `http:`/`https:` accepted; plain `http:` to a non-loopback host logs one `WARN` record of `ddb.http`, `… unencrypted …`, on stderr) |
+| `--base-url <url>` | API base URL (default `…/2`; only `http://`/`https://` and the host accepted, no backslash or control character; plain `http:` to a non-loopback host logs one `WARN` record of `ddb.http`, `… unencrypted …`, on stderr) |
 | `--timeout <ms>` | per-request timeout in ms (0 = no timeout) |
 | `--user-agent <ua>` | User-Agent header value |
 | `--max-retries <n>` | retries for transient 429/503 responses and reset connections (0..10; each waits the server's Retry-After, up to 30 s; each retry logs one WARN record of `ddb.http` before it waits) |
