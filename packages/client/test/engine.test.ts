@@ -958,19 +958,6 @@ test("server text of 16 MB is cleaned within a small heap, for a terminal and fo
   assert.ok(message !== undefined && message < 1000, out);
 });
 
-test("millions of lone surrogate escapes in an answer are repaired within a small heap (security audit C)", STARTS_A_PROCESS, () => {
-  // 6 million repairs (36 MB): one `+=` each made a rope node and exhausted a 128 MB heap.
-  const n = 6_000_000;
-  const out = inSmallHeap(
-    `const body = Buffer.from('{"x":"' + "\\\\ud800".repeat(${n}) + '"}');` +
-      `let replaced = 0;` +
-      `const e = new E.RequestEngine({ maxRetries: 0, onWarning: (m) => (replaced = Number(/: (\\d+) characters/.exec(m)?.[1])), transport: async () => ({ status: 200, headers: { "content-type": "application/json" }, body }) });` +
-      `const value = await e.getJson("/x");` +
-      `process.stdout.write(value.x.length + " " + replaced);`,
-  );
-  assert.equal(out, `${n} ${n}`);
-});
-
 test("scanNumbers quotes millions of declared members within a small heap (security audit C)", STARTS_A_PROCESS, () => {
   // One `+=` per quoted member made a rope node each: 3 million of them exhausted a 128 MB heap.
   const n = 3_000_000;

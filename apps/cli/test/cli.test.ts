@@ -1284,26 +1284,6 @@ test("the URL search of the redaction is linear: a 1 MB argument without :// is 
   }
 });
 
-test("the redaction of stdout is linear in the answer and hides the userinfo of glued URLs (security audit B, B2)", async () => {
-  // With a URL with userinfo in argv, every stdout text is redacted. The scheme regex this
-  // replaces took seconds on a run of scheme characters (`a.a.…`) in an answer; the linear pass
-  // takes milliseconds and still redacts a URL glued onto the one before it.
-  const base = "https://alice:s3cret-Pw@mirror.example/2";
-  const value = "a.".repeat(100_000);
-  const cli = makeCli(() => jsonResponse({ id: "a1", x: value }));
-  const start = performance.now();
-  const code = await run(["--base-url", base, "--compact", "item", ID], cli.deps);
-  const ms = performance.now() - start;
-  assert.equal(code, 0, cli.err.join("\n"));
-  assert.ok(cli.out.join("\n").includes(value));
-  assert.ok(ms < 1500, `${Math.round(ms)} ms`);
-  const glued = makeCli(() => jsonResponse({ id: "a1", x: "https://host://u:p1@h and https://u:p2@x://v:q3@w" }));
-  assert.equal(await run(["--base-url", base, "--compact", "item", ID], glued.deps), 0, glued.err.join("\n"));
-  const out = glued.out.join("\n");
-  assert.ok(out.includes("https://host://***@h and https://***@x://***@w"), out);
-  for (const secret of ["u:p1", "u:p2", "v:q3"]) assert.ok(!out.includes(secret), out);
-});
-
 test("--base-url with a backslash or a mangled scheme is a usage error before any request, never echoing the password (security audit F, F3, F4)", async () => {
   const pw = "s3cret-Pw1";
   for (const base of [

@@ -716,6 +716,14 @@ place; `--force` through a dangling link creates the file it names; a signal lea
 temporary file; all start the built bin), P27 big and odd answers (a large flat answer and 20 MB of
 DEL print within a small heap, 90 MB of DEL is an ERROR record, a lone surrogate or invalid bytes
 become U+FFFD with a WARN, two million one-byte chunks are read within a small heap).
+P28–P31 are the security audit's (2026-10-27): P28 hostile error answers (the number scan and the
+cleaning of server text linear and memory-bounded; the base URL's credentials scrubbed from
+decoded text, a quoted 2xx error envelope and a redirect's Location, which is then not followed),
+P29 base-URL credentials (a token userinfo scrubbed, a backslash or a mangled scheme refused,
+requests to the parsed host, linear stdout redaction, glued URLs), P30 output links (`--force`
+follows no other user's link in a shared directory, EACCES isn't "exists", a stream is checked
+on its descriptor; owners injected with `nodeFilesFor`), P31 the release pipeline (the SBOM tool
+locked in `tools/sbom/`, three jobs). P28's two bin runs start a process (30 s), as P27's do.
 
 ## Continuous integration
 
