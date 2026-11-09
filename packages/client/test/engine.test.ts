@@ -979,3 +979,130 @@ test("scanNumbers quotes millions of declared members within a small heap (secur
   );
   assert.equal(out, String(n * 10 + 1));
 });
+
+// Security audit D: the base URL's credential, echoed by a server behind a JSON escape, passed
+// the scrub of the body as sent and reached `.message`, `.detail` and a caller who parses `.body`.
+const D_PW = "pä\"s's-W0rd";
+const D_BASE = `https://alice:${encodeURIComponent(D_PW)}@mirror.example/2`;
+const D_BASIC = Buffer.from(`alice:${D_PW}`, "utf8").toString("base64");
+const D_SECRETS = [D_PW, `alice:${D_PW}`, D_BASIC].flatMap((secret) => [secret, JSON.stringify(secret).slice(1, -1)]);
+/** `text` as a JSON writer that escapes every non-ASCII character writes it. */
+const asciiJson = (text: string): string =>
+  JSON.stringify(text).replace(/[\u0080-￿]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+/** `text` with every character written as a \uXXXX escape. */
+const escapedJson = (text: string): string => `"${[...text].map((ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`).join("")}"`;
+/** What a caller may log of an error: its fields, and the strings of its body decoded. */
+function seenOf(err: unknown): string {
+  const e = err as { message?: unknown; detail?: unknown; apiName?: unknown; location?: unknown; body?: unknown };
+  let text = [e.message, e.detail, e.apiName, e.location, e.body].map(String).join("\n");
+  try {
+    const walk = (v: unknown): void => {
+      if (typeof v === "string") text += `\n${v}`;
+      else if (v !== null && typeof v === "object") for (const [k, w] of Object.entries(v)) (text += `\n${k}`), walk(w);
+    };
+    walk(typeof e.body === "string" ? JSON.parse(e.body) : undefined);
+  } catch {
+    // not JSON
+  }
+  return text;
+}
+
+test("a credential echoed behind JSON escapes is scrubbed from the message, the detail, the name and the decoded body (security audit D)", async () => {
+  const echoes = [
+    asciiJson(`wrong password ${D_PW}`),
+    JSON.stringify(`bad login alice:${D_PW}`),
+    escapedJson(D_PW),
+    JSON.stringify(`no access to https://alice:${D_PW}@mirror.example/x`),
+  ];
+  for (const status of [401, 500]) {
+    for (const json of echoes) {
+      for (const body of [`{"message":${json}}`, `{"name":${json},"detail":${json}}`, `{"message":${JSON.stringify(JSON.stringify({ error: { msg: JSON.parse(json) } }))}}`]) {
+        const e = new RequestEngine({ baseUrl: D_BASE, maxRetries: 0, transport: async () => rawResponse(body, "application/json", status) });
+        const err = await e.getJson("/x").catch((caught: unknown) => caught);
+        assert.ok(err instanceof DdbApiError && err.message.startsWith(`HTTP ${status} `), String(err));
+        const seen = seenOf(err);
+        for (const secret of D_SECRETS) assert.ok(!seen.includes(secret), `${status} ${body}: ${seen}`);
+      }
+    }
+  }
+});
+
+test("a credential in an error document with a success status, or in a /version body, is scrubbed (security audit D)", async () => {
+  for (const json of [asciiJson(D_PW), JSON.stringify(`alice:${D_PW}`), escapedJson(D_PW)]) {
+    const answers: Array<[string, (c: DdbClient) => Promise<unknown>]> = [
+      [`{"error":{"msg":${json}}}`, (c) => c.search({ query: "x" })],
+      [`{"name":"NotAuthorizedException","message":${json}}`, (c) => c.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")],
+    ];
+    for (const [body, call] of answers) {
+      const client = new DdbClient({ baseUrl: D_BASE, maxRetries: 0, transport: async () => rawResponse(body, "application/json") });
+      const err = await call(client).catch((caught: unknown) => caught);
+      assert.ok(err instanceof DdbParseError && /success status/.test(err.message), String(err));
+      for (const secret of D_SECRETS) assert.ok(!err.message.includes(secret), err.message);
+    }
+  }
+  const client = new DdbClient({ baseUrl: D_BASE, maxRetries: 0, transport: async () => rawResponse(`version of alice:${D_PW}`, "text/plain") });
+  const err = await client.version().catch((caught: unknown) => caught);
+  assert.ok(err instanceof DdbParseError, String(err));
+  for (const secret of D_SECRETS) assert.ok(!err.message.includes(secret), err.message);
+});
+
+test("an error body keeps its spelling unless a credential hides behind an escape (security audit D)", async () => {
+  const base = "https://alice:s3cret-pw@mirror.example";
+  const bodyOf = async (body: string): Promise<string> => {
+    const e = new RequestEngine({ baseUrl: base, maxRetries: 0, transport: async () => rawResponse(body, "application/json", 500) });
+    const err = await e.getJson("/x").catch((caught: unknown) => caught);
+    assert.ok(err instanceof DdbApiError, String(err));
+    return err.body;
+  };
+  // No credential, or one spelled as sent: the body as sent (scrubbed), escapes kept.
+  assert.equal(await bodyOf('{"m":"caf\\u00e9 \\"x\\""}'), '{"m":"caf\\u00e9 \\"x\\""}');
+  assert.equal(await bodyOf('{"m":"pw s3cret-pw \\u00e9"}'), '{"m":"pw *** \\u00e9"}');
+  // Escaped: written again decoded, scrubbed in that spelling.
+  assert.equal(await bodyOf('{"m":"pw s3cret\\u002dpw \\u00e9"}'), '{"m":"pw *** é"}');
+  // Not JSON: nobody decodes it, it stays as sent.
+  assert.equal(await bodyOf("pw s3cret\\u002dpw"), "pw s3cret\\u002dpw");
+  // Deeply nested: written again where this runtime can, else left out (probed, not assumed:
+  // whether JSON.stringify recurses depends on the Node version).
+  const deep = `${"[".repeat(200_000)}"s3cret\\u002dpw"${"]".repeat(200_000)}`;
+  let parses = true;
+  let writes = true;
+  try {
+    const value: unknown = JSON.parse(deep);
+    try {
+      JSON.stringify(value);
+    } catch {
+      writes = false;
+    }
+  } catch {
+    parses = false;
+  }
+  if (parses) {
+    const body = await bodyOf(deep);
+    assert.ok(!body.includes("s3cret"), body.slice(199_990, 200_030));
+    assert.equal(body === "", !writes);
+  }
+});
+
+test("a value quoted from an answer is scrubbed before it is cut, so no part of a credential stays (security audit D)", () => {
+  const pw = "s3cret-Pw-long";
+  const e = new RequestEngine({ baseUrl: `https://alice:${pw}@mirror.example` });
+  for (const at of [0, 190, 195, 199]) {
+    const quoted = e.quoteServerValue(`${"x".repeat(at)}${pw}${"y".repeat(600)}`);
+    assert.ok(!quoted.includes("s3cret"), `${at}: ${quoted}`);
+  }
+  assert.equal(new RequestEngine().quoteServerValue("a\n​b"), "a b");
+});
+
+test("an echo of the request URL as sent is scrubbed, a short password too (security audit D)", async () => {
+  // Typed raw; WHATWG sends `p%22%C3%A4` in the URL, which a server echoes.
+  const e = new RequestEngine({
+    baseUrl: 'https://alice:p"ä@mirror.example',
+    maxRetries: 0,
+    transport: async (req) => rawResponse(JSON.stringify({ message: `no access: https://alice:p%22%C3%A4@${new URL(req.url).host}/x` }), "application/json", 403),
+  });
+  const err = await e.getJson("/x").catch((caught: unknown) => caught);
+  assert.ok(err instanceof DdbApiError, String(err));
+  for (const text of [err.message, err.detail ?? "", err.body]) {
+    assert.ok(!text.includes("p%22%C3%A4@") && !text.includes('p"ä@'), text);
+  }
+});

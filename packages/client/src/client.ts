@@ -12,8 +12,8 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, bigIntegerKeysOption, decodeBody, serverTextForMessage, type EngineOptions, type RawResponse } from "./engine.js";
-import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage, quoteValue } from "./errors.js";
+import { RequestEngine, bigIntegerKeysOption, decodeBody, type EngineOptions, type RawResponse } from "./engine.js";
+import { DdbApiError, DdbParseError, DdbValidationError, cutForMessage, quoteValue } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import {
   assertValid,
@@ -242,11 +242,6 @@ function shapeError(request: string, expected: string): DdbParseError {
   return new DdbParseError(`${request}: unexpected response shape: expected ${expected}.`);
 }
 
-/** `text` cleaned for a message (serverTextForMessage: a bounded prefix, one line), cut at MAX_QUOTED_LENGTH (200) characters (never inside a surrogate pair). */
-function quoted(text: string): string {
-  return cutForMessage(serverTextForMessage(text), MAX_QUOTED_LENGTH);
-}
-
 /**
  * The message of an error document sent with a 2xx status, or undefined for any other
  * body: Solr's `{ error: { msg } }` (or a bare `error` string) and the DDB envelope
@@ -285,11 +280,16 @@ function searchShapeError(request: string, handler: string, expected: string): D
  * rule (only handlers returning that envelope are supported); there is no fallback for
  * other shapes.
  */
-function assertSolrResponse(request: string, handler: string, body: unknown): asserts body is SolrResponse {
+function assertSolrResponse(
+  request: string,
+  handler: string,
+  body: unknown,
+  quote: (value: string) => string,
+): asserts body is SolrResponse {
   if (!isObject(body)) throw searchShapeError(request, handler, "a JSON object");
   const error = errorEnvelope(body);
   if (error !== undefined) {
-    throw new DdbParseError(`${request}: an error document with a success status: ${quoted(error)}`);
+    throw new DdbParseError(`${request}: an error document with a success status: ${quote(error)}`);
   }
   const response = body["response"];
   if (!isObject(response)) throw searchShapeError(request, handler, "a response object");
@@ -377,7 +377,7 @@ export class DdbClient {
     }
     const path = `/search/index/${enc(collection)}/${enc(handler)}`;
     const body = await this.engine.getJson<unknown>(path, query);
-    assertSolrResponse(`GET ${this.engine.describeUrl(path, query)}`, handler, body);
+    assertSolrResponse(`GET ${this.engine.describeUrl(path, query)}`, handler, body, (value) => this.engine.quoteServerValue(value));
     return body;
   }
 
@@ -473,7 +473,7 @@ export class DdbClient {
       if (typeof json !== "object" || json === null) throw shapeError(request, "a JSON object or array");
       const error = isObject(json) ? errorEnvelope(json) : undefined;
       if (error !== undefined) {
-        throw new DdbParseError(`${request}: an error document with a success status: ${quoted(error)}`);
+        throw new DdbParseError(`${request}: an error document with a success status: ${this.engine.quoteServerValue(error)}`);
       }
       return { part, contentType: res.contentType, json: json as JsonValue, ...heldBy };
     }
@@ -495,7 +495,7 @@ export class DdbClient {
     if (!VERSION_PATTERN.test(version)) {
       throw new DdbParseError(
         `GET ${this.engine.describeUrl("/version")}: expected a version string such as "7.5", got ${
-          version === "" ? "an empty body" : `"${quoted(version)}"`
+          version === "" ? "an empty body" : `"${this.engine.quoteServerValue(version)}"`
         }.`,
       );
     }

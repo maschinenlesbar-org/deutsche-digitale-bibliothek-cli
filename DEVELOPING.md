@@ -138,8 +138,17 @@ The library keeps them out of logged objects too: the engine holds the base URL 
 userinfo (raw and percent-decoded), and the forms a server echoes it back in (the
 `Basic` value, the decoded `user:password`, the password alone from 4 characters;
 for a userinfo without a password, `TOKEN@host` or `TOKEN:@host`, the user name is the
-secret, a token sent as Basic `TOKEN:`: `echoedCredentialForms`), from error bodies and details, redirect targets,
-transport error text and the `cause` chain. Whatever a custom transport throws reaches
+secret, a token sent as Basic `TOKEN:`: `echoedCredentialForms`; each also percent-encoded, and
+the userinfo also as WHATWG writes it in a request URL, `p%22%C3%A4` for a typed `p"ä`), from error
+bodies and details, redirect targets, transport error text and the `cause` chain. Server text
+decoded from JSON is scrubbed again after the decode: a `detail` or `name` whose escapes (`\"`,
+`\u00e4`) hid the credential from the scrub of the body as sent. `DdbApiError.body` stays as sent
+(scrubbed) unless it is JSON whose decoded text still holds a credential: then it is the decoded
+JSON written again with the credential replaced (also where it is escaped twice, in a Solr error
+document inside the envelope's `message`), and `""` for such a body too deeply nested to write
+again. A value the client quotes from a 2xx answer (an error document with a success status, a
+`/version` body) goes through `RequestEngine.quoteServerValue`, which scrubs it before it is
+cleaned and cut. Whatever a custom transport throws reaches
 the caller as a `DdbNetworkError` (`GET <url> failed: <reason>`, the original as
 `cause`), never as a raw `TypeError` (`apps/cli/test/conformance-p2-library-redaction.test.ts`).
 

@@ -20,6 +20,7 @@ import {
   DdbNetworkError,
   DdbParseError,
   DdbValidationError,
+  MAX_QUOTED_LENGTH,
   TextBuilder,
   credentialsIn,
   cutForMessage,
@@ -464,6 +465,19 @@ export function validateBaseUrl(baseUrl: string): string {
 }
 
 /**
+ * `form` and its spelling in a URL (`encodeURIComponent`): a server that puts a credential into
+ * a URL, a redirect's Location, percent-encodes it. A form that has no such spelling (a lone
+ * surrogate) is kept as it is.
+ */
+function urlSpellings(form: string): string[] {
+  try {
+    return [form, encodeURIComponent(form)];
+  } catch {
+    return [form];
+  }
+}
+
+/**
  * Longest error `detail` the engine keeps (in characters). A longer server message is
  * cut and ends in "…", so a hostile or buggy body cannot flood stderr.
  */
@@ -692,8 +706,9 @@ export class RequestEngine {
   readonly #credentials: string[];
   /**
    * The forms a server echoes that userinfo back in (the Basic value, the decoded
-   * `user:password`, the password or token alone), longest first, so a password never leaves half
-   * of the `user:password` around it.
+   * `user:password`, the password or token alone; `echoedCredentialForms`), each also
+   * percent-encoded as in a URL (a redirect's Location), longest first, so a password never
+   * leaves half of the `user:password` around it.
    */
   readonly #echoed: string[];
   readonly #defaultHeaders: Record<string, string>;
@@ -716,16 +731,19 @@ export class RequestEngine {
     options = options ?? {};
     // Checked raw, before the trailing-slash strip (see validateBaseUrl).
     this.#baseUrl = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
-    this.#credentials = credentialsIn(this.#baseUrl).flatMap((raw) => {
+    // The userinfo as typed and as WHATWG writes it (it percent-encodes some of its characters,
+    // `p"ä` as `p%22%C3%A4`), which is how a server echoes a request URL.
+    const userinfos = [...new Set([...credentialsIn(this.#baseUrl), ...credentialsIn(new URL(this.#baseUrl).href)])];
+    this.#credentials = userinfos.flatMap((raw) => {
       try {
         return [raw, decodeURIComponent(raw)];
       } catch {
         return [raw];
       }
     });
-    this.#echoed = credentialsIn(this.#baseUrl)
-      .flatMap(echoedCredentialForms)
-      .sort((a, b) => b.length - a.length);
+    // Longest first, so a password never leaves half of the user:password around it; each form
+    // also percent-encoded, as a server puts it into a URL.
+    this.#echoed = [...new Set(userinfos.flatMap(echoedCredentialForms).flatMap(urlSpellings))].sort((a, b) => b.length - a.length);
     this.transport = functionOption("transport", options.transport, nodeHttpTransport);
     // Only `undefined` selects the default; a blank or otherwise unsendable value
     // is a DdbValidationError here rather than a network error at request time.
@@ -812,6 +830,47 @@ export class RequestEngine {
    */
   private scrub(text: string): string {
     return this.#credentials.length === 0 ? text : redactSecrets(redactCredentials(text, this.#credentials), this.#echoed);
+  }
+
+  /**
+   * An error body, already scrubbed as sent, as `DdbApiError.body` keeps it: when it is JSON with
+   * an escape in it, checked decoded too. An escape (`\"`, `\u00e4`) hides an echoed credential
+   * from the scrub of the text as sent, while a caller who parses the body sees it. Such a body is
+   * kept as the decoded JSON written again (`JSON.stringify`, one spelling per character) with the
+   * credential scrubbed in that spelling (and in the spelling of a JSON document inside a string,
+   * as the DDB sends a Solr error). A body that doesn't parse is text nobody decodes, and stays as
+   * sent; one too deeply nested to write again is left out.
+   */
+  private scrubBody(scrubbed: string): string {
+    if (this.#echoed.length === 0 || !scrubbed.includes("\\")) return scrubbed;
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(scrubbed);
+    } catch {
+      return scrubbed;
+    }
+    let rewritten: string;
+    try {
+      rewritten = JSON.stringify(decoded);
+    } catch {
+      return "";
+    }
+    // Each form as a JSON string spells it, once and twice: the DDB wraps a Solr error document,
+    // JSON itself, as a string in its envelope's `message`, so a credential in it is escaped twice.
+    const once = this.#echoed.map((form) => JSON.stringify(form).slice(1, -1));
+    const spelled = [...new Set([...once.map((form) => JSON.stringify(form).slice(1, -1)), ...once])].sort((a, b) => b.length - a.length);
+    return spelled.some((form) => rewritten.includes(form)) ? redactSecrets(rewritten, spelled) : scrubbed;
+  }
+
+  /**
+   * A value from an answer quoted for an error message, the base URL's credentials scrubbed
+   * first, before it is cleaned and cut (serverTextForMessage, then MAX_QUOTED_LENGTH, 200
+   * characters): a 2xx answer (an error document with a success status, a `/version` body) can
+   * echo them as well as an error body, and a cut before the scrub left a prefix of the password.
+   * The client quotes server values with this.
+   */
+  quoteServerValue(value: string): string {
+    return cutForMessage(serverTextForMessage(this.scrub(value)), MAX_QUOTED_LENGTH);
   }
 
   /**
@@ -1199,12 +1258,15 @@ export class RequestEngine {
     // characters so a hostile/MITM'd endpoint can't smuggle terminal escape
     // sequences into stderr when this message is printed (DDB-01), and keep it to
     // one bounded line.
-    if (detail !== undefined) detail = cleanDetail(detail);
+    // `detail` and `name` were decoded from the body: scrubbed again, since a JSON escape hid the
+    // credential from the scrub of the text as sent.
+    if (detail !== undefined) detail = cleanDetail(this.scrub(detail));
+    if (apiName !== undefined) apiName = this.scrub(apiName);
     if (hint !== undefined) detail = detail === undefined ? hint : `${detail}; ${hint}`;
     // Name the target of a redirect that was not followed.
     const location =
       status >= 300 && status < 400 && locationHeader ? redirectTarget(url, this.scrub(locationHeader)) : undefined;
-    return new DdbApiError({ status, url, method, body: text, detail, apiName, location });
+    return new DdbApiError({ status, url, method, body: this.scrubBody(text), detail, apiName, location });
   }
 }
 
