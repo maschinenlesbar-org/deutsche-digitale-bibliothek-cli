@@ -1106,3 +1106,36 @@ test("an echo of the request URL as sent is scrubbed, a short password too (secu
     assert.ok(!text.includes("p%22%C3%A4@") && !text.includes('p"ä@'), text);
   }
 });
+
+test("a redirect whose Location echoes the base URL's credential is not followed, and its target is scrubbed (security audit D2)", async () => {
+  const locations = [
+    `https://elsewhere.example/login?user=alice&pw=${encodeURIComponent(D_PW)}`,
+    `https://elsewhere.example/login?pw=${D_PW}`,
+    `https://elsewhere.example/${encodeURIComponent(`alice:${D_PW}`)}/x`,
+    `https://elsewhere.example/auth?basic=${D_BASIC}`,
+    `/relative/${D_PW}`,
+  ];
+  const percentDecoded = (text: string): string =>
+    text.replace(/(?:%[0-9a-fA-F]{2})+/g, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  for (const location of locations) {
+    const mt = makeMockTransport(() => ({ status: 302, headers: { location }, body: Buffer.alloc(0) }));
+    const e = new RequestEngine({ baseUrl: D_BASE, maxRetries: 0, transport: mt.transport });
+    const err = await e.getJson("/x").catch((caught: unknown) => caught);
+    assert.ok(err instanceof DdbApiError && /^HTTP 302 for GET .+: redirect to .+ not followed$/.test(err.message), String(err));
+    // Not followed: the credential never went to the Location's host, nor became the request URL.
+    assert.equal(mt.calls.length, 1, location);
+    const seen = percentDecoded(seenOf(err) + err.url);
+    for (const secret of D_SECRETS) assert.ok(!seen.includes(secret), `${location}: ${seen}`);
+  }
+  // A Location that echoes nothing is followed as before.
+  let n = 0;
+  const mt = makeMockTransport(() => (n++ === 0 ? { status: 302, headers: { location: "/2/y?pw=other" }, body: Buffer.alloc(0) } : jsonResponse({ ok: 1 })));
+  assert.deepEqual(await new RequestEngine({ baseUrl: D_BASE, transport: mt.transport }).getJson("/x"), { ok: 1 });
+  assert.equal(mt.calls.length, 2);
+});

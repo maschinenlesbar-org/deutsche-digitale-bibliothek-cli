@@ -542,10 +542,12 @@ seconds, ms under 1 s). Tests: `packages/client/test/engine.test.ts`, `apps/cli/
 
 **Redirects.** Only `301`/`302`/`303`/`307`/`308` with a parseable `Location` are
 followed, up to `maxRedirects` (5). Any other 3xx, a missing or malformed
-`Location` and a hop past the limit surface as a `DdbApiError` (exit 1) whose
+`Location`, a hop past the limit and a `Location` that echoes the base URL's credentials (the
+forms the engine scrubs, raw or percent-encoded, in its path or query: following it would carry
+them to wherever it points) surface as a `DdbApiError` (exit 1) whose
 `location` field and message name the target: `redirect to <url> not followed`
-(resolved, userinfo redacted, sanitised) or `redirect not followed (no Location
-header)`.
+(the credentials scrubbed from the `Location` as sent, then resolved, userinfo redacted,
+sanitised) or `redirect not followed (no Location header)`.
 
 **Cross-origin credential stripping.** When the API issues a redirect that
 crosses an origin boundary (scheme, host **or** port), the engine keeps only its own

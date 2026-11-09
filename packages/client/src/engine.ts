@@ -156,8 +156,9 @@ export interface EngineOptions {
   retryDelayMs?: number | undefined;
   /**
    * Number of HTTP redirects (301/302/303/307/308) to follow, 0..20. Defaults to 5. Any
-   * other 3xx, one with a missing or malformed Location, and one past this limit
-   * surface as a DdbApiError naming the target.
+   * other 3xx, one with a missing or malformed Location, one past this limit, and one whose
+   * Location echoes the base URL's credentials surface as a DdbApiError naming the target
+   * (those credentials scrubbed from it before it is resolved).
    */
   maxRedirects?: number | undefined;
   /**
@@ -1076,10 +1077,13 @@ export class RequestEngine {
         }
       }
 
-      // Follow redirects, resolving the Location relative to the current URL.
+      // Follow redirects, resolving the Location relative to the current URL. A Location that
+      // echoes the base URL's credential (in its path or query, raw or percent-encoded) is not
+      // followed: it would carry the credential to wherever it points, and every later message
+      // would name a URL that holds it. It surfaces as a DdbApiError naming the target, scrubbed.
       const location = headerValue(responseHeaders["location"]);
       const candidate =
-        FOLLOWED_REDIRECTS.has(status) && redirects < this.maxRedirects
+        FOLLOWED_REDIRECTS.has(status) && redirects < this.maxRedirects && (location === undefined || this.scrub(location) === location)
           ? resolveLocation(location, url)
           : undefined;
       const next =
@@ -1127,8 +1131,9 @@ export class RequestEngine {
         redirects += 1;
         continue;
       }
-      // Any other 3xx — not a followed status, no usable Location, or past
-      // maxRedirects — falls through and surfaces as a DdbApiError naming the target.
+      // Any other 3xx — not a followed status, no usable Location, past maxRedirects, or a
+      // Location that echoes the credentials — falls through and surfaces as a DdbApiError
+      // naming the target.
 
       const contentType = String(headerValue(responseHeaders["content-type"]) ?? "");
       if (status < 200 || status >= 300) {
@@ -1263,7 +1268,9 @@ export class RequestEngine {
     if (detail !== undefined) detail = cleanDetail(this.scrub(detail));
     if (apiName !== undefined) apiName = this.scrub(apiName);
     if (hint !== undefined) detail = detail === undefined ? hint : `${detail}; ${hint}`;
-    // Name the target of a redirect that was not followed.
+    // Name the target of a redirect that was not followed: the base URL's credentials scrubbed
+    // from the Location as sent, before resolving it percent-encodes what is left of them in a
+    // new spelling (`'` as `%27` in a query).
     const location =
       status >= 300 && status < 400 && locationHeader ? redirectTarget(url, this.scrub(locationHeader)) : undefined;
     return new DdbApiError({ status, url, method, body: this.scrubBody(text), detail, apiName, location });
