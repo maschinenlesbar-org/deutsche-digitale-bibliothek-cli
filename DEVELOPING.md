@@ -597,7 +597,10 @@ redirect to another origin"). Checked by `apps/cli/test/conformance-p3-redirect-
 **maxResponseBytes.** A cap on the response body size in bytes (`0` = unlimited;
 default 100 MiB), guarding against unbounded responses. The built-in transport aborts
 as soon as it is passed; for any transport the engine checks the body it gets back, and
-the message names both the option and the flag (`sizeLimitMessage`).
+the message names both the option and the flag (`sizeLimitMessage`). The built-in transport
+joins small chunks as they arrive (every 1024 chunks or 64 KiB), so its memory follows the bytes,
+not the number of chunks a server sends: one Buffer per one-byte chunk held about 210 bytes of
+heap each, and 2 MB in one-byte chunks aborted the bin in a 256 MB heap.
 
 **Timeout (`--timeout`).** Enforced two ways so a hostile/slow server cannot hang
 the CLI: an idle-socket timeout (no bytes for `timeoutMs`) **and** a total
@@ -712,7 +715,7 @@ directory are refused before any request; `/dev/null`, a FIFO and `/dev/stdout` 
 place; `--force` through a dangling link creates the file it names; a signal leaves no claim and no
 temporary file; all start the built bin), P27 big and odd answers (a large flat answer and 20 MB of
 DEL print within a small heap, 90 MB of DEL is an ERROR record, a lone surrogate or invalid bytes
-become U+FFFD with a WARN).
+become U+FFFD with a WARN, two million one-byte chunks are read within a small heap).
 
 ## Continuous integration
 
