@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TextDecoder } from "node:util";
 import { MAX_RETRY_AFTER_MS, RequestEngine, firstInexactNumber, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/engine.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, echoedCredentialForms, redactUrl, toWellFormed } from "../src/errors.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, echoedCredentialForms, redactUrl, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
 import { DdbClient } from "../src/client.js";
 import type { HttpResponse } from "../src/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
@@ -824,4 +824,48 @@ test("a number with a long run of zeros is refused in linear time (security audi
   // leading and trailing ones of a fraction too.
   assert.equal(firstInexactNumber(`[${"9".repeat(17)}0000, 1${"0".repeat(30)}, 0.000${"0".repeat(20)}]`), `${"9".repeat(17)}0000`);
   assert.equal(firstInexactNumber(`[1${"0".repeat(30)}, 12345678901234567000, 1.0e300, 0.00, -0]`), undefined);
+});
+
+function elapsed(work: () => unknown): number {
+  const start = performance.now();
+  work();
+  return performance.now() - start;
+}
+
+test("redactUrlUserinfo hides every URL's userinfo in one linear pass, however many URLs (security audit B)", () => {
+  // The URL regex this replaces (a scheme tried at every word start) takes about 3 s on this.
+  assert.ok(elapsed(() => redactUrlUserinfo("a.".repeat(30_000))) < 1000);
+  assert.equal(redactUrlUserinfo("a -https://u:p@h/x and x-ftp://v@w?q, mail@example.org"), "a -https://***@h/x and x-ftp://***@w?q, mail@example.org");
+  assert.equal(redactUrlUserinfo("1://u:p@h ://u:p@h"), "1://u:p@h ://u:p@h");
+  assert.equal(redactUrlUserinfo("https://h/p?u=a@b"), "https://h/p?u=a@b");
+  for (const text of ["a".repeat(1_000_000), "a.".repeat(500_000), "://".repeat(100_000), `https://${"u".repeat(1_000_000)}`]) {
+    assert.equal(redactUrlUserinfo(text), text);
+  }
+  const many = redactUrlUserinfo("https://u:p@h ".repeat(100_000));
+  assert.equal(many, "https://***@h ".repeat(100_000));
+});
+
+test("redactUrlUserinfo hides the userinfo of a URL glued onto the one before it, still linear (security audit B2)", () => {
+  // The authority read for the first `://` ends at the `/` of the second; the second URL starts
+  // inside it (its scheme is the first one's host, or follows a redacted `@`), so the search goes
+  // on after each `://`, not after the authority. The regex this replaces redacted both; the
+  // first linear pass missed them.
+  assert.equal(redactUrlUserinfo("https://host://u:p@h"), "https://host://***@h");
+  assert.equal(redactUrlUserinfo("https://u:p@x://v:q@w"), "https://***@x://***@w");
+  assert.equal(redactUrlUserinfo("see https://h.example:/x://u:p@h"), "see https://h.example:/x://***@h");
+  assert.equal(redactUrlUserinfo("https://u:p@1://v:q@w"), "https://***@1://v:q@w");
+  // Many glued URLs, unredacted and redacted, and long scheme-character runs: one pass each.
+  const n = 100_000;
+  for (const [text, want] of [
+    [`${"a://".repeat(n)}u:p@h`, `${"a://".repeat(n)}***@h`],
+    ["x://u:p@".repeat(n), "x://***@".repeat(n)],
+    [`${"a.".repeat(500_000)}://u:p@h`, `${"a.".repeat(500_000)}://***@h`],
+    [`https://${"a.".repeat(500_000)}://u:p@h`, `https://${"a.".repeat(500_000)}://***@h`],
+    ["a:".repeat(500_000), "a:".repeat(500_000)],
+  ] as const) {
+    let got = "";
+    const ms = elapsed(() => (got = redactUrlUserinfo(text)));
+    assert.ok(got === want, `${text.slice(0, 40)}…`);
+    assert.ok(ms < 1000, `${Math.round(ms)} ms on ${text.slice(0, 40)}…`);
+  }
 });

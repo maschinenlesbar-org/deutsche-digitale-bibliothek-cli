@@ -17,6 +17,7 @@ import {
   echoedCredentialForms,
   redactCredentials,
   redactSecrets,
+  redactUrlUserinfo,
 } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
 import { sanitizeServerText } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/engine";
 
@@ -138,15 +139,6 @@ function rejectRepeatedOptions(command: Command): void {
 }
 
 /**
- * Replace the userinfo of every URL in `text` with `***`, the form `redactUrl` gives
- * (`https://user:secret@host` becomes `https://***@host`). Text-based, so it also covers
- * a URL that does not parse; a backstop behind the exact-string redaction below.
- */
-export function redactUserinfo(text: string): string {
-  return text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#']*@/gi, "$1***@");
-}
-
-/**
  * The options whose value is the base URL: a `user:password@host` given there without
  * its scheme is still a credential (anywhere else a bare `a:b@c` is not).
  */
@@ -213,7 +205,7 @@ export function redactionFor(argv: readonly string[]): Redaction {
   // Longest first, so a password never leaves half of the user:password around it.
   const echoedList = [...echoed].sort((a, b) => b.length - a.length);
   const passwordList = [...passwords].sort((a, b) => b.length - a.length);
-  const out = (text: string): string => redactSecrets(redactUserinfo(redactCredentials(text, list)), echoedList);
+  const out = (text: string): string => redactSecrets(redactUrlUserinfo(redactCredentials(text, list)), echoedList);
   return { out, err: (text) => redactSecrets(out(text), passwordList) };
 }
 

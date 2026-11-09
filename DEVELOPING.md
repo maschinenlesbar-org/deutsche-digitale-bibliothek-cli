@@ -112,7 +112,10 @@ which also cuts the userinfo out of a value that doesn't parse. The CLI goes fur
 every argument (and in the value part of `--opt=value`, `redactionFor`; the
 `--base-url` value counts with or without its scheme) with the exported `credentialsIn` and
 redacts it with `redactCredentials` from every line printed on stdout and from every log
-record's *message*. A URL counts wherever it starts inside an argument (`urlsWithin`): inside a
+record's *message*; behind the exact strings, the client's `redactUrlUserinfo` replaces the
+userinfo of every URL in a stdout text (`https://***@host`), a URL glued onto the one before it
+included, in one linear pass (the scheme regex it replaced took seconds on a run of `a.a.…` in an
+answer). A URL counts wherever it starts inside an argument (`urlsWithin`): inside a
 Solr phrase (`title:Goethe https://…`, `type_fct:"https://…"`), padded (a value is sent
 trimmed) or after a dash; each `://` is found with `indexOf` and its scheme by walking back, so
 the search stays linear in a long argument, and at most 64 URLs are read from one argument. Its
