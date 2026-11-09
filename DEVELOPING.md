@@ -634,7 +634,15 @@ over it; a write that fails part-way removes both, so no half-written file and n
 left, and with `--force` the old file stays as it was. From the first file write on, SIGINT,
 SIGTERM and SIGHUP remove the claim and the temporary file, then exit 130, 143 or 129. `--force`
 keeps the old file's mode and writes through a symlink, or a chain of them, to the file it names
-(`linkTarget`), creating that file when the link dangles; the link stays. An error names the
+(`linkTarget`), creating that file when the link dangles; the link stays. A link is followed only
+when the caller or the owner of its directory made it, or nobody else can write to that directory
+(neither sticky nor writable by others): the rule of Linux's `fs.protected_symlinks`, checked at
+every hop, a dangling last one too, since the kernel never sees these links (they are read by hand
+and the file is renamed onto the target). Another user's link in `/tmp` is refused ("… is a link
+another user made in a directory others can write to; it is not followed"): exit 2 before the
+request, or exit 1 when it appears during it. A path that can't be inspected (EACCES on the way)
+is reported as that, never as an existing file. The owners are a seam (`nodeFilesFor(owners)`,
+`LinkOwners`), so the tests are another user without root. An error names the
 user's path, never the temporary file. `-o -` (stdout) skips both.
 
 **Error types.** [`errors.ts`](packages/client/src/errors.ts): `DdbApiError` (non-2xx,

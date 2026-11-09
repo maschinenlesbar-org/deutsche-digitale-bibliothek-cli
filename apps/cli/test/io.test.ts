@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, closeSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
-import { defaultIO, handleOutputErrors, stderrAfterStdout, stdoutWriter } from "../src/cli/io.js";
+import { defaultIO, handleOutputErrors, nodeFilesFor, stderrAfterStdout, stdoutWriter, type LinkOwners } from "../src/cli/io.js";
 import { DdbError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
 import { createLogger } from "../src/cli/log.js";
 
@@ -275,3 +275,85 @@ test("stdout to a regular file gets every byte or an error: a short write is nev
   stdoutWriter({ write: (data: string | Buffer) => streamed.push(data), emit: () => true })("y");
   assert.deepEqual(streamed, ["y"]);
 });
+
+// Security audit G: --force followed every link by hand (lstat/readlink, then a rename onto the
+// target), so the kernel's fs.protected_symlinks never applied: a link another user planted in a
+// shared directory sent the answer over any file the caller could replace.
+const ME = 1000;
+const OTHER = 1001;
+/** /tmp: owned by root, sticky and world-writable. */
+const SHARED = { uid: 0, mode: 0o41777 };
+function owners(links: Record<string, number>, dirs: Record<string, { uid: number; mode: number }>): LinkOwners {
+  return {
+    uid: ME,
+    ownerOf: (path, follow) => (follow ? (dirs[path] ?? { uid: ME, mode: 0o40755 }) : { uid: links[path] ?? ME, mode: 0o120777 }),
+  };
+}
+
+test("--force follows no link another user made in a shared directory, at any hop, a dangling last one included (security audit G)", () => {
+  withTempDir((dir) => {
+    const victim = join(dir, "victim.txt");
+    writeFileSync(victim, "keep me\n");
+    const link = join(dir, "out.json");
+    symlinkSync(victim, link);
+    for (const mode of [SHARED, { uid: ME, mode: 0o40777 }]) {
+      const files = nodeFilesFor(owners({ [link]: OTHER }, { [dir]: mode }));
+      assert.throws(() => files.check(link, true), (err: Error) => /another user/.test(err.message) && err.message.includes(link));
+      assert.throws(() => files.write(link, Buffer.from("x"), true), /another user/);
+      assert.equal(readFileSync(victim, "utf8"), "keep me\n");
+      assert.ok(lstatSync(link).isSymbolicLink());
+    }
+    // own link -> a foreign link -> the victim
+    const inner = join(dir, "inner");
+    symlinkSync(victim, inner);
+    const outer = join(dir, "outer.json");
+    symlinkSync(inner, outer);
+    assert.throws(() => nodeFilesFor(owners({ [inner]: OTHER }, { [dir]: SHARED })).write(outer, Buffer.from("x"), true), /another user/);
+    assert.equal(readFileSync(victim, "utf8"), "keep me\n");
+    // A foreign dangling link: the file it names is not created.
+    const dangling = join(dir, "dangling.json");
+    const target = join(dir, "created-elsewhere.json");
+    symlinkSync(target, dangling);
+    assert.throws(() => nodeFilesFor(owners({ [dangling]: OTHER }, { [dir]: SHARED })).write(dangling, Buffer.from("x"), true), /another user/);
+    assert.throws(() => statSync(target));
+  });
+});
+
+test("--force still follows the caller's own links, the directory owner's, and any link in a directory only its owner writes (security audit G)", () => {
+  const cases: Array<[string, (dir: string, link: string) => LinkOwners]> = [
+    ["own link in a shared directory", (dir) => owners({}, { [dir]: SHARED })],
+    ["the shared directory owner's link", (dir, link) => owners({ [link]: 0 }, { [dir]: SHARED })],
+    ["another user's link in a directory only its owner writes", (dir, link) => owners({ [link]: OTHER }, { [dir]: { uid: OTHER, mode: 0o40755 } })],
+    ["no caller id", (dir, link) => ({ ...owners({ [link]: OTHER }, { [dir]: SHARED }), uid: undefined })],
+  ];
+  for (const [label, who] of cases) {
+    withTempDir((dir) => {
+      const victim = join(dir, "victim.txt");
+      writeFileSync(victim, "keep me\n");
+      const link = join(dir, "out.json");
+      symlinkSync(victim, link);
+      const files = nodeFilesFor(who(dir, link));
+      files.check(link, true);
+      files.write(link, Buffer.from("new\n"), true);
+      assert.equal(readFileSync(victim, "utf8"), "new\n", label);
+      assert.ok(lstatSync(link).isSymbolicLink(), label);
+    });
+  }
+});
+
+test("a path that can't be inspected is reported as such, not as an existing file (security audit G)", { skip: process.getuid?.() === 0 }, () => {
+  withTempDir((dir) => {
+    const closed = join(dir, "closed");
+    mkdirSync(closed);
+    const link = join(dir, "out.json");
+    symlinkSync(join(closed, "x.json"), link);
+    chmodSync(closed, 0o000);
+    try {
+      assert.throws(() => nodeFilesFor().check(link, false), (err: Error) => !/Refusing to overwrite/.test(err.message) && /EACCES|permission/i.test(err.message));
+      assert.throws(() => nodeFilesFor().write(link, Buffer.from("x"), false), (err: Error) => err instanceof DdbError && !/Refusing to overwrite/.test(err.message) && /EACCES|permission/i.test(err.message));
+    } finally {
+      chmodSync(closed, 0o700);
+    }
+  });
+});
+
