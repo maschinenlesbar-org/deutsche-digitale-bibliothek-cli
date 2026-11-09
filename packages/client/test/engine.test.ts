@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TextDecoder } from "node:util";
-import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/engine.js";
+import { MAX_RETRY_AFTER_MS, RequestEngine, firstInexactNumber, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/engine.js";
 import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, echoedCredentialForms, redactUrl, toWellFormed } from "../src/errors.js";
 import { DdbClient } from "../src/client.js";
 import type { HttpResponse } from "../src/http.js";
@@ -806,4 +806,22 @@ test("an answer longer than V8's longest string is a DdbParseError naming the re
   // An error status with such a body is still the API error, without the unreadable body.
   const failing = new RequestEngine({ maxResponseBytes: 0, transport: makeMockTransport(() => rawResponse(huge, "text/plain", 500)).transport });
   await assert.rejects(failing.getJson("/x"), (err: unknown) => err instanceof DdbApiError && err.status === 500 && err.body === "");
+});
+
+test("a number with a long run of zeros is refused in linear time (security audit A)", async () => {
+  // decimalOf stripped trailing zeros with `/0+$/`, which tries a match at every zero of a run that
+  // doesn't end the digits: 1.<100 000 zeros>1e300 took about 15 s, past any --timeout (the number
+  // scan runs once the answer is in). Counted with index loops, it takes milliseconds.
+  const body = `{"numFound":1,"x":1.${"0".repeat(100_000)}1e300}`;
+  const e = new RequestEngine({ transport: async () => rawResponse(body, "application/json"), maxRetries: 0 });
+  const start = performance.now();
+  const err = await e.getJson("/x").catch((caught: unknown) => caught);
+  const ms = performance.now() - start;
+  assert.ok(ms < 1000, `${Math.round(ms)} ms`);
+  assert.ok(err instanceof DdbParseError && /cannot be represented exactly/.test(err.message), String(err));
+  assert.ok(err.message.length < 1000, "the message quotes the literal cut");
+  // The same digits and exponent as before: trailing zeros of an integer past 2^53 are exact,
+  // leading and trailing ones of a fraction too.
+  assert.equal(firstInexactNumber(`[${"9".repeat(17)}0000, 1${"0".repeat(30)}, 0.000${"0".repeat(20)}]`), `${"9".repeat(17)}0000`);
+  assert.equal(firstInexactNumber(`[1${"0".repeat(30)}, 12345678901234567000, 1.0e300, 0.00, -0]`), undefined);
 });
