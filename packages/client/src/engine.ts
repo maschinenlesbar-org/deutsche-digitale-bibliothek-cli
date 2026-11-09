@@ -20,8 +20,10 @@ import {
   DdbNetworkError,
   DdbParseError,
   DdbValidationError,
+  TextBuilder,
   credentialsIn,
   cutForMessage,
+  cutText,
   echoedCredentialForms,
   messageUrl,
   quoteValue,
@@ -385,25 +387,64 @@ export function bigIntegerKeysOption(value: ReadonlySet<string> | undefined): Re
 }
 
 /**
- * Strip C0/C1 control characters (except tab and newline) from a string that
- * originated in an attacker-controlled response body. A JSON error body can encode
- * an ESC as the six-character escape backslash-u-001b, which `JSON.parse` decodes
- * into a real control byte; without this a hostile or MITM'd endpoint could drive
- * ANSI/OSC escape sequences into the user's terminal when the error `detail` is
- * printed to stderr. It is also reused by the CLI to clean the raw item/version
- * passthrough before it reaches a terminal. The CLI's JSON output is escaped
- * separately (`escapeControlChars` in cli/shared.ts): `JSON.stringify` alone leaves
- * DEL and the C1 range raw. Written with
- * a char-code check so no control byte ever appears literally in this source.
+ * A whole terminal escape sequence: a CSI (`ESC [` or the 8-bit U+009B, parameters,
+ * intermediates, final byte), a terminated control string (OSC/DCS/SOS/PM/APC, `ESC ]` …
+ * up to BEL or ST, or their 8-bit forms) or a short `ESC` sequence. Dropping only the
+ * control bytes left the printable rest behind (`ESC ] 0 ; title BEL` became `]0;title`).
+ * An unterminated control string is left to the per-character filter, so it cannot
+ * swallow the rest of the text. A control string's body ends at an ESC or at another
+ * introducer: with the introducers allowed inside it, an unterminated run of them was matched
+ * from each one to the end of the text, quadratic. Written with escapes, so the source holds no
+ * control bytes.
+ */
+const ESCAPE_SEQUENCE =
+  /(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]|(?:\u001b[\]PX^_]|[\u0090\u0098\u009d-\u009f])[^\u0007\u001b\u0090\u0098\u009c-\u009f]*(?:\u0007|\u001b\\|\u009c)|\u001b[ -/]*[0-~]/g;
+
+/** What `sanitizeServerText` drops once the escape sequences are gone: C0 but TAB and LF, DEL, C1. */
+const CONTROL_CHAR = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+
+/**
+ * Strip terminal escape sequences and C0/C1 control characters (except tab and newline) from
+ * a string that originated in an attacker-controlled response body, keeping the rest of it
+ * whole: the CLI shows the raw item/version passthrough on a terminal through it (`forTerminal`
+ * in the item command), where the text's lines and length must stay. A JSON error body can
+ * encode an ESC as the six-character escape backslash-u-001b, which `JSON.parse` decodes into a
+ * real control byte; without this a hostile or MITM'd endpoint could drive ANSI/OSC escape
+ * sequences into the user's terminal. Whole sequences go first (ESCAPE_SEQUENCE), then the
+ * remaining control characters (CONTROL_CHAR): two linear regex replaces, which V8 builds flat.
+ * One `+=` per character made a rope node each, and a 16 MB text exhausted a small heap.
+ * Messages take {@link serverTextForMessage}, which also cuts, folds and drops format
+ * characters. The CLI's JSON output is escaped separately (`escapeControlChars` in
+ * cli/shared.ts): `JSON.stringify` alone leaves DEL and the C1 range raw.
  */
 export function sanitizeServerText(text: string): string {
-  let out = "";
-  for (const ch of text) {
-    const n = ch.codePointAt(0) ?? 0;
-    if (n <= 8 || (n >= 0x0b && n <= 0x1f) || (n >= 0x7f && n <= 0x9f)) continue;
-    out += ch;
-  }
-  return out;
+  return text.replace(ESCAPE_SEQUENCE, "").replace(CONTROL_CHAR, "");
+}
+
+/**
+ * The most server text (in UTF-16 units) `serverTextForMessage` reads; a longer text is cut first.
+ * Every message keeps far less of it (MAX_DETAIL_LENGTH, 500 characters), and cleaning all of a
+ * 16 MB error detail exhausted a small heap.
+ */
+const MAX_SERVER_TEXT = 16 * 1024;
+
+/**
+ * What `serverTextForMessage` drops once the escape sequences are gone: the C0 controls but the
+ * whitespace ones (TAB to CR), DEL, the C1 controls, and every format character (General
+ * Category Cf: bidi controls, zero-width characters, U+00AD, U+FEFF, …).
+ */
+const DROPPED_CHAR = /[\u0000-\u0008\u000e-\u001f\u007f-\u009f\p{Cf}]/gu;
+
+/**
+ * Server text (an error detail, a quoted value, a Content-Type, a redirect target) made safe for
+ * a one-line message: only the first MAX_SERVER_TEXT (16 384) units are read (never half a
+ * surrogate pair; a caller that scrubs credentials does so first, so a cut never splits one),
+ * whole escape sequences and then C0/C1 controls, DEL and every format character (bidi
+ * controls, zero-width characters) are dropped, and every whitespace run (newlines, U+2028/U+2029
+ * included) becomes one space, the ends trimmed. Every step is a linear regex replace.
+ */
+export function serverTextForMessage(text: string): string {
+  return cutText(text, MAX_SERVER_TEXT).replace(ESCAPE_SEQUENCE, "").replace(DROPPED_CHAR, "").replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -449,13 +490,12 @@ function solrErrorMessage(message: string): string | undefined {
 }
 
 /**
- * Clean an error detail for a one-line stderr message: strip control characters,
- * fold every whitespace run (newlines included) into one space and cap the length
+ * Clean an error detail for a one-line stderr message (serverTextForMessage: a bounded prefix,
+ * no escape sequences, controls or format characters, whitespace folded) and cap the length
  * (never inside a surrogate pair).
  */
 function cleanDetail(detail: string): string {
-  const clean = sanitizeServerText(detail).replace(/\s+/g, " ").trim();
-  return cutForMessage(clean, MAX_DETAIL_LENGTH);
+  return cutForMessage(serverTextForMessage(detail), MAX_DETAIL_LENGTH);
 }
 
 const realSleep = (ms: number): Promise<void> =>
@@ -574,7 +614,8 @@ function skipSpace(json: string, i: number): number {
 export function scanNumbers(json: string, bigIntegerKeys: ReadonlySet<string> = NO_KEYS): NumberScan {
   const keys = bigIntegerKeys.size === 0 ? undefined : [...bigIntegerKeys];
   let inexact: string | undefined;
-  let out: string | undefined;
+  // Pieces joined in batches (TextBuilder): one `+=` per quoted member made a rope node each.
+  let out: TextBuilder | undefined;
   let copied = 0;
   for (let i = 0; i < json.length; i++) {
     const c = json.charCodeAt(i);
@@ -598,7 +639,8 @@ export function scanNumbers(json: string, bigIntegerKeys: ReadonlySet<string> = 
       STRICT_JSON_NUMBER.lastIndex = at;
       const literal = STRICT_JSON_NUMBER.exec(json)?.[0];
       if (literal === undefined) continue;
-      out = (out ?? "") + json.slice(copied, at) + '"' + literal + '"';
+      out ??= new TextBuilder();
+      out.push(json.slice(copied, at), '"', literal, '"');
       copied = at + literal.length;
       i = copied - 1;
     } else if (c === 0x2d || (c >= 0x30 && c <= 0x39)) {
@@ -613,7 +655,9 @@ export function scanNumbers(json: string, bigIntegerKeys: ReadonlySet<string> = 
       i += literal.length - 1;
     }
   }
-  return { json: out === undefined ? json : out + json.slice(copied), inexact };
+  if (out === undefined) return { json, inexact };
+  out.push(json.slice(copied));
+  return { json: out.toString(), inexact };
 }
 
 /** A member name written with an escape, decoded; a name JSON.parse can't read matches nothing. */
@@ -1270,7 +1314,9 @@ function escapeAt(json: string, at: number): number {
  */
 function wellFormedEscapes(json: string): { json: string; replaced: number } {
   if (!SURROGATE_ESCAPE.test(json)) return { json, replaced: 0 };
-  let out = "";
+  // Pieces joined in batches (TextBuilder): one `+=` per repair made a rope node each, and
+  // millions of lone surrogates in a large answer exhausted a small heap.
+  const out = new TextBuilder();
   let copied = 0;
   let replaced = 0;
   for (let i = 0; i < json.length; i++) {
@@ -1285,12 +1331,14 @@ function wellFormedEscapes(json: string): { json: string; replaced: number } {
       i += 11;
       continue;
     }
-    out += json.slice(copied, i) + "\\ufffd";
+    out.push(json.slice(copied, i), "\\ufffd");
     copied = i + 6;
     replaced++;
     i += 5;
   }
-  return replaced === 0 ? { json, replaced } : { json: out + json.slice(copied), replaced };
+  if (replaced === 0) return { json, replaced };
+  out.push(json.slice(copied));
+  return { json: out.toString(), replaced };
 }
 
 function isLowSurrogate(code: number): boolean {
@@ -1334,6 +1382,6 @@ function resolveLocation(location: string | undefined, base: string): URL | unde
  */
 function redirectTarget(requestUrl: string, location: string): string | undefined {
   const resolved = resolveLocation(location, requestUrl);
-  const clean = sanitizeServerText(resolved ? redactUrl(resolved.href) : location).replace(/\s+/g, " ").trim();
+  const clean = serverTextForMessage(resolved ? redactUrl(resolved.href) : location);
   return clean === "" ? undefined : clean;
 }

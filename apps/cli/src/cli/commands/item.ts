@@ -16,7 +16,7 @@ import {
   type ItemOptions,
   type ItemPart,
 } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client";
-import { isBidiControl, sanitizeServerText } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/engine";
+import { sanitizeServerText } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/engine";
 import { action, parseSolrInt, renderJson, writeOutputFile } from "../shared.js";
 
 /** commander value-parser for --part: the library's rule (itemPartProblem). */
@@ -33,17 +33,16 @@ function parseLang(value: string): string {
   return value;
 }
 
-/** Server text for a terminal: without C0/C1 controls (tab and newline kept) and bidi controls. */
+/** The bidi controls (isBidiControl in the client): ALM, LRM/RLM, the embeddings and overrides, the isolates. */
+const BIDI_CONTROL = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+/**
+ * Server text for a terminal: without escape sequences, C0/C1 controls (tab and newline kept)
+ * and bidi controls. Regex replaces, which V8 builds flat: one `+=` per bidi control made a rope
+ * node each.
+ */
 function forTerminal(text: string): string {
-  const clean = sanitizeServerText(text);
-  let out = "";
-  let from = 0;
-  for (let i = 0; i < clean.length; i++) {
-    if (!isBidiControl(clean.charCodeAt(i))) continue;
-    out += clean.slice(from, i);
-    from = i + 1;
-  }
-  return from === 0 ? clean : out + clean.slice(from);
+  return sanitizeServerText(text).replace(BIDI_CONTROL, "");
 }
 
 export function registerItemCommand(program: Command, deps: CliDeps): void {

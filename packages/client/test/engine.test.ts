@@ -1,8 +1,9 @@
 import { test } from "node:test";
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { TextDecoder } from "node:util";
-import { MAX_RETRY_AFTER_MS, RequestEngine, firstInexactNumber, parseRetryAfter, sanitizeServerText, validateBaseUrl } from "../src/engine.js";
-import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, cutText, echoedCredentialForms, redactUrl, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
+import { MAX_RETRY_AFTER_MS, RequestEngine, firstInexactNumber, parseRetryAfter, sanitizeServerText, serverTextForMessage, validateBaseUrl } from "../src/engine.js";
+import { DdbApiError, DdbError, DdbNetworkError, DdbParseError, DdbValidationError, TextBuilder, cutText, echoedCredentialForms, redactUrl, redactUrlUserinfo, toWellFormed } from "../src/errors.js";
 import { DdbClient } from "../src/client.js";
 import type { HttpResponse } from "../src/http.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
@@ -18,7 +19,7 @@ test("sanitizeServerText strips C0/C1 control bytes but keeps tab and newline", 
   const nl = String.fromCharCode(0x0a);
   const c1 = String.fromCharCode(0x9b); // a C1 control (CSI)
   const del = String.fromCharCode(0x7f);
-  assert.equal(sanitizeServerText(`a${ESC}[31mb${BEL}${NUL}c`), "a[31mbc");
+  assert.equal(sanitizeServerText(`a${ESC}[31mb${BEL}${NUL}c`), "abc");
   assert.equal(sanitizeServerText(`x${tab}y${nl}z`), `x${tab}y${nl}z`);
   assert.equal(sanitizeServerText(`p${c1}${del}q`), "pq");
   assert.equal(sanitizeServerText("plain <edm>OK</edm>"), "plain <edm>OK</edm>");
@@ -33,8 +34,8 @@ test("error detail is stripped of terminal control characters (DDB-01)", async (
     () => e.getJson("/x"),
     (err) => {
       assert.ok(err instanceof DdbApiError);
-      // detail is sanitized: the ESC and BEL bytes are gone, text otherwise intact.
-      assert.equal(err.detail, "pwn]0;titleed");
+      // detail is sanitized: the whole OSC sequence (ESC ] … BEL) is gone, text otherwise intact.
+      assert.equal(err.detail, "pwned");
       assert.ok(!err.detail!.includes(ESC));
       // The full raw body (the JSON envelope) is preserved untouched.
       assert.equal(err.body, evil);
@@ -868,4 +869,113 @@ test("redactUrlUserinfo hides the userinfo of a URL glued onto the one before it
     assert.ok(got === want, `${text.slice(0, 40)}…`);
     assert.ok(ms < 1000, `${Math.round(ms)} ms on ${text.slice(0, 40)}…`);
   }
+});
+
+test("sanitizeServerText drops what the per-character filter dropped, and whole escape sequences, in linear time (security audit C)", () => {
+  // The filter it replaces, one character at a time: C0 but TAB and LF, DEL and C1 go; the rest
+  // (format characters included: the terminal path drops bidi controls itself) stays.
+  const perCharacter = (text: string): string =>
+    [...text]
+      .filter((ch) => {
+        const n = ch.codePointAt(0) ?? 0;
+        return !(n <= 8 || (n >= 0x0b && n <= 0x1f) || (n >= 0x7f && n <= 0x9f));
+      })
+      .join("");
+  const every = Array.from({ length: 0x3000 }, (_, i) => String.fromCharCode(i)).join("") + "\u{1f600}\u{e0001}\ud800x";
+  for (let at = 0; at < every.length; at += 512) {
+    const piece = every.slice(at, at + 512).replace(/[\u001b\u0090\u0098\u009b-\u009f]/g, "");
+    assert.equal(sanitizeServerText(piece), perCharacter(piece), `from U+${at.toString(16)}`);
+  }
+  // A whole sequence goes, not only its control bytes; a control string ends at another introducer.
+  const OSC8 = String.fromCharCode(0x9d);
+  const ST8 = String.fromCharCode(0x9c);
+  assert.equal(sanitizeServerText(`a${ESC}]0;title${BEL}b${ESC}[1;31mc`), "abc");
+  assert.equal(sanitizeServerText(`a${OSC8}0;x${OSC8}0;t${ST8}b`), "a0;xb");
+  assert.equal(sanitizeServerText(`<x>\n\t${ESC}]8;;https://h${ESC}\\link</x>`), "<x>\n\tlink</x>");
+  // Unterminated runs of introducers: linear.
+  for (const opener of [OSC8, String.fromCharCode(0x90), `${ESC}]`]) {
+    assert.ok(elapsed(() => sanitizeServerText(`${opener.repeat(100_000)} tail`)) < 1000);
+  }
+});
+
+test("serverTextForMessage reads a bounded prefix and drops what the per-character filter dropped (security audit C)", () => {
+  // The filter it replaces, one character at a time: C0 but TAB to CR, DEL, C1 and Cf go.
+  const perCharacter = (text: string): string =>
+    [...text]
+      .filter((ch) => {
+        const n = ch.codePointAt(0) ?? 0;
+        return (n >= 0x09 && n <= 0x0d) || !(n <= 0x1f || (n >= 0x7f && n <= 0x9f) || /\p{Cf}/u.test(ch));
+      })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+  const every = Array.from({ length: 0x3000 }, (_, i) => String.fromCharCode(i)).join("") + "\u{1f600}\u{e0001}\ud800x";
+  for (let at = 0; at < every.length; at += 512) {
+    const piece = every.slice(at, at + 512).replace(/[\u001b\u0090\u0098\u009b-\u009f]/g, "");
+    assert.equal(serverTextForMessage(piece), perCharacter(piece), `from U+${at.toString(16)}`);
+  }
+  // At most 16 384 units of the text are read, never half a surrogate pair.
+  assert.equal(serverTextForMessage("x".repeat(100_000)).length, 16_384);
+  assert.equal(serverTextForMessage(`${"x".repeat(16_383)}\u{1f600}`), "x".repeat(16_383));
+  // A control string ends at another introducer: the first is dropped by the filter, the second
+  // string as a whole.
+  const OSC8 = String.fromCharCode(0x9d);
+  const ST8 = String.fromCharCode(0x9c);
+  assert.equal(serverTextForMessage(`a${OSC8}0;x${OSC8}0;t${ST8}b`), "a0;xb");
+  assert.equal(serverTextForMessage(`a${ESC}]0;x${ESC}]0;t${BEL}b`), "a0;xb");
+});
+
+test("a TextBuilder joins its pieces in order across batches (security audit C)", () => {
+  const b = new TextBuilder();
+  const expected: string[] = [];
+  for (let i = 0; i < 40_000; i++) {
+    b.push(String(i), ",");
+    expected.push(String(i), ",");
+  }
+  assert.equal(b.toString(), expected.join(""));
+  assert.equal(new TextBuilder().toString(), "");
+});
+
+// These tests start a process with a small heap: 30 s instead of the suite's 5 s.
+const STARTS_A_PROCESS = { timeout: 30_000 };
+
+/** Run `script` (an ES module that imports from the built engine as `E`) in a process with a `heapMb` heap; its stdout. */
+function inSmallHeap(script: string, heapMb = 128): string {
+  const engine = new URL("../src/engine.js", import.meta.url).href;
+  return execFileSync(process.execPath, [`--max-old-space-size=${heapMb}`, "--input-type=module", "-e", `const E = await import(${JSON.stringify(engine)});${script}`], { encoding: "utf8" });
+}
+
+test("server text of 16 MB is cleaned within a small heap, for a terminal and for a message (security audit C)", STARTS_A_PROCESS, () => {
+  // One `+=` per character made a rope node each: a 16 MB error detail or raw part exhausted a 128 MB heap.
+  const out = inSmallHeap(
+    `const text = "x ".repeat(8_000_000);` +
+      `const e = new E.RequestEngine({ maxRetries: 0, transport: async () => ({ status: 500, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify({ message: text })) }) });` +
+      `const err = await e.getJson("/x").catch((caught) => caught);` +
+      `process.stdout.write(E.sanitizeServerText(text).length + " " + err.message.length);`,
+  );
+  const [terminal, message] = out.split(" ").map(Number);
+  assert.equal(terminal, 16_000_000);
+  assert.ok(message !== undefined && message < 1000, out);
+});
+
+test("millions of lone surrogate escapes in an answer are repaired within a small heap (security audit C)", STARTS_A_PROCESS, () => {
+  // 6 million repairs (36 MB): one `+=` each made a rope node and exhausted a 128 MB heap.
+  const n = 6_000_000;
+  const out = inSmallHeap(
+    `const body = Buffer.from('{"x":"' + "\\\\ud800".repeat(${n}) + '"}');` +
+      `let replaced = 0;` +
+      `const e = new E.RequestEngine({ maxRetries: 0, onWarning: (m) => (replaced = Number(/: (\\d+) characters/.exec(m)?.[1])), transport: async () => ({ status: 200, headers: { "content-type": "application/json" }, body }) });` +
+      `const value = await e.getJson("/x");` +
+      `process.stdout.write(value.x.length + " " + replaced);`,
+  );
+  assert.equal(out, `${n} ${n}`);
+});
+
+test("scanNumbers quotes millions of declared members within a small heap (security audit C)", STARTS_A_PROCESS, () => {
+  // One `+=` per quoted member made a rope node each: 3 million of them exhausted a 128 MB heap.
+  const n = 3_000_000;
+  const out = inSmallHeap(
+    `const json = "[" + '{"k":1},'.repeat(${n - 1}) + '{"k":1}]';` + `process.stdout.write(String(E.scanNumbers(json, new Set(["k"])).json.length));`,
+  );
+  assert.equal(out, String(n * 10 + 1));
 });

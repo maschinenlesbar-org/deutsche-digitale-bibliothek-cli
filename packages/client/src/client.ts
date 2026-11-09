@@ -12,7 +12,7 @@
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK")           // view (JSON)
 //   client.item("TNPFDKO2VDGBZ72RWC6RKDNZYZQZP3XK", "edm")    // RDF/XML (text)
 
-import { RequestEngine, bigIntegerKeysOption, decodeBody, sanitizeServerText, type EngineOptions, type RawResponse } from "./engine.js";
+import { RequestEngine, bigIntegerKeysOption, decodeBody, serverTextForMessage, type EngineOptions, type RawResponse } from "./engine.js";
 import { DdbApiError, DdbParseError, DdbValidationError, MAX_QUOTED_LENGTH, cutForMessage, quoteValue } from "./errors.js";
 import type { QueryParams } from "./query.js";
 import {
@@ -242,9 +242,9 @@ function shapeError(request: string, expected: string): DdbParseError {
   return new DdbParseError(`${request}: unexpected response shape: expected ${expected}.`);
 }
 
-/** `text` cleaned of control characters, on one line, cut at MAX_QUOTED_LENGTH (200) characters (never inside a surrogate pair). */
+/** `text` cleaned for a message (serverTextForMessage: a bounded prefix, one line), cut at MAX_QUOTED_LENGTH (200) characters (never inside a surrogate pair). */
 function quoted(text: string): string {
-  return cutForMessage(sanitizeServerText(text).replace(/\s+/g, " ").trim(), MAX_QUOTED_LENGTH);
+  return cutForMessage(serverTextForMessage(text), MAX_QUOTED_LENGTH);
 }
 
 /**

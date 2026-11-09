@@ -161,7 +161,10 @@ same way in its log record.
 No rejected input ever surfaces as a raw `TypeError`
 (`apps/cli/test/conformance-p8-p9-p13-responses-and-errors.test.ts`).
 
-Server text in a message is cleaned of control characters and cut at 500 characters,
+Server text in a message is cleaned (`serverTextForMessage`: only its first 16 384 characters
+are read, whole escape sequences, control characters and every format character are dropped,
+whitespace is folded, each step a linear regex replace, so a hostile 16 MB detail costs neither
+seconds nor the heap) and cut at 500 characters,
 and a request URL at 300 (`messageUrl`, ending in "… (N characters)"); `DdbApiError.url`
 and `.body` keep them whole. A cut never lands inside a surrogate pair (`cutText`), so
 the message stays well-formed. Any other value an own message quotes from a server
@@ -455,7 +458,9 @@ apps/cli/src/cli/
   `DdbParseError` naming it.
   The CLI writes those bytes unchanged with `-o` and to a non-terminal stdout
   (`CliIO.isTerminal()` false → `outBinary`); only a terminal gets the decoded text
-  with control characters and bidi controls stripped (an override reordered what it showed).
+  with whole escape sequences, control characters and bidi controls stripped (an override
+  reordered what it showed; `sanitizeServerText` and `forTerminal`, regex replaces that keep the
+  text's lines and length bounded only by the answer, never one string node per character).
 - JSON output (stdout and the `-o` file) escapes what `JSON.stringify` leaves raw although a
   terminal acts on it: DEL, C1 (U+0080–U+009F) and the bidi controls (`isBidiControl`: U+061C,
   U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) become `\uXXXX`, the same JSON
@@ -504,8 +509,8 @@ includes the `/2` version prefix), serialises queries, applies retry/backoff,
 follows redirects, decodes JSON/raw responses and maps errors (DDB envelope **and**
 Solr `error.msg`). A failing Solr request comes back as HTTP 500 with the Solr error
 document as a *string* in the envelope's `message`; the engine unwraps it to that
-document's `error.msg`. Every `detail` is stripped of control characters, folded to one
-line and capped at 500 characters (`…`); the full body stays on `DdbApiError.body`.
+document's `error.msg`. Every `detail` is stripped of escape sequences, control and format
+characters, folded to one line and capped at 500 characters (`…`); the full body stays on `DdbApiError.body`.
 
 **Retry / backoff.** Transient `429` and `503` responses are retried
 automatically, up to `--max-retries`. Each retry waits `retryDelayMs * attempt` (200 ms,

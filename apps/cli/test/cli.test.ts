@@ -287,8 +287,8 @@ test("item raw text to the terminal is stripped of control bytes (DDB-01)", asyn
   const cli = makeCli(() => rawResponse(evil, "application/rdf+xml"));
   const code = await run(["item", ID, "--part", "edm"], cli.deps);
   assert.equal(code, 0);
-  // Control bytes gone; XML structure otherwise intact.
-  assert.equal(cli.out.join("\n"), "<edm>]0;pwned<title>ok</title></edm>");
+  // The whole escape sequence gone (not only its control bytes); XML structure otherwise intact.
+  assert.equal(cli.out.join("\n"), "<edm><title>ok</title></edm>");
 });
 
 test("item raw text to -o keeps the bytes verbatim (DDB-01)", async () => {
@@ -1209,7 +1209,7 @@ test("a raw XML part shown on a terminal loses its bidi controls, as it loses C0
   const tty = makeCli(() => rawResponse(xml, "application/rdf+xml"));
   tty.deps.io.isTerminal = () => true;
   assert.equal(await run(["item", ID, "--part", "edm"], tty.deps), 0);
-  assert.deepEqual(tty.out, ["<a>abcdcba x[31m</a>"]);
+  assert.deepEqual(tty.out, ["<a>abcdcba x</a>"]);
   const pipe = makeCli(() => rawResponse(xml, "application/rdf+xml"));
   const binary: Buffer[] = [];
   pipe.deps.io.outBinary = (d) => binary.push(d);
