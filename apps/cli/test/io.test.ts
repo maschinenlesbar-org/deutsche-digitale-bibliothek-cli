@@ -357,3 +357,17 @@ test("a path that can't be inspected is reported as such, not as an existing fil
   });
 });
 
+test("a stream target is written only when the descriptor opened is a stream (security audit G2)", () => {
+  withTempDir((dir) => {
+    const victim = join(dir, "victim.txt");
+    writeFileSync(victim, "keep me\n");
+    const link = join(dir, "out.json");
+    symlinkSync(victim, link);
+    // Classified as a stream, a regular file (through a link) when opened: refused without --force.
+    const real = nodeFilesFor();
+    const switched = { ...real, state: () => "stream" as const };
+    assert.throws(() => switched.write(link, Buffer.from("appended\n"), false), /Refusing to overwrite/);
+    assert.equal(readFileSync(victim, "utf8"), "keep me\n");
+    assert.doesNotThrow(() => real.write("/dev/null", Buffer.from("x"), false));
+  });
+});

@@ -624,8 +624,10 @@ directory "<dir>" does not exist.") are a usage error there (`OutputRefusedError
 `DdbUsageError`: exit 2, an ERROR of `ddb.output`), so a refused write costs no request. A
 **stream** — a character device (`/dev/null`), a FIFO, a socket, or a descriptor path
 (`/dev/stdout`, `/dev/stderr`, `/dev/fd/N`, `/proc/self/fd/N`, as `>(…)` makes) — needs no
-`--force` and is written in place (opened for append, every byte written), with no claim and no
-temporary file: a rename over `/dev/null` failed, and one over a FIFO turned it into a file
+`--force` and is written in place (opened for append without creating anything, every byte
+written), with no claim and no temporary file; the descriptor opened is checked, not the name,
+so a path switched to a regular file after it was classified takes the way of a file (and is
+refused without `--force`): a rename over `/dev/null` failed, and one over a FIFO turned it into a file
 its reader never saw. A regular file is written atomically: without
 `--force` `writeFile` claims the name with an exclusive create (so a file that appears meanwhile is still
 refused, an `OutputError`, exit 1), writes a temporary file beside the target
