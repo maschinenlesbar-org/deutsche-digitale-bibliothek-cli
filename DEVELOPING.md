@@ -140,6 +140,11 @@ quotes, `#`, `?` or `/` is covered too (`apps/cli/test/conformance-p1-cli-redact
 A bare `a:b@c` anywhere else (`-o run:2026-10-09@x.json`, a query, a User-Agent) is no
 credential: `credentialsIn` reads userinfo only from a URL with a scheme.
 
+A base URL (`--base-url`, and the environment variable where the CLI reads one) is read as
+a URL however its scheme is typed (`typedUrlCredentials`): missing (`alice:pw@host`) or
+mistyped (`http//alice:pw@host`, the colon left out, whose userinfo is everything between the
+first slashes and the last `@`), so commander's echo of a refused one shows no password.
+
 The library keeps them out of logged objects too: the engine holds the base URL and
 `defaultHeaders` in real `#private` fields, so `console.log(client)`,
 `util.inspect` and `JSON.stringify` never show them, and it scrubs the base URL's
