@@ -1,0 +1,476 @@
+{
+  "comment": "What tools/interop/interop.mjs needs that is particular to this repo: the mock upstream's answer per path (under --base-url http://127.0.0.1:<port>), how many tools the server lists, and the calls to make with what each must answer. The answers are live ones recorded on 2026-11-19: a search for Oktoberfest, and the view, parents, media and EDM of the 1810 print; the mock answers by path only, so the count call sees the search answer without facets.",
+  "answers": {
+    "/search/index/search/select": {
+      "response": {
+        "numFound": 1617,
+        "start": 0,
+        "numFoundExact": true,
+        "docs": [
+          {
+            "id": "KE43D2INXYOPHOEEME6T3BEJIMIKTPLU",
+            "label": [
+              "Oktoberfest"
+            ],
+            "title": [
+              "Oktoberfest"
+            ],
+            "type_fct": [
+              "mediatype_003"
+            ],
+            "objecttype": [
+              "Abschnitt (Publikation)",
+              "Fotografie"
+            ],
+            "provider": [
+              "Sächsische Landesbibliothek - Staats- und Universitätsbibliothek Dresden"
+            ],
+            "begin_time": [
+              714416
+            ],
+            "end_time": [
+              714780
+            ],
+            "license": [
+              "http://rightsstatements.org/vocab/InC/1.0/"
+            ]
+          },
+          {
+            "id": "LIVC7P2HG574DHYOII7AK5XA2BYUQJDC",
+            "label": [
+              "Oktoberfest"
+            ],
+            "title": [
+              "Oktoberfest"
+            ],
+            "type_fct": [
+              "mediatype_003"
+            ],
+            "objecttype": [
+              "Abschnitt (Publikation)",
+              "Fotografie"
+            ],
+            "provider": [
+              "Sächsische Landesbibliothek - Staats- und Universitätsbibliothek Dresden"
+            ],
+            "begin_time": [
+              714416
+            ],
+            "end_time": [
+              714780
+            ],
+            "license": [
+              "http://rightsstatements.org/vocab/InC/1.0/"
+            ]
+          },
+          {
+            "id": "UXFGNVRVBIA7VQRPYHLK4FUPCYVT2M4J",
+            "label": [
+              "Oktoberfest"
+            ],
+            "title": [
+              "Oktoberfest"
+            ],
+            "type_fct": [
+              "mediatype_003"
+            ],
+            "objecttype": [
+              "Abschnitt (Publikation)",
+              "Fotografie"
+            ],
+            "provider": [
+              "Sächsische Landesbibliothek - Staats- und Universitätsbibliothek Dresden"
+            ],
+            "begin_time": [
+              714416
+            ],
+            "end_time": [
+              714780
+            ],
+            "license": [
+              "http://rightsstatements.org/vocab/InC/1.0/"
+            ]
+          }
+        ]
+      }
+    },
+    "/items/YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ/view": {
+      "item": {
+        "identifier": "DE-MUS-319517/GR105655",
+        "label": "Oktoberfest 1810",
+        "title": "Oktoberfest 1810",
+        "subtitle": "Druck",
+        "rights": "",
+        "metdata-rights": "http://creativecommons.org/publicdomain/zero/1.0/",
+        "origin": "https://db.dhm.de/objekt/GR105655",
+        "category": "Kultur",
+        "media": "image",
+        "thumbnail": "",
+        "license": {
+          "resource": "http://creativecommons.org/licenses/by-nc-nd/4.0/"
+        },
+        "institution": {
+          "id": "FKBVHZEFB6RYNEMU3RNQGTMCFOSV7463",
+          "url": "http://www.dhm.de",
+          "name": "Stiftung Deutsches Historisches Museum",
+          "logo-institution-ddbid": "FKBVHZEFB6RYNEMU3RNQGTMCFOSV7463"
+        },
+        "viewers": {
+          "viewer": []
+        },
+        "fields": [
+          {
+            "usage": "display",
+            "field": [
+              {
+                "id": "flex_mus_neu_015",
+                "name": "AlternativTitel",
+                "value": [
+                  {
+                    "content": "DAS OCTOBERFEST. 1810.",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_020",
+                "name": "Objekt Bezeichnung",
+                "value": [
+                  {
+                    "content": "Druck",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_060",
+                "name": "Material/Technik",
+                "value": [
+                  {
+                    "content": "Druckfarbe; Papier; Radierung",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_070",
+                "name": "Maße",
+                "value": [
+                  {
+                    "content": "Höhe x Breite: 25,1 x 37 cm (Blatt)",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  },
+                  {
+                    "content": "Höhe x Breite: 16,9 x 25,8 cm (Darstellung)",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_100",
+                "name": "Ereignis",
+                "value": [
+                  {
+                    "content": "Herstellung",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_110",
+                "name": "(wer)",
+                "value": [
+                  {
+                    "content": "Zeichner: Peter von Hess",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  },
+                  {
+                    "content": "Stecher: ? Weller",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_120",
+                "name": "(wo)",
+                "value": [
+                  {
+                    "content": "Deutschland",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_130",
+                "name": "(wann)",
+                "value": [
+                  {
+                    "content": "1810",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_210",
+                "name": "Bezug (was)",
+                "value": [
+                  {
+                    "content": "Fest",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  },
+                  {
+                    "content": "Oktoberfest (München)",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  },
+                  {
+                    "content": "Landwirtschaft",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_340",
+                "name": "Klassifikation",
+                "value": [
+                  {
+                    "content": "Druckgraphik (Gattung)",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_400",
+                "name": "Standort",
+                "value": [
+                  {
+                    "content": "Deutsches Historisches Museum, Berlin, Berlin, Deutschland",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              },
+              {
+                "id": "flex_mus_neu_410",
+                "name": "Inventarnummer",
+                "value": [
+                  {
+                    "content": "Gr 90/722",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              }
+            ]
+          },
+          {
+            "usage": "index",
+            "field": [
+              {
+                "id": "title",
+                "name": "Title",
+                "value": [
+                  {
+                    "content": "Oktoberfest 1810",
+                    "resource": null,
+                    "rightsinfo": null,
+                    "rightsholder": null,
+                    "creditline": null
+                  }
+                ],
+                "georeference": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "/items/YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ/parents": {
+      "numberOfResults": 2,
+      "hierarchy": [
+        {
+          "aggregationEntity": false,
+          "id": "YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ",
+          "parent": "FKBVHZEFB6RYNEMU3RNQGTMCFOSV7463",
+          "ingestId": "10351542388340548lkaH",
+          "providerId": [
+            "FKBVHZEFB6RYNEMU3RNQGTMCFOSV7463",
+            "oid1444921227476"
+          ],
+          "label": "Oktoberfest 1810",
+          "type": null,
+          "position": "-1",
+          "leaf": true
+        },
+        {
+          "aggregationEntity": false,
+          "id": "FKBVHZEFB6RYNEMU3RNQGTMCFOSV7463",
+          "parent": null,
+          "ingestId": "5095594020963603yfKs",
+          "providerId": [
+            "00008615",
+            "IPSQKSWH46RX2B475NRZARHV4SFHLQGZ"
+          ],
+          "label": "Stiftung Deutsches Historisches Museum",
+          "type": "institution",
+          "position": "-1",
+          "leaf": false
+        }
+      ]
+    },
+    "/items/YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ/binaries": {
+      "binary": [
+        {
+          "ref": "6133e060-12d2-4326-a80f-7b045ce3057d",
+          "name": "Oktoberfest 1810",
+          "name2": "Urheber*in: Hess, Peter von; Weller, ? (Herstellung) / Rechtewahrnehmung: Deutsches Historisches Museum",
+          "name3": null,
+          "kind": "http://creativecommons.org/licenses/by-nc-nd/4.0/",
+          "mimetype": "image/jpeg",
+          "position": 1,
+          "primary": true,
+          "local_pathname": "https://objekt.db.dhm.de/GR105655/download/large_without_watermark",
+          "license_group": "rights_002"
+        }
+      ]
+    },
+    "/items/YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ/edm": {
+      "$raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:ddb=\"http://www.deutsche-digitale-bibliothek.de/edm/\" xmlns:item=\"http://www.deutsche-digitale-bibliothek.de/item\" xmlns:lido=\"http://www.lido-schema.org\" xmlns:ns14=\"http://www.deutsche-digitale-bibliothek.de/ns/cortex-item-source-description\" xmlns:ns15=\"http://www.deutsche-digitale-bibliothek.de/ns/cortex-item-source\" xmlns:wgs84_pos=\"http://www.w3.org/2003/01/geo/wgs84_pos#\">\n        <ore:Aggregation rdf:about=\"RVFQ2SWNGD2FVUMNYS72KZ2NYJYRGNCX\" xmlns:ore=\"http://www.openarchives.org/ore/terms/\">\n            <edm:aggregatedCHO rdf:resource=\"http://www.deutsche-digitale-bibliothek.de/item/YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\"/>\n            <edm:dataProvider xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">Stiftung Deutsches Historisches Museum</edm:dataProvider>\n            <edm:dataProvider rdf:resource=\"http://www.deutsche-digitale-bibliothek.de/organization/FKBVHZEFB6RYNEMU3RNQGTMCFOSV7463\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\"/>\n            <edm:isShownAt rdf:resource=\"https://db.dhm.de/objekt/GR105655\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\"/>\n            <edm:isShownBy rdf:resource=\"https://objekt.db.dhm.de/GR105655/download/large_without_watermark\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\"/>\n            <edm:object rdf:resource=\"https://objekt.db.dhm.de/GR105655/download/large_without_watermark\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\"/>\n            <edm:provider xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">Deutsche Digitale Bibliothek</edm:provider>\n            <edm:rights rdf:resource=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\"/>\n            <dcterms:rights rdf:resource=\"http://creativecommons.org/publicdomain/zero/1.0/\" xmlns:dcterms=\"http://purl.org/dc/terms/\"/>\n</ore:Aggregation>\n        <edm:WebResource xmlns:marcrel=\"http://id.loc.gov/vocabulary/relators.html\" rdf:about=\"https://db.dhm.de/objekt/GR105655\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <edm:rights rdf:resource=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\"/>\n            <dc:type rdf:resource=\"http://ddb.vocnet.org/medientyp/mt002\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"/>\n            <dcterms:rights rdf:resource=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\" xmlns:dcterms=\"http://purl.org/dc/terms/\"/>\n</edm:WebResource>\n        <skos:Concept rdf:about=\"http://ddb.vocnet.org/medientyp/mt002\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">\n            <skos:notation>mediatype_002</skos:notation>\n</skos:Concept>\n        <edm:WebResource xmlns:marcrel=\"http://id.loc.gov/vocabulary/relators.html\" rdf:about=\"https://objekt.db.dhm.de/GR105655/download/large_without_watermark\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <edm:rights rdf:resource=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\"/>\n            <dc:type rdf:resource=\"http://ddb.vocnet.org/medientyp/mt002\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"/>\n            <dcterms:rights rdf:resource=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\" xmlns:dcterms=\"http://purl.org/dc/terms/\"/>\n</edm:WebResource>\n        <skos:Concept rdf:about=\"http://ddb.vocnet.org/medientyp/mt002\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">\n            <skos:notation>mediatype_002</skos:notation>\n</skos:Concept>\n        <edm:Agent rdf:about=\"http://www.deutsche-digitale-bibliothek.de/organization/FKBVHZEFB6RYNEMU3RNQGTMCFOSV7463\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <skos:prefLabel xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">Stiftung Deutsches Historisches Museum</skos:prefLabel>\n            <rdf:type rdf:resource=\"http://ddb.vocnet.org/sparte/sparte006\"/>\n</edm:Agent>\n        <skos:Concept rdf:about=\"http://ddb.vocnet.org/sparte/sparte006\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">\n            <skos:notation>sec_06</skos:notation>\n</skos:Concept>\n        <edm:ProvidedCHO rdf:about=\"http://www.deutsche-digitale-bibliothek.de/item/YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <edm:currentLocation rdf:resource=\"RA5ZEP24LOCXJBLQPBMP3PTHQENUVRSH\"/>\n            <edm:hasMet rdf:resource=\"IRFAX3IYFSOU7AG6C7PW3Q6YQ4XVAMW4\"/>\n            <edm:type>IMAGE</edm:type>\n            <dc:creator xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Hess, Peter von (Herstellung) (Zeichner)</dc:creator>\n            <dc:creator xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Weller, ? (Herstellung) (Stecher)</dc:creator>\n            <dc:identifier xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Gr 90/722 (Inventarnummer)</dc:identifier>\n            <dc:format xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Druckfarbe (Material/Technik)</dc:format>\n            <dc:format xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Papier (Material/Technik)</dc:format>\n            <dc:format xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Radierung (Technik)</dc:format>\n            <dc:type xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Druck</dc:type>\n            <dc:subject xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Fest</dc:subject>\n            <dc:subject xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Oktoberfest (München)</dc:subject>\n            <dc:subject xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Landwirtschaft</dc:subject>\n            <dc:title xml:lang=\"ger\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">Oktoberfest 1810</dc:title>\n            <dcterms:subject rdf:resource=\"HUNVQ3TBEEVHLBH367WJJENJA5IVKVYQ\" xmlns:dcterms=\"http://purl.org/dc/terms/\"/>\n            <dcterms:subject rdf:resource=\"DBCADRMIZUEXW5ACWSCGVIN6K56NJXYZ\" xmlns:dcterms=\"http://purl.org/dc/terms/\"/>\n            <dcterms:subject rdf:resource=\"EMM43X7Z5I3XKV5BOUTXHYTMJG6UH6NM\" xmlns:dcterms=\"http://purl.org/dc/terms/\"/>\n            <dcterms:alternative xml:lang=\"ger\" xmlns:dcterms=\"http://purl.org/dc/terms/\">DAS OCTOBERFEST. 1810.</dcterms:alternative>\n            <dcterms:extent xml:lang=\"ger\" xmlns:dcterms=\"http://purl.org/dc/terms/\">Höhe x Breite: 25,1 x 37 cm (Blatt)</dcterms:extent>\n            <dcterms:extent xml:lang=\"ger\" xmlns:dcterms=\"http://purl.org/dc/terms/\">Höhe x Breite: 16,9 x 25,8 cm (Darstellung)</dcterms:extent>\n            <dcterms:created xmlns:dcterms=\"http://purl.org/dc/terms/\">1810 (Herstellung)</dcterms:created>\n            <dcterms:spatial xml:lang=\"ger\" xmlns:dcterms=\"http://purl.org/dc/terms/\">Deutschland</dcterms:spatial>\n</edm:ProvidedCHO>\n        <skos:Concept rdf:about=\"HUNVQ3TBEEVHLBH367WJJENJA5IVKVYQ\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">\n            <skos:prefLabel xml:lang=\"ger\">Fest</skos:prefLabel>\n</skos:Concept>\n        <skos:Concept rdf:about=\"DBCADRMIZUEXW5ACWSCGVIN6K56NJXYZ\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">\n            <skos:prefLabel xml:lang=\"ger\">Oktoberfest (München)</skos:prefLabel>\n</skos:Concept>\n        <skos:Concept rdf:about=\"EMM43X7Z5I3XKV5BOUTXHYTMJG6UH6NM\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">\n            <skos:prefLabel xml:lang=\"ger\">Landwirtschaft</skos:prefLabel>\n</skos:Concept>\n        <edm:Event xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" rdf:about=\"IRFAX3IYFSOU7AG6C7PW3Q6YQ4XVAMW4\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <edm:hasType rdf:resource=\"http://terminology.lido-schema.org/lido00007\"/>\n            <crm:P11_had_participant rdf:resource=\"TBPIZSU6R32FXN6SORP77YMWH66YRP2U\" xmlns:crm=\"http://www.cidoc-crm.org/rdfs/cidoc_crm_v5.0.2_english_label.rdfs#\"/>\n            <crm:P11_had_participant rdf:resource=\"XJM7SBNDQDDOFPAGW4FWTUFZREZMEVCK\" xmlns:crm=\"http://www.cidoc-crm.org/rdfs/cidoc_crm_v5.0.2_english_label.rdfs#\"/>\n            <edm:occuredAt rdf:resource=\"V2ZTICVY76VX7XI4VPINYTXJJ6UZZ3T2\"/>\n</edm:Event>\n        <edm:Agent rdf:about=\"TBPIZSU6R32FXN6SORP77YMWH66YRP2U\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <skos:prefLabel xml:lang=\"zxx\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">Hess, Peter von</skos:prefLabel>\n            <edm:wasPresentAt rdf:resource=\"IRFAX3IYFSOU7AG6C7PW3Q6YQ4XVAMW4\"/>\n</edm:Agent>\n        <edm:Agent rdf:about=\"XJM7SBNDQDDOFPAGW4FWTUFZREZMEVCK\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <skos:prefLabel xml:lang=\"zxx\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">Weller, ?</skos:prefLabel>\n            <edm:wasPresentAt rdf:resource=\"IRFAX3IYFSOU7AG6C7PW3Q6YQ4XVAMW4\"/>\n</edm:Agent>\n        <edm:TimeSpan rdf:about=\"V2ZTICVY76VX7XI4VPINYTXJJ6UZZ3T2\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <edm:begin>1810</edm:begin>\n            <edm:end>1810</edm:end>\n</edm:TimeSpan>\n        <edm:Place xmlns:exslt=\"http://exslt.org/common\" rdf:about=\"RA5ZEP24LOCXJBLQPBMP3PTHQENUVRSH\" xmlns:edm=\"http://www.europeana.eu/schemas/edm/\">\n            <skos:prefLabel xml:lang=\"ger\" xmlns:skos=\"http://www.w3.org/2004/02/skos/core#\">Berlin</skos:prefLabel>\n</edm:Place>\n</rdf:RDF>",
+      "$type": "application/rdf+xml;charset=utf-8"
+    }
+  },
+  "tools": 7,
+  "calls": [
+    {
+      "name": "searchObjects",
+      "arguments": {
+        "query": "Oktoberfest",
+        "limit": 3
+      },
+      "expect": {
+        "status": "ok",
+        "total": 1617,
+        "objects.0.id": "KE43D2INXYOPHOEEME6T3BEJIMIKTPLU",
+        "objects.0.mediaType": "text"
+      }
+    },
+    {
+      "name": "countObjects",
+      "arguments": {
+        "query": "Oktoberfest"
+      },
+      "expect": {
+        "status": "ok",
+        "total": 1617
+      }
+    },
+    {
+      "name": "getObject",
+      "arguments": {
+        "id": "YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ"
+      },
+      "expect": {
+        "status": "ok",
+        "title": "Oktoberfest 1810",
+        "rights.media": "http://creativecommons.org/licenses/by-nc-nd/4.0/"
+      }
+    },
+    {
+      "name": "getObjectContext",
+      "arguments": {
+        "id": "YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ"
+      },
+      "expect": {
+        "status": "ok",
+        "heldBy.label": "Stiftung Deutsches Historisches Museum"
+      }
+    },
+    {
+      "name": "getObjectMedia",
+      "arguments": {
+        "id": "YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ"
+      },
+      "expect": {
+        "status": "ok",
+        "files.0.mimeType": "image/jpeg"
+      }
+    },
+    {
+      "name": "getObjectRecord",
+      "arguments": {
+        "id": "YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ",
+        "part": "edm",
+        "limit": 1
+      },
+      "expect": {
+        "status": "ok",
+        "format": "xml",
+        "nextOffset": 1
+      }
+    },
+    {
+      "name": "getObject",
+      "arguments": {
+        "id": "not an id"
+      },
+      "error": true
+    }
+  ]
+}
