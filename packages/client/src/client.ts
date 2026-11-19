@@ -319,6 +319,50 @@ function itemPath(url: URL | string): { id: string; rest: string } | undefined {
   return match ? { id: match[1]!, rest: match[2] ?? "" } : undefined;
 }
 
+/** The request {@link DdbClient.search} sends: its path under the base URL, its query, and the handler. */
+export interface SearchRequest {
+  path: string;
+  query: QueryParams;
+  handler: string;
+}
+
+/**
+ * The request `search(params)` sends, after the same checks (a bad parameter throws a DdbError):
+ * what an answer's source names. `search()` builds its request with it.
+ */
+export function searchRequest(params: SearchParams): SearchRequest {
+  assertSearchParams(params);
+  const collection = normalizeToken(params.collection ?? "search");
+  const handler = normalizeToken(params.requestHandler ?? "select");
+  // The index matches composed text only: `München` with U+0308 (as pasted from a macOS file
+  // name) found 231 documents instead of 2.77 million, and as a facet filter none; a trailing
+  // no-break space made another facet value. The query and the filters go out trimmed and in
+  // NFC (normalizeText).
+  const query: QueryParams = { q: normalizeText(params.query), wt: "json" };
+  query["rows"] = params.rows ?? DEFAULT_SEARCH_ROWS;
+  if (params.start !== undefined) query["start"] = params.start;
+  // Field names, the sort and the facet fields are tokens: trimmed and in NFC (normalizeToken);
+  // a padded facet field was an HTTP 500 ("undefined field").
+  if (params.sort !== undefined) query["sort"] = normalizeToken(params.sort);
+  if (params.fields !== undefined) query["fl"] = normalizeFields(params.fields);
+  if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters.map(normalizeText);
+  if (params.facetFields !== undefined && params.facetFields.length > 0) {
+    query["facet"] = "true";
+    query["facet.field"] = params.facetFields.map(normalizeToken);
+    if (params.facetLimit !== undefined) query["facet.limit"] = params.facetLimit;
+    // Solr sorts facet values by count, except when facet.limit is -1 ("no limit"): then
+    // its facet.sort default flips to index (alphabetical) order, and "the top of the
+    // array" became the alphabetically first value. Keep count order for -1 explicitly.
+    if (params.facetLimit === -1) query["facet.sort"] = "count";
+  }
+  return { path: `/search/index/${enc(collection)}/${enc(handler)}`, query, handler };
+}
+
+/** The path of an item's component (`/items/{id}{suffix}`): what an answer's source names. */
+export function itemComponentPath(id: string, part: ItemPart): string {
+  return `/items/${enc(id)}${PART_SUFFIX[part]}`;
+}
+
 export class DdbClient {
   private readonly engine: RequestEngine;
   /** How many ancestors `item()` follows when the API points a component at one. */
@@ -351,31 +395,7 @@ export class DdbClient {
    * DdbParseError names the handler and that rule (there is no fallback).
    */
   async search(params: SearchParams): Promise<SolrResponse> {
-    assertSearchParams(params);
-    const collection = normalizeToken(params.collection ?? "search");
-    const handler = normalizeToken(params.requestHandler ?? "select");
-    // The index matches composed text only: `München` with U+0308 (as pasted from a macOS file
-    // name) found 231 documents instead of 2.77 million, and as a facet filter none; a trailing
-    // no-break space made another facet value. The query and the filters go out trimmed and in
-    // NFC (normalizeText).
-    const query: QueryParams = { q: normalizeText(params.query), wt: "json" };
-    query["rows"] = params.rows ?? DEFAULT_SEARCH_ROWS;
-    if (params.start !== undefined) query["start"] = params.start;
-    // Field names, the sort and the facet fields are tokens: trimmed and in NFC (normalizeToken);
-    // a padded facet field was an HTTP 500 ("undefined field").
-    if (params.sort !== undefined) query["sort"] = normalizeToken(params.sort);
-    if (params.fields !== undefined) query["fl"] = normalizeFields(params.fields);
-    if (params.filters !== undefined && params.filters.length > 0) query["fq"] = params.filters.map(normalizeText);
-    if (params.facetFields !== undefined && params.facetFields.length > 0) {
-      query["facet"] = "true";
-      query["facet.field"] = params.facetFields.map(normalizeToken);
-      if (params.facetLimit !== undefined) query["facet.limit"] = params.facetLimit;
-      // Solr sorts facet values by count, except when facet.limit is -1 ("no limit"): then
-      // its facet.sort default flips to index (alphabetical) order, and "the top of the
-      // array" became the alphabetically first value. Keep count order for -1 explicitly.
-      if (params.facetLimit === -1) query["facet.sort"] = "count";
-    }
-    const path = `/search/index/${enc(collection)}/${enc(handler)}`;
+    const { path, query, handler } = searchRequest(params);
     const body = await this.engine.getJson<unknown>(path, query);
     assertSolrResponse(`GET ${this.engine.describeUrl(path, query)}`, handler, body, (value) => this.engine.quoteServerValue(value));
     return body;
@@ -426,7 +446,7 @@ export class DdbClient {
     let res: RawResponse;
     let path: string;
     for (;;) {
-      path = `/items/${enc(current)}${suffix}`;
+      path = itemComponentPath(current, part);
       try {
         res = await this.engine.getRaw(
           path,
