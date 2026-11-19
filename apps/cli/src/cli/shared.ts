@@ -4,9 +4,10 @@
 import { constants } from "node:buffer";
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
+import { pidsProblem, responseCapFor } from "./limits.js";
 import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
 import type { DdbClientOptions } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/client";
-import { DdbUsageError, cutForMessage } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
+import { DdbError, DdbUsageError, cutForMessage } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/errors";
 import { baseUrlProblem, headerValueProblem } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/validate";
 import { DEFAULT_BASE_URL, cleartextProblem, isBidiControl, type RetryEvent } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/engine";
 import { SOLR_MAX_INT } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client/internal/types";
@@ -309,6 +310,9 @@ export interface ActionContext {
   opts: Record<string, unknown>;
 }
 
+/** The container can't run the CLI as it is limited (limits.ts): an ERROR record of the cli area and exit 1. */
+export class EnvironmentError extends DdbError {}
+
 /**
  * Wrap an async command action with consistent global-option resolution and
  * client construction. The callback receives a context (client + resolved global
@@ -325,6 +329,14 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
+    // In a container: under a pids limit Node can't work with, refuse before any request; under a
+    // memory limit the 100 MiB default can't be held, so cap by the memory instead (an oversized
+    // answer is then the cap's error, not an OOM kill). An explicit --max-response-bytes wins.
+    const limits = deps.limits?.() ?? {};
+    const problem = pidsProblem(limits);
+    if (problem !== undefined) throw new EnvironmentError(problem);
+    const given = command.getOptionValueSourceWithGlobals("maxResponseBytes");
+    const memory = given === undefined || given === "default" ? limits.memoryBytes : undefined;
     // --force only lets -o overwrite a file; on its own it would be ignored.
     if (global.force === true && global.output === undefined) {
       throw new DdbUsageError("--force needs --output (it only allows overwriting the -o file).");
@@ -351,6 +363,7 @@ export function action(
     // stdout stays clean for piping.
     const client = deps.createClient({
       ...toEngineOptions(global),
+      ...(memory === undefined ? {} : { maxResponseBytes: responseCapFor(memory) }),
       warn: (message) => logOf(deps).warn("http", message.replace(/^warning: /i, "")),
       onRetry: (event) => logOf(deps).warn("http", retryMessage(event)),
       // An answer delivered changed (invalid text replaced with U+FFFD) is never silent.
