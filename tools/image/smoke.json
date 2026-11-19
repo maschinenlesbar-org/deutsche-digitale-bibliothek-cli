@@ -1,0 +1,107 @@
+{
+  "comment": "What tools/image/smoke.mjs needs that is particular to this repo: the bin (its log topic), a command that makes one request, the exit code of a network error, the mock's answer to that request (by path, under --base-url http://mock:8080), and a string the printed answer contains. The answer is the live one for a search for Oktoberfest (three objects, the fields a hit shows), recorded on 2026-11-19.",
+  "bin": "ddb",
+  "command": [
+    "search",
+    "Oktoberfest",
+    "--rows",
+    "3"
+  ],
+  "networkErrorExit": 6,
+  "answers": {
+    "/search/index/search/select": {
+      "response": {
+        "numFound": 1617,
+        "start": 0,
+        "numFoundExact": true,
+        "docs": [
+          {
+            "id": "KE43D2INXYOPHOEEME6T3BEJIMIKTPLU",
+            "label": [
+              "Oktoberfest"
+            ],
+            "title": [
+              "Oktoberfest"
+            ],
+            "type_fct": [
+              "mediatype_003"
+            ],
+            "objecttype": [
+              "Abschnitt (Publikation)",
+              "Fotografie"
+            ],
+            "provider": [
+              "Sächsische Landesbibliothek - Staats- und Universitätsbibliothek Dresden"
+            ],
+            "begin_time": [
+              714416
+            ],
+            "end_time": [
+              714780
+            ],
+            "license": [
+              "http://rightsstatements.org/vocab/InC/1.0/"
+            ]
+          },
+          {
+            "id": "LIVC7P2HG574DHYOII7AK5XA2BYUQJDC",
+            "label": [
+              "Oktoberfest"
+            ],
+            "title": [
+              "Oktoberfest"
+            ],
+            "type_fct": [
+              "mediatype_003"
+            ],
+            "objecttype": [
+              "Abschnitt (Publikation)",
+              "Fotografie"
+            ],
+            "provider": [
+              "Sächsische Landesbibliothek - Staats- und Universitätsbibliothek Dresden"
+            ],
+            "begin_time": [
+              714416
+            ],
+            "end_time": [
+              714780
+            ],
+            "license": [
+              "http://rightsstatements.org/vocab/InC/1.0/"
+            ]
+          },
+          {
+            "id": "UXFGNVRVBIA7VQRPYHLK4FUPCYVT2M4J",
+            "label": [
+              "Oktoberfest"
+            ],
+            "title": [
+              "Oktoberfest"
+            ],
+            "type_fct": [
+              "mediatype_003"
+            ],
+            "objecttype": [
+              "Abschnitt (Publikation)",
+              "Fotografie"
+            ],
+            "provider": [
+              "Sächsische Landesbibliothek - Staats- und Universitätsbibliothek Dresden"
+            ],
+            "begin_time": [
+              714416
+            ],
+            "end_time": [
+              714780
+            ],
+            "license": [
+              "http://rightsstatements.org/vocab/InC/1.0/"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "expectStdout": "KE43D2INXYOPHOEEME6T3BEJIMIKTPLU"
+}
