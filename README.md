@@ -41,6 +41,58 @@ Check it works:
 ddb version        # prints the backend version, e.g. 7.5
 ```
 
+### Docker
+
+From 0.11.0 every release is also a container image for linux/amd64 and linux/arm64 on the
+GitHub Container Registry, made from the same tarball as the npm package. It needs no Node.js and no
+install:
+
+```bash
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+  ghcr.io/maschinenlesbar-org/deutsche-digitale-bibliothek-cli:latest search Bauhaus --rows 5
+```
+
+The image's entrypoint is the program, so the command follows the image name directly;
+`… deutsche-digitale-bibliothek-cli:latest ddb search Bauhaus` works too.
+
+In a container with a memory limit (`--memory`) the default `--max-response-bytes` is an eighth
+of that limit (at most the usual 100 MiB), so an oversized answer is refused with a clear
+error instead of the container being killed for memory. A provider's whole record
+(`item --part source-record`) can be several megabytes; most answers are small.
+The CLI needs at least 12 processes and threads (`--pids-limit 12`): below that it refuses with
+an error, and with 4 or fewer Node.js itself hangs before the CLI can check.
+
+`latest` is the newest release. For scripts, name a release and pin its digest, which the
+[release notes](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/releases) give:
+`…/deutsche-digitale-bibliothek-cli:0.11.0@sha256:<digest>`. Each image carries signed build provenance;
+check it with
+
+```bash
+gh attestation verify oci://ghcr.io/maschinenlesbar-org/deutsche-digitale-bibliothek-cli:latest \
+  --repo maschinenlesbar-org/deutsche-digitale-bibliothek-cli
+```
+
+### MCP server
+
+From 0.11.0 the Deutsche Digitale Bibliothek is also an [MCP](https://modelcontextprotocol.io/)
+server for AI agents, `@maschinenlesbar.org/deutsche-digitale-bibliothek-mcp` (command `ddb-mcp`,
+image `ghcr.io/maschinenlesbar-org/deutsche-digitale-bibliothek-mcp`): seven read-only tools, to
+search objects with friendly filters (media type, sector, place, provider, years turned into the
+index's day numbers), count them with facet distributions (zero counts dropped, codes explained),
+and read one object: its description with the rights where they really are, what it is part of and
+who holds it, its children, its media files with each file's licence, and its full records (EDM,
+the provider's METS or LIDO, IIIF) a page at a time, on stdio or Streamable HTTP. Setup for Claude
+Code, Claude Desktop and VS Code:
+[MCP.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/MCP.md).
+
+```bash
+npm i -g @maschinenlesbar.org/deutsche-digitale-bibliothek-mcp
+claude mcp add ddb -- ddb-mcp
+```
+
+The metadata are CC0; every result says so, and that the media an object links to carry the
+holding institution's own rights.
+
 ## No API key needed
 
 The read routes (`search`, `item`, `version`) are **public** — there is nothing to
@@ -242,6 +294,7 @@ These may be given **before or after** the command, e.g.
 - **[Usage.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/Usage.md)** — full use-case-driven cookbook.
 - **[GLOSSARY.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/GLOSSARY.md)** — every domain term and facet explained.
 - **[DEVELOPING.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/DEVELOPING.md)** — TypeScript library usage, architecture, testing, CI.
+- **[MCP.md](https://github.com/maschinenlesbar-org/deutsche-digitale-bibliothek-cli/blob/main/MCP.md)** — the MCP server: tools, setup, options.
 
 ## Data license
 

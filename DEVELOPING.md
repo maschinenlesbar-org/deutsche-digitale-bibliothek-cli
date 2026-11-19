@@ -40,7 +40,7 @@ ddb --help
 ## Library usage
 
 ```ts
-import { DdbClient, DdbApiError } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-cli";
+import { DdbClient, DdbApiError, countObjects, getObject } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-cli";
 
 const client = new DdbClient();   // no API key needed for the read routes
 
@@ -58,6 +58,12 @@ try {
 } catch (err) {
   if (err instanceof DdbApiError) console.error(err.status, err.apiName, err.detail);
 }
+
+// The skills' use cases, with their traps built in (see "MCP server" below): counts and facet
+// distributions as value/count pairs (zero counts dropped, codes explained); one object's view
+// with its rights where they really are (an unknown id is status "empty", not an exception).
+const bauhaus = await countObjects(client, { query: "Bauhaus", facets: ["place"], fromYear: 1919, toYear: 1933 });
+const print = await getObject(client, { id: "YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ" });
 ```
 
 ### Client options
@@ -407,14 +413,18 @@ apps/cli/            # @maschinenlesbar.org/deutsche-digitale-bibliothek-cli —
   test/              # CLI tests and every conformance-*.test.ts
 packages/client/     # @maschinenlesbar.org/deutsche-digitale-bibliothek-client — private, shipped inside the CLI's tarball
   src/               # the API client (below)
-  test/              # tests that only touch the client, + the transport helpers and fixtures
+  test/              # tests that only touch the client, + the transport helpers and fixtures (ddb.ts: a mock of the API)
+apps/mcp/            # @maschinenlesbar.org/deutsche-digitale-bibliothek-mcp — the MCP server, released with the CLI
+packages/log/        # the log records (text/jsonl), shared by both apps
+tools/image/         # the container images of both apps (build, push, smoke, SBOM)
+tools/interop/       # the built MCP server against the official MCP client (own lockfile)
 tools/pack/          # prepack/postpack: ship the client (dist/node_modules) and commander in the tarball
-tools/bump.mjs       # version bump + commit + tag (npm run bump)
+tools/bump.mjs       # version bump + commit + tag of every published app (npm run bump)
 tools/sbom/          # the CycloneDX SBOM tool, own lockfile (release.yml's sbom job only)
 tsconfig.docs.json   # TypeDoc only: the package entry, with the client read from its sources
 ```
 
-- **The client is its own package** so a later MCP app can share it with the CLI. It is
+- **The client is its own package** so the MCP app shares it with the CLI. It is
   never published on its own: `apps/cli`'s `prepack` copies it into
   `apps/cli/dist/node_modules/`, where the CLI's imports find it, and the tarball ships it
   as plain files — so npm lists only commander (bundled) as a dependency, never the
@@ -428,9 +438,10 @@ tsconfig.docs.json   # TypeDoc only: the package entry, with the client read fro
   fixtures from the CLI's tests (not bundled). Only `"."` is part of the library.
 - **Dependencies point one way:** the app depends on the client, the client on nothing
   in the workspace.
-- **The version lives in `apps/cli/package.json`.** The root has none; a plain
-  `npm version` at the root is refused. Release with `npm run bump -- <patch|minor|major>`,
-  which bumps the app, commits (the bare version as the message) and tags `vX.Y.Z`.
+- **The version lives in `apps/cli/package.json`** (and, the same, in `apps/mcp/package.json`).
+  The root has none; a plain `npm version` at the root is refused. Release with
+  `npm run bump -- <patch|minor|major>`, which bumps every published app together, commits (the
+  bare version as the message) and tags `vX.Y.Z`.
 - **TypeScript:** `tsconfig.base.json` holds the compiler options; every workspace has a
   `tsconfig.json` (`src/`) and a `tsconfig.test.json` (`test/`), and the root
   `tsconfig.json`/`tsconfig.test.json` reference them, built with `tsc -b`.
@@ -446,6 +457,8 @@ packages/client/src/
     engine.ts    # URL building (base incl. /2), retry/backoff, redirects, decoding, errors
     errors.ts    # DdbError / DdbApiError / DdbNetworkError / DdbParseError / DdbUsageError / DdbValidationError
     client.ts    # DdbClient — search (Solr) / item (content-type aware) / version
+    operations.ts # the skills' use cases: searchObjects / countObjects / getObject / getObjectContext /
+                 #   listObjectChildren / getObjectMedia / getObjectRecord
     index.ts     # the client's public surface (the library entry re-exports it)
 apps/cli/src/cli/
     io.ts        # injectable I/O seam (stdout/stderr/file), the logger and the clock
@@ -734,9 +747,12 @@ locked in `tools/sbom/`, three jobs). P28's two bin runs start a process (30 s),
 
 GitHub Actions workflows under `.github/workflows/`:
 
-- **ci.yml** — type-check, build and test on Node 22/24/26 for every push and PR; then pack the
-  real tarball, check the pack left nothing behind, install it globally with the registry out
-  of reach and run the bin.
+- **ci.yml** — type-check, build and test on Node 22/24/26 for every push and PR; then pack each
+  published app (the CLI and the MCP server), check the pack left nothing behind, install it
+  globally with the registry out of reach and run its bins; its `interop` job runs the MCP
+  server against the official client.
+- **images.yml** — build, smoke-test and scan both container images on every push and weekly
+  (see [Container image](#container-image)).
 - **release.yml** — on a `v*` tag (made by `npm run bump`), three jobs. **pack** (read-only):
   verify the tag matches `apps/cli/package.json`, test, `npm pack --workspace apps/cli`, record
   the tarball's and the notes' sha256 as job outputs. **sbom** (read-only): `npm ci
@@ -747,15 +763,112 @@ GitHub Actions workflows under `.github/workflows/`:
   the GitHub Release with `gh` (tarball, SBOMs, notes). So no third-party code runs where the
   tarball is built or where the write token is. Update the tool by changing its version in
   `tools/sbom/package.json` and running `npm install --package-lock-only --ignore-scripts` there;
-  don't chain its install into an npm script (the `tools/docs/` rule).
-- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): `npm publish --workspace apps/cli` via OIDC **Trusted
-  Publishing** (no stored `NPM_TOKEN`) with provenance.
+  don't chain its install into an npm script (the `tools/docs/` rule). The release also carries
+  both image archives, their SBOMs, `SHA256SUMS` and signed provenance (see
+  [Container image](#container-image)).
+- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): publishes the release's own files, both tarballs to npm via OIDC **Trusted
+  Publishing** (no stored `NPM_TOKEN`) with provenance and both images to ghcr.io, each checked
+  first against the immutable release and the provenance `release.yml` signed.
 - **docs.yml** — build the project website (`site/`, English and German) with the TypeDoc API docs
   under `/api/`, and deploy both to GitHub Pages on each `v*`
   tag.
   TypeDoc runs from the isolated, lockfile-pinned `tools/docs/` toolchain because it
   needs the TypeScript 6 compiler API, which TypeScript 7 no longer ships; locally,
   run `npm ci --prefix tools/docs` once before `npm run docs`.
+
+## MCP server (apps/mcp)
+
+`apps/mcp` is the second published app, `@maschinenlesbar.org/deutsche-digitale-bibliothek-mcp`
+(bin `ddb-mcp`), released in lockstep with the CLI: `npm run bump` bumps every published app
+under `apps/` together, one version, one tag. Its npm README is the root `MCP.md` (prepack packs
+`<APP>.md` for an app that has one).
+
+| Module | Role |
+|---|---|
+| `packages/client/src/operations.ts` | The skills' use cases as library functions, with their traps built in. `searchObjects` and `countObjects` take the query and friendly filters (`filterQueries`: media type and sector by name to their codes, place, provider, object type, language and keyword as exact quoted values, years as a `begin_time` range of the index's day numbers, `dayNumberOfYear`: Python's `toordinal()` + 1, plus raw Solr `fq`); a hit carries its label, its media type in words, object types, provider, places, the date range as dates (`dateOfDayNumber`) and the media licence, never `_version_`. `countObjects` asks with rows 0 and turns Solr's flat `[value, count, …]` arrays into pairs, zero counts dropped, codes labelled (`codeLabel`), `complete: false` when the limit was reached. `getObject`: the view with its rights where they really are (the media licence in `license.resource`, the metadata licence under the misspelled `metdata-rights`; `rights` is often empty), the displayed fields; a view in a language the object lacks (HTTP 404) falls back to the default view with a note; an unknown id is `empty`. `getObjectContext`: `parents` without the object itself; the first institution is the holder, institutions after it are the organisations it belongs to (`holderBelongsTo`: the Staatsbibliothek zu Berlin, then the Stiftung Preußischer Kulturbesitz), never parent records; an empty chain says where the holder and the containing work are. `listObjectChildren` pages `children`; `getObjectMedia` lists `binaries` with each file's licence and credit line. `getObjectRecord`: any other component as text in chunks of at most 1800 characters (`chunksOf`), a page at a time; a section's source-record is named as its ancestor's (`heldBy`); a 404 for `iiif` or `citation` means none, not a bad id. Ids may be given as a DDB page link (`objectIdFrom`). Every answer keeps the requests it made (`requestsOf`), for the source; the search request is built by the client's `searchRequest`, which `search()` uses too. Public API of both packages. |
+| `packages/log` | The log records (text/jsonl), shared by both apps; `createLogger({ program })`. |
+| `src/mcp/tools.ts` | This repo's: the seven tools (flat input schemas with limits, no root combinators; one object output schema each; descriptions under 2000 characters), the instructions, the licence (CC0 metadata; the media's own per-object rights; the link to DATA_LICENSE.md), the hints the server's messages give. A result's `source` is the requests it came from, several in braces (`{items/ID/view?lang=en,items/ID/view}`). The API's `version` is no tool: it answers no question. |
+| `src/mcp/api.ts` | This repo's: how the kit reaches the client (`DdbClient` as `Client`, `DdbError` as `ClientError`, `DdbNetworkError` as `NetworkError`, `apiBase`). `apiBase` is the base URL, which already holds `/2`. The DDB publishes no request limit and its answers state none, so the kit's limiter (2 at a time, 120 a minute) is the only pace. |
+| `src/mcp/server.ts` | The McpServer factory, the tool types, `callTool`: deadline (`--call-timeout`) plus the client's cancellation, cleaned and fitted answers, failures as `isError` results. |
+| `src/mcp/result.ts` | `cleanStrings` (control, bidi, zero-width characters dropped in the value), `fitResult` (whole list entries dropped under `--max-result-chars`, `nextOffset`). |
+| `src/mcp/limiter.ts` | One per process around the upstream transport: 2 in flight, 120 a minute, pause on 429, a bounded queue. |
+| `src/mcp/http.ts` | node:http adapter for the SDK's `createMcpHandler`: POST /mcp, /healthz, Host and Origin checks (the SDK does neither), 1 MiB body, 8 requests at once, timeouts. |
+| `src/mcp/config.ts`, `run.ts`, `index.ts` | Options (`node:util` parseArgs), argv -> exit code, the bin (console into log records, SIGINT/SIGTERM, stdin's end). |
+
+The protocol is the SDK's: `@modelcontextprotocol/server` 2.4.0, bundled with its core and zod
+(prepack). It serves the 2026-07-28 revision and the 2025 handshake (2025-11-25, 2025-06-18)
+statelessly, on stdio (`serveStdio`) and HTTP. The SDK bundles AJV 8.18 into its own code to
+validate tool arguments against the input schemas; an SBOM doesn't list that copy.
+
+**The kit.** Everything in `apps/mcp` but `tools.ts`, `api.ts`, `test/helpers.ts`,
+`test/tools.test.ts` and the conformance tests' adapter blocks, plus `packages/log`,
+`apps/cli/src/cli/limits.ts`, `tools/image/` (but `smoke.json`), `tools/interop/` (but
+`interop.json`), `tools/bump.mjs`, `tools/pack/` and the workflows `ci.yml`, `images.yml`,
+`release.yml` and `publish.yml`, is the kit of `create-cli-template` (in the api-cli workspace),
+the same in every repository with an MCP server: a fix lands there first and comes here with
+`npm run sync-kit -- ../deutsche-digitale-bibliothek-cli` (run in create-cli-template; `--check`
+lists the drift).
+
+Tests (`apps/mcp/test`) run in-process over the SDK's InMemoryTransport with raw JSON-RPC (the
+kit's `harness.ts`). The rules every server follows are the shared conformance tests
+`conformance-m1-…` to `conformance-m10-…` (protocol and tool rules, HTTP, Host and Origin,
+stdio with the built bin, config, limiter, result shaping, drain, call errors, MCP.md), each with
+an adapter block naming this repo's calls and mock answers; `tools.test.ts` holds this server's
+own (the seven tools and the traps). The mock API is the client's `test/ddb.ts` (`ddbApi`,
+`ddbAnswer`): it answers by path from live answers recorded on 2026-11-19 and 20, cut to the
+fields read (a search for Oktoberfest and its facet counts, two Staatsarchiv München records, the
+view, media, parents and EDM of the 1810 print `YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ`, the parents of
+an archival record and of a book illustration, the empty parents of a book section, children of a
+series, the 404s of a view in English and of a missing IIIF manifest); the section's
+source-record redirect is the client test's, with a stand-in record. The stdio tests start the
+built bin (30 s each). `tools/interop/` checks the built server against the official client 2.4.0
+(stdio and HTTP; legacy, auto and pinned 2026-07-28) in ci.yml's `interop` job; it has its own
+lockfile and is never installed by the workspace, release or publish runs; the calls it makes and
+the mock's answers (one per path) are in `tools/interop/interop.json`.
+
+## Container image
+
+`tools/image/` builds both apps' images (Dockerfile targets `cli` and `mcp`) from their release
+tarballs (`npm pack` output), never from source: `ADD` unpacks it onto distroless Node 24 (Debian 13, `nonroot`, uid 65532), so the image
+holds exactly the files npm users get. The base, BuildKit, the test registry, skopeo (local runs
+only), syft and grype are pinned in `pins.json`; bump them in the deps round. A Node or Debian
+security fix reaches the image only through a new base digest, so it means a patch release.
+
+| Script | What it does |
+|---|---|
+| `build.mjs` | Multi-arch OCI archive (amd64, arm64), reproducible: no provenance or SBOM attestation, timestamps from `SOURCE_DATE_EPOCH` (default: the HEAD commit's time). Two builds give the same index digest; compare index digests, not files. |
+| `push.mjs` | Copies the archive to a registry with skopeo (`--all --preserve-digests`) and checks the digest the registry serves. Used for the local test registry and for ghcr.io. |
+| `smoke.mjs` | Runs the image read-only, without capabilities, as an arbitrary uid: `--version`, `--help`, a network error (exit 6, the CLI's network exit code), one request to a mock upstream (`smoke.json`: `search Oktoberfest --rows 3` against the recorded answer), and `docker stop`, which must end a waiting call with 143 in under 5 s. |
+| `sbom.mjs` | One CycloneDX SBOM per platform with syft, and with `--gate true` grype over them: a fixable high or critical finding fails. Accepted findings go into `.grype.yaml` with a reason. CI only. |
+
+Locally (colima; the scripts never read your docker config, so no credential helper is asked;
+on macOS port 5000 is often taken by the AirPlay receiver, hence 5055):
+
+```bash
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+npm pack --workspace apps/cli --pack-destination dist-artifacts
+node tools/image/build.mjs --app cli --tarball dist-artifacts/<tarball>.tgz --out dist-artifacts/cli.oci.tar
+docker run -d -p 127.0.0.1:5055:5000 <registry pin from pins.json>
+node tools/image/push.mjs --archive dist-artifacts/cli.oci.tar --to 127.0.0.1:5055/deutsche-digitale-bibliothek-cli:dev
+node tools/image/smoke.mjs --app cli --image 127.0.0.1:5055/deutsche-digitale-bibliothek-cli@<index digest>
+```
+
+Without a registry (and without any pull), copy one platform out of the archive with the pinned
+skopeo image into a docker archive (`skopeo copy --override-os linux --override-arch arm64
+oci-archive:… docker-archive:…:deutsche-digitale-bibliothek-cli:arm64`), `docker load` it and
+smoke-test `deutsche-digitale-bibliothek-cli:arm64`, as images.yml's arm64 job does.
+
+In CI: `images.yml` does all of it on every push and weekly, with the arm64 image smoke-tested on
+an arm64 runner and the vulnerability gate. In `release.yml` the job `image` builds from the
+checked tarball and records the archive's digest, `image-sbom` makes the SBOMs (no gate: the
+scanner's database changes daily), `attest` signs build provenance for the tarball, the archive
+and the image index, and the release attaches the archive, the image SBOMs and `SHA256SUMS`.
+`publish.yml` publishes the release's own files: both tarballs to npm and both archives to
+`ghcr.io/maschinenlesbar-org/deutsche-digitale-bibliothek-cli` and `…/deutsche-digitale-bibliothek-mcp`
+(with the run's `GITHUB_TOKEN`), each checked first against the immutable release
+(`gh release verify-asset`) and the provenance `release.yml` signed for that tag
+(`gh attestation verify`). `apps/cli/test/conformance-p32-image-pipeline.test.ts` (shared) pins
+these rules.
 
 ## Website
 
