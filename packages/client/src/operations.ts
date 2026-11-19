@@ -639,15 +639,19 @@ export interface ObjectContext {
   searched: { id: string };
   /** The records it is part of, nearest first (a series, a fonds, the archive's structure); none for a single object. */
   partOf: HierarchyEntry[];
-  /** The institution that holds it (the last entry of the API's chain): the holder, not a parent record. */
+  /** The institution that holds it (the first institution in the API's chain): the holder, not a parent record. */
   heldBy?: HierarchyEntry;
+  /** The organisations the holder belongs to, nearest first (a library's foundation): not parent records either. */
+  holderBelongsTo?: HierarchyEntry[];
   reason?: string;
   notes: string[];
 }
 
 /**
  * What an object is part of, and who holds it, from `parents`: the API's chain starts with the
- * object itself (skipped) and ends with the institution (`heldBy`, not a parent record). An empty
+ * object itself (skipped) and ends with the institution (`heldBy`, not a parent record), and
+ * sometimes with the organisation it belongs to after it (`holderBelongsTo`: the Staatsbibliothek
+ * zu Berlin, then the Stiftung Preußischer Kulturbesitz). An empty
  * chain is not "no parent": a section of a digitised book answers none although it is part of
  * the volume, so `empty` says where to look instead.
  */
@@ -674,12 +678,16 @@ export async function getObjectContext(client: DdbClient, input: { id: string })
     });
   }
   const rest = entries[0]?.id === id ? entries.slice(1) : entries;
-  const last = rest[rest.length - 1];
-  const heldBy = last !== undefined && last.type === "institution" ? last : undefined;
-  const partOf = heldBy === undefined ? rest : rest.slice(0, -1);
+  // The records come first, then the institutions: the nearest holds the object, any after it
+  // are the organisations it belongs to.
+  const first = rest.findIndex((e) => e.type === "institution");
+  const partOf = first === -1 ? rest : rest.slice(0, first);
+  const institutions = first === -1 ? [] : rest.slice(first);
   const notes = partOf.length === 0 ? ["No record above it: it is a single object, held by the institution."] : [];
   const answer: ObjectContext = { status: "ok", searched, partOf, notes };
+  const [heldBy, ...above] = institutions;
   if (heldBy !== undefined) answer.heldBy = heldBy;
+  if (above.length > 0) answer.holderBelongsTo = above;
   return trace.done(answer);
 }
 

@@ -218,11 +218,11 @@ export const TOOLS: readonly ToolDefinition[] = [
     title: "What an object is part of, and who holds it",
     description: [
       'The records above a DDB object, nearest first (the file\'s series, its fonds, the archive\'s structure), and the institution that holds it. Use it for "wozu gehört diese Akte?", "in welchem Bestand liegt das?", "welches Archiv hat das?", "what is this part of?", "which collection or fonds is it in?", "who holds this object?".',
-      "partOf lists the records above it; heldBy is the holding institution (the holder, not a parent record). A single museum object has partOf empty: say it is not part of a hierarchy, and name the holder. status empty means the API lists no hierarchy at all, which is not \"part of nothing\": a section of a digitised book answers so. Then take the holder from getObject and the containing work from getObjectRecord with part source-record (it names the ancestor). type is the archive's level code (htype_…), not a label: don't translate it.",
+      "partOf lists the records above it; heldBy is the holding institution (the holder, not a parent record); holderBelongsTo, the organisation that institution belongs to (the Stiftung Preußischer Kulturbesitz for the Staatsbibliothek zu Berlin), not a parent record either. A single museum object has partOf empty: say it is not part of a hierarchy, and name the holder. status empty means the API lists no hierarchy at all, which is not \"part of nothing\": a section of a digitised book answers so. Then take the holder from getObject and the containing work from getObjectRecord with part source-record (it names the ancestor). type is the archive's level code (htype_…), not a label: don't translate it.",
       RULES,
     ].join("\n\n"),
     inputSchema: input({ id }, ["id"]),
-    outputSchema: output({ partOf: arr, heldBy: obj }),
+    outputSchema: output({ partOf: arr, heldBy: obj, holderBelongsTo: arr }),
     source: source("items"),
     async run(args, context) {
       return remember(args, await getObjectContext(context.client, { id: str(args, "id") ?? "" }));

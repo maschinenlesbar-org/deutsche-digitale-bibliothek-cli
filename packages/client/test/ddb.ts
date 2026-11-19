@@ -18,6 +18,8 @@ export const PRINT = "YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ";
 export const RECORD = "5UPF53VT2D55EKJWAGOPV5AY5XO75RMO";
 /** A series of that archive ("Oktoberfest in München") with 100 children. */
 export const SERIES = "EV5F5USPSDKV5VCM3G6OIRXPA2QGY6LF";
+/** An illustration in a book of the Staatsbibliothek zu Berlin, which belongs to the Stiftung Preußischer Kulturbesitz. */
+export const ILLUSTRATION = "5556S6VXBQ7766TPFLK3IDEOG4SX4MGH";
 /** A section of a digitised book: no parents listed, its source-record is its volume's. */
 export const SECTION = "JG3YAM7VLFJPVGMAWK4IBCJVFHNFZ5NP";
 export const VOLUME = "JY7HJBJAUBYMG437RSIFJNUPMMSAHT26";
@@ -677,6 +679,83 @@ export const PARENTS_RECORD = {
   ]
 };
 
+/** items/ILLUSTRATION/parents (2026-11-20, ~00:01 CET): the illustration, its volume, the work, the library, then the foundation the library belongs to: two institutions. */
+export const PARENTS_ILLUSTRATION = {
+  "numberOfResults": 5,
+  "hierarchy": [
+    {
+      "aggregationEntity": false,
+      "id": "5556S6VXBQ7766TPFLK3IDEOG4SX4MGH",
+      "parent": "72P5NGEPP6S3FGXD6KW4TORFVOIRIOZT",
+      "ingestId": "49532188503360679IsDa",
+      "providerId": [
+        "00008125",
+        "6GFV3I4ELFEEFQIN2WECOXMTI5FUWHCK"
+      ],
+      "label": "Goethe.",
+      "type": "htype_015",
+      "position": "00002",
+      "leaf": true
+    },
+    {
+      "aggregationEntity": false,
+      "id": "72P5NGEPP6S3FGXD6KW4TORFVOIRIOZT",
+      "parent": "N3MUEEC4VMOVEH4KQIIHKVIHHGTDDOHC",
+      "ingestId": "49532188503360679IsDa",
+      "providerId": [
+        "00008125",
+        "6GFV3I4ELFEEFQIN2WECOXMTI5FUWHCK"
+      ],
+      "label": "Tome Premier",
+      "type": "htype_007",
+      "position": "00001",
+      "leaf": false
+    },
+    {
+      "aggregationEntity": false,
+      "id": "N3MUEEC4VMOVEH4KQIIHKVIHHGTDDOHC",
+      "parent": "6GFV3I4ELFEEFQIN2WECOXMTI5FUWHCK",
+      "ingestId": "49532188503360679IsDa",
+      "providerId": [
+        "00008125",
+        "6GFV3I4ELFEEFQIN2WECOXMTI5FUWHCK"
+      ],
+      "label": "Mémoires De Goethe",
+      "type": "htype_020",
+      "position": "00001",
+      "leaf": false
+    },
+    {
+      "aggregationEntity": false,
+      "id": "6GFV3I4ELFEEFQIN2WECOXMTI5FUWHCK",
+      "parent": "FB2OLEOR7CKRPB23WLCIUIIJMJOGN3UH",
+      "ingestId": "5095594020963603yfKs",
+      "providerId": [
+        "00008615",
+        "IPSQKSWH46RX2B475NRZARHV4SFHLQGZ"
+      ],
+      "label": "Staatsbibliothek zu Berlin - Preußischer Kulturbesitz",
+      "type": "institution",
+      "position": "-1",
+      "leaf": false
+    },
+    {
+      "aggregationEntity": false,
+      "id": "FB2OLEOR7CKRPB23WLCIUIIJMJOGN3UH",
+      "parent": null,
+      "ingestId": "5095594020963603yfKs",
+      "providerId": [
+        "00008615",
+        "IPSQKSWH46RX2B475NRZARHV4SFHLQGZ"
+      ],
+      "label": "Stiftung Preußischer Kulturbesitz",
+      "type": "institution",
+      "position": "-1",
+      "leaf": false
+    }
+  ]
+};
+
 /** items/SERIES/children?rows=3: three of its 100 children. */
 export const CHILDREN_SERIES = {
   "numberOfResults": 100,
@@ -771,6 +850,7 @@ function item(id: string, rest: string, url: URL): HttpResponse {
   if (rest === "/parents") {
     if (id === PRINT) return jsonResponse(PARENTS_PRINT);
     if (id === RECORD) return jsonResponse(PARENTS_RECORD);
+    if (id === ILLUSTRATION) return jsonResponse(PARENTS_ILLUSTRATION);
     if (id === SECTION) return jsonResponse({ numberOfResults: 0, hierarchy: [] });
     return notFound(id);
   }

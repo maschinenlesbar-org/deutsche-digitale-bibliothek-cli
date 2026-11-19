@@ -27,7 +27,7 @@ import {
 } from "../src/operations.js";
 import type { HttpRequest } from "../src/http.js";
 import { jsonResponse, makeMockTransport } from "./helpers.js";
-import { ddbApi, EDM_PRINT, PRINT, RECORD, SECTION, SERIES, VOLUME } from "./ddb.js";
+import { ddbApi, EDM_PRINT, ILLUSTRATION, PRINT, RECORD, SECTION, SERIES, VOLUME } from "./ddb.js";
 
 const clientOf = (mock: ReturnType<typeof ddbApi>) => new DdbClient({ transport: mock.transport, maxRetries: 0 });
 const params = (request: HttpRequest | undefined) => new URL(request?.url ?? "http://x/").searchParams;
@@ -220,6 +220,15 @@ test("getObjectContext: the object itself is skipped, the institution is the hol
   const archival = await getObjectContext(clientOf(ddbApi()), { id: RECORD });
   assert.deepEqual(archival.partOf.map((e) => e.label), ["Oktoberfest in München", "Veranstaltungsplakate", "Plakatsammlung", "V. Sammlungsgut / Dokumentationen", "Staatsarchiv München (Archivtektonik)"]);
   assert.equal(archival.heldBy?.label, "Staatsarchiv München");
+});
+
+test("getObjectContext: the chain can end in two institutions (a library and the foundation it belongs to): the nearest holds it, the other is not a parent record", async () => {
+  const answer = await getObjectContext(clientOf(ddbApi()), { id: ILLUSTRATION });
+  assert.deepEqual(answer.partOf.map((e) => e.label), ["Tome Premier", "Mémoires De Goethe"]);
+  assert.equal(answer.heldBy?.label, "Staatsbibliothek zu Berlin - Preußischer Kulturbesitz");
+  assert.deepEqual(answer.holderBelongsTo?.map((e) => e.label), ["Stiftung Preußischer Kulturbesitz"]);
+  const single = await getObjectContext(clientOf(ddbApi()), { id: PRINT });
+  assert.equal(single.holderBelongsTo, undefined, "one institution: nothing above it");
 });
 
 test("getObjectContext: an empty chain is not 'part of nothing': it says where the holder and the containing work are", async () => {

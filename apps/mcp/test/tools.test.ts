@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { listTools } from "../src/mcp/server.js";
 import { connect } from "./harness.js";
 import { dayNumberOfYear } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client";
-import { ddbApi, PRINT, RECORD, SECTION, SERIES, VOLUME } from "./helpers.js";
+import { ddbApi, ILLUSTRATION, PRINT, RECORD, SECTION, SERIES, VOLUME } from "./helpers.js";
 
 const API = "https://api.deutsche-digitale-bibliothek.de/2";
 
@@ -84,6 +84,9 @@ test("getObjectContext: the holder is no parent; an empty hierarchy says where t
   assert.equal((archival["partOf"] as unknown[]).length, 5);
   assert.equal((archival["heldBy"] as { label: string }).label, "Staatsarchiv München");
   assert.equal(archival["source"], `${API}/items/${RECORD}/parents`);
+  const book = (await connection.call("getObjectContext", { id: ILLUSTRATION })).structuredContent ?? {};
+  assert.equal((book["heldBy"] as { label: string }).label, "Staatsbibliothek zu Berlin - Preußischer Kulturbesitz");
+  assert.deepEqual((book["holderBelongsTo"] as { label: string }[]).map((e) => e.label), ["Stiftung Preußischer Kulturbesitz"]);
   const section = (await connection.call("getObjectContext", { id: SECTION })).structuredContent ?? {};
   assert.equal(section["status"], "empty");
   assert.match(String(section["reason"]), /source-record/);
