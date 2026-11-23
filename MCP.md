@@ -75,7 +75,9 @@ For scripts and shared configs, pin a release and its digest from the
 | `getObjectRecord` | Any other component as text in chunks, a page at a time: EDM, the provider's own record (METS/MODS, LIDO, MARCXML), the archive information package, the ingest source, the IIIF manifest, a newspaper citation. |
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
-`source` it came from and the data licence. Counts come from the index's total, never from
+`source` it came from (an answer a redirect fetched from another host says so there: "…
+(answered by https://other.example after a redirect)", and a WARN record names both) and the data
+licence. Counts come from the index's total, never from
 paging; years are turned into the index's day numbers; facet values are as the index holds them
 (one place can come in several spellings). An unknown id, an object without a hierarchy, media or
 IIIF manifest, a view missing in a language: each is said in words, with what to try. A failure
