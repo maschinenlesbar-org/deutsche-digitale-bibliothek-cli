@@ -88,7 +88,7 @@ Werte kommen so, wie die Einrichtungen sie erfasst haben (`place_fct` enthält `
 | `sector_fct` | Sparte | `sec_01`..`sec_07` |
 | `language_fct` | Sprache | Sprachcodes |
 | `keywords_fct` | Schlagwörter | Wörter |
-| `begin_time` / `end_time` | Zeitraum | Tagesnummern, keine Jahre: `660725` = 1. Januar 1810 (Python `date.toordinal()` + 1) |
+| `begin_time` / `end_time` | Zeitraum | Tagesnummern, keine Jahre: `660725` = 1. Januar 1810 (Python `date.toordinal()` + 1); `begin_time` 0 (mit `end_time` 364) ist der Platzhalter des Index für einen Datensatz ohne verwertbares Datum |
 | `mimetype_fct` | MIME-Typ der Medien | MIME-Typen |
 
 Es gibt kein `time_fct` und keine Facette für Bundesländer: `time_fct` und `state_fct` sind

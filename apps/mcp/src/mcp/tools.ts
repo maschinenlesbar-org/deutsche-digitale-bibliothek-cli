@@ -107,7 +107,7 @@ const filters: Record<string, JsonSchema> = {
   language: { type: "string", minLength: 2, maxLength: 3, pattern: "^[a-z]{2,3}$", description: 'A language code as the index has it: "ger", "eng", "lat", "fre".' },
   keyword: { type: "string", minLength: 1, maxLength: 200, description: "A subject keyword; exact value." },
   fromYear: { type: "integer", minimum: MIN_YEAR, maximum: MAX_YEAR, description: "Objects whose date range starts in this year or later (undated objects are left out)." },
-  toYear: { type: "integer", minimum: MIN_YEAR, maximum: MAX_YEAR, description: "Objects whose date range starts in this year or earlier." },
+  toYear: { type: "integer", minimum: MIN_YEAR, maximum: MAX_YEAR, description: "Objects whose date range starts in this year or earlier (undated objects are left out)." },
   filters: { type: "array", maxItems: 5, items: { type: "string", minLength: 1, maxLength: 300 }, description: 'Raw Solr filter queries, ANDed, for what the fields above don\'t reach: place_fct:("Berlin" OR "Dessau").' },
 };
 

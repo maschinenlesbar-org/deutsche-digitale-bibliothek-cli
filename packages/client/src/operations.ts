@@ -175,7 +175,10 @@ export interface ObjectFilters {
   keyword?: string | undefined;
   /** Objects whose date range starts in this year or later (begin_time). */
   fromYear?: number | undefined;
-  /** Objects whose date range starts in this year or earlier (begin_time). */
+  /**
+   * Objects whose date range starts in this year or earlier (begin_time), and in the year 1 or
+   * later: records without a usable date (begin_time 0, the index's placeholder) are left out.
+   */
   toYear?: number | undefined;
   /** Raw Solr filter queries (`fq`), ANDed, for what the friendly filters don't reach. */
   filters?: string[] | undefined;
@@ -230,7 +233,10 @@ export function filterQueries(input: ObjectFilters): string[] {
     throw new DdbValidationError(`Invalid years: fromYear ${from} is after toYear ${to}.`);
   }
   if (from !== undefined || to !== undefined) {
-    const lo = from === undefined ? "*" : String(dayNumberOfYear(from));
+    // Never an open lower bound: the index gives a record without a usable date (an archive
+    // file dated "o.D.") the placeholder begin_time 0 (and end_time 364), which `[* TO day]`
+    // counts as older than any year asked. Day 2 is 1 Jan of the year 1, the earliest real date.
+    const lo = String(dayNumberOfYear(from ?? MIN_YEAR));
     const hi = to === undefined ? "*" : String(dayNumberOfYear(to + 1) - 1);
     fq.push(`begin_time:[${lo} TO ${hi}]`);
   }

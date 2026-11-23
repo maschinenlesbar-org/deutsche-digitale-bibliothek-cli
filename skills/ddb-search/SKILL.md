@@ -151,6 +151,10 @@ ddb search Weimar --rows 10 --offset 10
   `YJFMZZU3OPATMQJBOUSB2ECY2NANFEFQ` has `begin_time [660725]` (1 Jan 1810) and
   `end_time [661089]` (31 Dec 1810); the value is Python's `date.toordinal()` + 1. Convert
   years first (see recipe); `begin_time:[1900 TO 1909]` returns 0 hits without an error.
+  A record without a usable date (an archive file dated "o.D.") has the placeholder
+  `begin_time [0]` (`end_time [364]`, which reads as 29 Dec of the year 1): an open range
+  `begin_time:[* TO …]` counts tens of thousands of them, so start a range at `2`
+  (1 Jan of the year 1), never at `*`.
 - **`--filter` is a raw Solr `fq`**, e.g. `type_fct:mediatype_002` or
   `place_fct:"Berlin"` — not `facet=value`. Quote values with spaces.
 - **The query is required.** Use `'*:*'` to browse everything (still capped at `--rows`).

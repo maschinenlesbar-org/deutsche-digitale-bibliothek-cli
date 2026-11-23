@@ -60,10 +60,23 @@ test("the friendly filters become Solr filter queries: codes, quoted exact value
     ],
   );
   assert.deepEqual(filterQueries({ query: "x", fromYear: 1810 }), [`begin_time:[660725 TO *]`]);
-  assert.deepEqual(filterQueries({ query: "x", toYear: 1810 }), [`begin_time:[* TO 661089]`]);
+  assert.deepEqual(filterQueries({ query: "x", toYear: 1810 }), [`begin_time:[2 TO 661089]`], "toYear alone starts at 1 Jan of the year 1, not at *");
+  assert.equal(dayNumberOfYear(1), 2);
   assert.throws(() => filterQueries({ query: "x", fromYear: 1910, toYear: 1900 }), /fromYear 1910 is after toYear 1900/);
   assert.throws(() => filterQueries({ query: "x", place: "  " }), DdbValidationError);
   assert.throws(() => filterQueries({ query: "x", mediaType: "photo" as never }), /mediaType: expected one of audio, image/);
+});
+
+test("toYear leaves out the records without a usable date, whose begin_time is the index's placeholder 0", async () => {
+  // Live (2026-11-22): 56 947 records (archive files dated "o.D.") have begin_time 0 and
+  // end_time 364; an open range [* TO day] counted them as objects from before any year asked.
+  const mock = makeMockTransport(() => jsonResponse({ response: { numFound: 0, start: 0, docs: [] } }));
+  await countObjects(new DdbClient({ transport: mock.transport, maxRetries: 0 }), { query: "*:*", toYear: 1500 });
+  const [range] = params(mock.calls[0]).getAll("fq");
+  const match = /^begin_time:\[(\S+) TO (\d+)\]$/.exec(range ?? "");
+  assert.ok(match !== null, range);
+  assert.notEqual(match[1], "*", "an open lower bound takes in begin_time 0");
+  assert.ok(Number(match[1]) > 0 && Number(match[1]) <= dayNumberOfYear(1), range);
 });
 
 // ---- searchObjects ---------------------------------------------------------------------------

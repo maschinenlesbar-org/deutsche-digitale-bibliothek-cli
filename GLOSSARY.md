@@ -87,7 +87,7 @@ values are delivered as the institutions wrote them (`place_fct` has `München` 
 | `sector_fct` | cultural sector | `sec_01`..`sec_07` |
 | `language_fct` | language | language codes |
 | `keywords_fct` | subject keywords | words |
-| `begin_time` / `end_time` | time period | day numbers, not years: `660725` = 1 Jan 1810 (Python `date.toordinal()` + 1) |
+| `begin_time` / `end_time` | time period | day numbers, not years: `660725` = 1 Jan 1810 (Python `date.toordinal()` + 1); `begin_time` 0 (with `end_time` 364) is the index's placeholder for a record without a usable date |
 | `mimetype_fct` | media MIME type | MIME types |
 
 There is no `time_fct` and no federal-state facet: `time_fct` and `state_fct` are
