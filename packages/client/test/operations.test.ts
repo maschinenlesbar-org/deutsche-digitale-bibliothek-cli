@@ -20,6 +20,7 @@ import {
   getObjectContext,
   getObjectMedia,
   getObjectRecord,
+  hitOf,
   listObjectChildren,
   objectIdFrom,
   requestsOf,
@@ -77,6 +78,16 @@ test("toYear leaves out the records without a usable date, whose begin_time is t
   assert.ok(match !== null, range);
   assert.notEqual(match[1], "*", "an open lower bound takes in begin_time 0");
   assert.ok(Number(match[1]) > 0 && Number(match[1]) <= dayNumberOfYear(1), range);
+});
+
+test("a hit whose begin_time is the placeholder 0, or no date at all, shows no date: not half of one", () => {
+  const ID = "I44JTUQ7AY3ON2PB7AK6V6AQE4KJ5XHW";
+  // Live (2026-11-22): the undated archive files answer begin_time [0], end_time [364].
+  assert.equal(hitOf({ id: ID, begin_time: [0], end_time: [364] }).date, undefined, "364 alone would read as 0001-12-29");
+  assert.equal(hitOf({ id: ID, begin_time: [-5000], end_time: [660725] }).date, undefined);
+  assert.equal(hitOf({ id: ID, begin_time: ["1810"], end_time: [661089] }).date, undefined);
+  assert.deepEqual(hitOf({ id: ID, begin_time: [660725], end_time: [661089] }).date, { from: "1810-01-01", to: "1810-12-31" });
+  assert.deepEqual(hitOf({ id: ID, end_time: [661089] }).date, { to: "1810-12-31" }, "no begin_time at all: the end is still a date");
 });
 
 // ---- searchObjects ---------------------------------------------------------------------------

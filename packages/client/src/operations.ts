@@ -268,7 +268,7 @@ export interface ObjectHit {
   objectTypes?: string[];
   provider?: string;
   places?: string[];
-  /** The date range (begin_time/end_time as dates). */
+  /** The date range (begin_time/end_time as dates); none when begin_time isn't a date (the index's placeholder 0). */
   date?: { from?: string; to?: string };
   /** The media's licence (a rights URI); the metadata are CC0. */
   mediaLicence?: string;
@@ -297,8 +297,11 @@ export function hitOf(doc: SolrDoc): ObjectHit {
   if (provider !== undefined) hit.provider = provider;
   const places = strings(doc["place_fct"]);
   if (places.length > 0) hit.places = places;
-  const from = dateOfDayNumber(firstNumber(doc["begin_time"]));
-  const to = dateOfDayNumber(firstNumber(doc["end_time"]));
+  // A begin_time that isn't a date (the placeholder 0 of a record without a usable date, whose
+  // end_time 364 would read as 29 Dec of the year 1) makes the whole range no date.
+  const begin = doc["begin_time"];
+  const from = dateOfDayNumber(firstNumber(begin));
+  const to = begin !== undefined && from === undefined ? undefined : dateOfDayNumber(firstNumber(doc["end_time"]));
   if (from !== undefined || to !== undefined) hit.date = { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
   const licence = first(doc["license"]);
   if (licence !== undefined) hit.mediaLicence = licence;
