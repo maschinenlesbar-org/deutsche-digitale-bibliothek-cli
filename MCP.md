@@ -77,17 +77,17 @@ For scripts and shared configs, pin a release and its digest from the
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
 `source` it came from (whole, never cut like the data; an answer a redirect fetched from another
 host says so there: "… (answered by https://other.example after a redirect)", and a WARN record
-names both) and the data licence. Counts come from the index's total, never from paging; years are turned into the index's
-day numbers; facet values are as the index holds them (one place can come in several spellings).
-An unknown id, an object without a hierarchy, media or IIIF manifest, a view missing in a
-language: each is said in words, with what to try. A text over 2000 characters is cut and ends in
-`…[cut, N characters in all]`, and the answer says `truncated`. An answer over
-`--max-result-chars` first loses entries from the end of its page (then `nextOffset` says where to
-go on), then has its longest texts cut further (each with that mark) or, when that isn't enough, its
-other lists shortened (`reason` names them); a list keeps its first entry, `notes` stay whole, and the answer says
-`truncated`. One that can't be cut down so far is a tool error that says to ask for less. A
-failure is a tool error that says what to change (one over 5000 characters loses its middle, never
-its end, where the reason is).
+names both) and the data licence. Counts come from the index's total, never from paging; years
+are turned into the index's day numbers; facet values are as the index holds them (one place can
+come in several spellings). An unknown id, an object without a hierarchy, media or IIIF manifest,
+a view missing in a language: each is said in words, with what to try. A text over 2000
+characters is cut and ends in `…[cut, N characters in all]`, and the answer says `truncated`. An
+answer over `--max-result-chars` first loses entries from the end of its page (then `nextOffset`
+says where to go on), then has its longest texts cut further (each with that mark) or, when that
+isn't enough, its other lists shortened (`reason` names them); a list keeps its first entry,
+`notes` stay whole, and the answer says `truncated`. One that can't be cut down so far is a tool
+error that says to ask for less. A failure is a tool error that says what to change (one over
+5000 characters loses its middle, never its end, where the reason is).
 
 ## Options
 
@@ -121,11 +121,11 @@ its end, where the reason is).
   Exposed beyond localhost (it logs a warning then), it belongs behind a proxy that authenticates or
   at least terminates TLS.
 - **Gentle with the upstream.** One server process sends at most 2 requests at a time and 120 a
-  minute to the API, pauses on HTTP 429 (as long as its Retry-After asks, at most 30 s), and
-  stops a tool call after its deadline (a tool that has read part of its answer by then may answer
-  with that part, and says so). A request those limits would hold longer than it or its call may
-  wait is not sent: the call fails at once, naming the limit and when to ask again (and the log
-  says so).
+  minute to the API, pauses the requests to a host that answers HTTP 429 (as long as its
+  Retry-After asks, at most 30 s; those to another host go on), and stops a tool call after its
+  deadline (a tool that has read part of its answer by then may answer with that part, and says
+  so). A request those limits would hold longer than it or its call may wait is not sent: the call
+  fails at once, naming the limit and when to ask again (and the log says so).
 - **Results are data.** Text from the API, keys included, is cleaned (control, bidi,
   zero-width, tag and other invisible characters removed, but an emoji keeps its joiners; a key
   that cleaning makes equal to another stays, as `name~2`), but it is still other people's text:
