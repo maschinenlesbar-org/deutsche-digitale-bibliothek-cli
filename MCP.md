@@ -81,7 +81,9 @@ names both) and the data licence. Counts come from the index's total, never from
 day numbers; facet values are as the index holds them (one place can come in several spellings).
 An unknown id, an object without a hierarchy, media or IIIF manifest, a view missing in a
 language: each is said in words, with what to try. A text over 2000 characters is cut and ends in
-`…[cut, N characters in all]`, and the answer says `truncated`. A failure is a tool error that
+`…[cut, N characters in all]`, and the answer says `truncated`. An answer over `--max-result-chars` loses entries from the end of its lists, then has
+its longest texts cut further (each with that mark), and says `truncated`; one that can't be cut
+down so far is a tool error that says to ask for less. A failure is a tool error that
 says what to change (one over 5000 characters loses its middle, never its end, where the reason
 is).
 
