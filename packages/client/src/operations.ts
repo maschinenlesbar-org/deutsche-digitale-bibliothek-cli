@@ -638,7 +638,13 @@ export async function getObject(client: DdbClient, input: GetObjectInput): Promi
   }
   if (object(object(result.json)?.["item"]) === undefined) throw shapeError("view", id, 'an "item" object');
   const view = viewOf(id, result.json);
-  notes.push(RIGHTS_NOTE);
+  const metadata = view.rights.metadata;
+  if (metadata === undefined || /\/publicdomain\/zero\//i.test(metadata)) notes.push(RIGHTS_NOTE);
+  else {
+    notes.push(
+      `The view gives the metadata licence ${JSON.stringify(metadata)} (rights.metadata), not CC0 as the DDB's metadata usually are: report that one. The media carry their own rights, chosen by the holding institution (rights.media).`,
+    );
+  }
   if (view.rights.media === undefined && view.rights.statement === undefined && view.rights.metadata === undefined) {
     notes.push("The view carries no rights statement at all; getObjectMedia lists each file's licence.");
   }

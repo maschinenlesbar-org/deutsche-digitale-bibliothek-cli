@@ -445,6 +445,18 @@ test("getObjectMedia: a file that names no licence gets a note saying so, not on
   assert.doesNotMatch(all.notes.join(" "), /names no licence/);
 });
 
+test("getObject: a view whose metadata licence isn't CC0 is not told 'the metadata are CC0'", async () => {
+  const view = (rights: string | undefined) => ({ item: { title: "Objekt", ...(rights === undefined ? {} : { "metdata-rights": rights }), license: { resource: "http://rightsstatements.org/vocab/InC/1.0/" } } });
+  const inc = await getObject(answering(view("http://rightsstatements.org/vocab/InC/1.0/")), { id: PRINT });
+  assert.equal(inc.status === "ok" ? inc.rights.metadata : undefined, "http://rightsstatements.org/vocab/InC/1.0/");
+  assert.doesNotMatch(inc.notes.join(" "), /metadata are CC0/);
+  assert.match(inc.notes.join(" "), /metadata licence .*InC.*not CC0/);
+  const cc0 = await getObject(answering(view("http://creativecommons.org/publicdomain/zero/1.0/")), { id: PRINT });
+  assert.match(cc0.notes.join(" "), /metadata are CC0/);
+  const none = await getObject(answering(view(undefined)), { id: PRINT });
+  assert.match(none.notes.join(" "), /metadata are CC0/, "the API serves CC0 metadata; a view without the key is no exception");
+});
+
 test("chunksOf cuts at line ends, else after a tag, else hard, never inside a surrogate pair", () => {
   assert.deepEqual(chunksOf("ab\ncd\nef", 5), ["ab\ncd", "ef"]);
   assert.deepEqual(chunksOf("<a><b>", 4), ["<a>", "<b>"]);
