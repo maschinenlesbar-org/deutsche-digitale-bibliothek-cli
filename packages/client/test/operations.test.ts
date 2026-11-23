@@ -435,6 +435,16 @@ test("a component answer in the wrong shape is a parse error or read for what it
   await assert.rejects(listObjectChildren(answering({ numberOfResults: 3, hierarchy: "x" }), { id: SERIES }), DdbParseError);
 });
 
+test("getObjectMedia: a file that names no licence gets a note saying so, not only the general rights notes", async () => {
+  const unlicensed = { name: "Bild", mimetype: "image/jpeg", local_pathname: "https://x/1.jpg", primary: true };
+  const licensed = { name: "Scan", mimetype: "image/jpeg", local_pathname: "https://x/2.jpg", kind: "http://creativecommons.org/licenses/by/4.0/" };
+  const answer = await getObjectMedia(answering({ binary: [unlicensed, licensed] }), { id: PRINT });
+  assert.equal(answer.files[0]?.licence, undefined);
+  assert.match(answer.notes.join(" "), /1 of the 2 files names no licence \("Bild"\).*not CC0/);
+  const all = await getObjectMedia(clientOf(ddbApi()), { id: PRINT });
+  assert.doesNotMatch(all.notes.join(" "), /names no licence/);
+});
+
 test("chunksOf cuts at line ends, else after a tag, else hard, never inside a surrogate pair", () => {
   assert.deepEqual(chunksOf("ab\ncd\nef", 5), ["ab\ncd", "ef"]);
   assert.deepEqual(chunksOf("<a><b>", 4), ["<a>", "<b>"]);

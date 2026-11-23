@@ -870,7 +870,15 @@ export async function getObjectMedia(client: DdbClient, input: { id: string }): 
   if (files.length === 0) {
     return trace.done({ status: "empty", searched, files, reason: "The object lists no media files: it is described by metadata only (getObject has the description).", notes: [] });
   }
-  return trace.done({ status: "ok", searched, files, notes: [RIGHTS_NOTE.replace("(rights.media)", "(each file's licence)"), "Only links are given; nothing is downloaded."] });
+  const notes = [RIGHTS_NOTE.replace("(rights.media)", "(each file's licence)"), "Only links are given; nothing is downloaded."];
+  const unlicensed = files.filter((f) => f.licence === undefined);
+  if (unlicensed.length > 0) {
+    const named = unlicensed.slice(0, 5).map((f) => JSON.stringify(f.name ?? f.url ?? "unnamed")).join(", ");
+    notes.push(
+      `${unlicensed.length} of the ${files.length} ${files.length === 1 ? "file" : "files"} names no licence (${named}${unlicensed.length > 5 ? ", …" : ""}): don't assume one, and not CC0 (that is the metadata's licence); getObject's rights.media may give the object's media licence.`,
+    );
+  }
+  return trace.done({ status: "ok", searched, files, notes });
 }
 
 // ---- any other component ---------------------------------------------------------------------
