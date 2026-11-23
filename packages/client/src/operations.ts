@@ -259,6 +259,11 @@ function filterNotes(input: ObjectFilters): string[] {
   return notes;
 }
 
+/** The note of a total Solr marks as a lower bound (`numFoundExact: false`), or none. */
+function totalNotes(response: { numFound: number; numFoundExact?: boolean }): string[] {
+  return response.numFoundExact === false ? [`The index counted at least ${response.numFound} objects, not exactly (numFoundExact false): say "at least".`] : [];
+}
+
 /** The fields a search asks for: what a hit shows (no `_version_`, Solr's internal document version). */
 const HIT_FIELDS = "id,label,title,type_fct,objecttype,provider,place_fct,begin_time,end_time,license";
 
@@ -370,7 +375,7 @@ export async function searchObjects(client: DdbClient, input: SearchObjectsInput
   // tool could take it. It is left out with a note; paging goes on after what the API sent.
   const objects = docs.filter((doc) => typeof doc === "object" && doc !== null && itemIdProblem(doc.id) === undefined).map(hitOf);
   const dropped = docs.length - objects.length;
-  const notes = filterNotes(input);
+  const notes = [...filterNotes(input), ...totalNotes(answer.response)];
   if (dropped > 0) {
     notes.push(`${dropped} of the ${docs.length} documents the API sent have no usable id (32 upper-case letters and digits) and are left out.`);
   }
@@ -474,6 +479,7 @@ export async function countObjects(client: DdbClient, input: CountObjectsInput):
   });
   const notes = [
     ...filterNotes(input),
+    ...totalNotes(answer.response),
     ...(names.length > 0
       ? ["Facet values are as the index holds them: one place can come in several spellings (München, \"München, Oktoberfest\"), and places mix with regions. One object can carry several values, so the counts don't add up to the total."]
       : []),

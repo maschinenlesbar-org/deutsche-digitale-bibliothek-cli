@@ -182,6 +182,16 @@ test("searchObjects: a document without a usable id is left out with a note, nev
   assert.equal(empty.nextOffset, 1);
 });
 
+test("a total Solr marks as a lower bound (numFoundExact false) says so in a note", async () => {
+  const lowerBound = (numFoundExact: boolean) =>
+    new DdbClient({ transport: makeMockTransport(() => jsonResponse({ response: { numFound: 1000, start: 0, numFoundExact, docs: [] } })).transport, maxRetries: 0 });
+  const search = await searchObjects(lowerBound(false), { query: "x", offset: 1000 });
+  assert.match(search.notes.join(" "), /at least 1000/);
+  const count = await countObjects(lowerBound(false), { query: "x" });
+  assert.match(count.notes.join(" "), /at least 1000/);
+  assert.doesNotMatch((await countObjects(lowerBound(true), { query: "x" })).notes.join(" "), /at least/);
+});
+
 test("searchObjects: a bad page size, year or filter is refused before any request", async () => {
   const mock = ddbApi();
   await assert.rejects(searchObjects(clientOf(mock), { query: "x", limit: 51 }), DdbValidationError);
