@@ -150,9 +150,19 @@ test("searchObjects: nothing found is empty with what was searched; a page past 
   assert.equal(none.status, "empty");
   assert.deepEqual(none.searched, { query: "Nichtsda", filters: ["type_fct:mediatype_005"] });
   assert.match(none.reason ?? "", /Try fewer filters/);
-  const past = await searchObjects(clientOf(ddbApi()), { query: "Oktoberfest", offset: 5 });
+  const past = await searchObjects(clientOf(ddbApi()), { query: "Oktoberfest", offset: 1617 });
   assert.equal(past.status, "empty");
-  assert.match(past.reason ?? "", /1617 objects match; offset 5 is past the end/);
+  assert.match(past.reason ?? "", /1617 objects match; offset 1617 is past the end/);
+});
+
+test("searchObjects: a count with no documents before its end is not 'past the end': the answer contradicts itself and says so", async () => {
+  const mock = makeMockTransport(() => jsonResponse({ response: { numFound: 7, start: 0, docs: [] } }));
+  const answer = await searchObjects(new DdbClient({ transport: mock.transport, maxRetries: 0 }), { query: "Oktoberfest", limit: 3 });
+  assert.equal(answer.status, "empty");
+  assert.equal(answer.total, 7);
+  assert.doesNotMatch(answer.reason ?? "", /past the end/);
+  assert.match(answer.reason ?? "", /counts 7 objects but sent none for offset 0/);
+  assert.equal(answer.nextOffset, undefined);
 });
 
 test("searchObjects: a document without a usable id is left out with a note, never a hit with the page …/item/undefined", async () => {

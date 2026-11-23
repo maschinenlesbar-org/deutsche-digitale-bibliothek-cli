@@ -380,9 +380,11 @@ export async function searchObjects(client: DdbClient, input: SearchObjectsInput
     result.reason =
       docs.length > 0
         ? `The API sent ${docs.length === 1 ? "1 document" : `${docs.length} documents`} for offset ${offset}, with no usable id.${result.nextOffset === undefined ? "" : " The next page may have some (nextOffset)."}`
-        : total > 0
+        : offset >= total && total > 0
           ? `${total} objects match; offset ${offset} is past the end.`
-          : "No object matches the query with these filters. Try fewer filters or other words; place, provider and object type need the index's exact spelling (countObjects lists the values).";
+          : total > 0
+            ? `The API counts ${total} objects but sent none for offset ${offset}: its answer contradicts itself. Ask again; if it repeats, try other words or filters.`
+            : "No object matches the query with these filters. Try fewer filters or other words; place, provider and object type need the index's exact spelling (countObjects lists the values).";
   }
   return trace.done(result);
 }
