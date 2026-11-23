@@ -10,6 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { listTools } from "../src/mcp/server.js";
+import { SIZE_HINT, TOOLS } from "../src/mcp/tools.js";
 import { connect } from "./harness.js";
 import { dayNumberOfYear } from "@maschinenlesbar.org/deutsche-digitale-bibliothek-client";
 import { ddbApi, ILLUSTRATION, PRINT, RECORD, SECTION, SERIES, VOLUME } from "./helpers.js";
@@ -18,6 +19,37 @@ const API = "https://api.deutsche-digitale-bibliothek.de/2";
 
 test("seven tools: the search use cases, the object use cases, then any other component", () => {
   assert.deepEqual(listTools().map((t) => t.name), ["searchObjects", "countObjects", "getObject", "getObjectContext", "listObjectChildren", "getObjectMedia", "getObjectRecord"]);
+});
+
+/** Each "option (tool, tool)" a hint names, checked against the tools' input schemas. */
+function assertOptionsFit(text: string): void {
+  const schemas = new Map(TOOLS.map((tool) => [tool.name, Object.keys((tool.inputSchema as { properties: Record<string, unknown> }).properties)]));
+  const pairs = [...text.matchAll(/(\w+(?: or \w+)*) \((\w+(?:, \w+)*)\)/g)];
+  assert.ok(pairs.length >= 2, text);
+  for (const [, options, tools] of pairs) {
+    for (const tool of (tools as string).split(", ")) {
+      for (const option of (options as string).split(" or ")) assert.ok(schemas.get(tool)?.includes(option), `${tool} takes no ${option}: ${text}`);
+    }
+  }
+  const named = new Set(pairs.flatMap(([, options]) => (options as string).split(" or ")));
+  for (const option of ["facets", "limit", "page"]) {
+    assert.ok(!new RegExp(`\\b${option}\\b`).test(text) || named.has(option), `${option} named without its tools: ${text}`);
+  }
+}
+
+test("the deadline's advice fits every tool: a one-object call is told to try again, each option is named with the tools that take it", async () => {
+  const hanging = { transport: (): Promise<never> => new Promise<never>(() => {}) };
+  const connection = await connect({ transport: hanging, config: { callTimeoutMs: 30 } });
+  const text = (await connection.call("getObject", { id: PRINT })).content[0]?.text ?? "";
+  await connection.close();
+  assert.match(text, /took longer than .* and was stopped/);
+  assert.match(text, /try again shortly/);
+  assert.match(text, /getObject\b.*can't ask for less/);
+  assertOptionsFit(text);
+});
+
+test("the size cap's advice names each option with the tools that take it", () => {
+  assertOptionsFit(SIZE_HINT);
 });
 
 test("searchObjects: hits with the media type in words and dates; the source is the request as sent; the CC0 licence with the media caveat", async () => {
