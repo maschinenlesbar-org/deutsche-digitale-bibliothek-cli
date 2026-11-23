@@ -104,7 +104,8 @@ is a tool error that says what to change.
 - **Read-only.** No tool changes anything, here or upstream.
 - **No authentication** on HTTP unless you give one. It listens on loopback by default; it checks
   the `Host` header and, from a browser, the `Origin` (only the origins given with
-  `--allowed-origins`, matched exactly) against DNS rebinding and other web pages. With
+  `--allowed-origins`, matched exactly) against DNS rebinding and other web pages; a page on one
+  of those origins gets CORS (its preflight answered, the answers readable). With
   `--auth-token-file <path>` every request must send `Authorization: Bearer <token>` (the file holds
   one token of at least 32 characters, mode 600, owned by the user the server runs as; read once at
   start; `(umask 077; openssl rand -hex 32 > mcp-token)` makes one); anything else is answered 401.
