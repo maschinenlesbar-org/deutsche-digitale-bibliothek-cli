@@ -77,11 +77,12 @@ For scripts and shared configs, pin a release and its digest from the
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
 `source` it came from (an answer a redirect fetched from another host says so there: "…
 (answered by https://other.example after a redirect)", and a WARN record names both) and the data
-licence. Counts come from the index's total, never from
-paging; years are turned into the index's day numbers; facet values are as the index holds them
-(one place can come in several spellings). An unknown id, an object without a hierarchy, media or
-IIIF manifest, a view missing in a language: each is said in words, with what to try. A failure
-is a tool error that says what to change.
+licence. Counts come from the index's total, never from paging; years are turned into the index's
+day numbers; facet values are as the index holds them (one place can come in several spellings).
+An unknown id, an object without a hierarchy, media or IIIF manifest, a view missing in a
+language: each is said in words, with what to try. A text over 2000 characters is cut and ends in
+`…[cut, N characters in all]`, and the answer says `truncated`. A failure is a tool error that
+says what to change.
 
 ## Options
 
