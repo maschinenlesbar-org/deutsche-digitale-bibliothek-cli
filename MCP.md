@@ -82,7 +82,8 @@ day numbers; facet values are as the index holds them (one place can come in sev
 An unknown id, an object without a hierarchy, media or IIIF manifest, a view missing in a
 language: each is said in words, with what to try. A text over 2000 characters is cut and ends in
 `…[cut, N characters in all]`, and the answer says `truncated`. A failure is a tool error that
-says what to change.
+says what to change (one over 5000 characters loses its middle, never its end, where the reason
+is).
 
 ## Options
 
