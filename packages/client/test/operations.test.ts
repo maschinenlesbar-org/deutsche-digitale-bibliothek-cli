@@ -155,6 +155,23 @@ test("searchObjects: nothing found is empty with what was searched; a page past 
   assert.match(past.reason ?? "", /1617 objects match; offset 5 is past the end/);
 });
 
+test("searchObjects: a document without a usable id is left out with a note, never a hit with the page …/item/undefined", async () => {
+  const GOOD = "KE43D2INXYOPHOEEME6T3BEJIMIKTPLU";
+  const docs = [{ label: ["kein id"] }, { id: "lowercase" }, { id: GOOD, label: ["gut"] }, { id: 42 }];
+  const mock = makeMockTransport(() => jsonResponse({ response: { numFound: 9, start: 0, docs } }));
+  const answer = await searchObjects(new DdbClient({ transport: mock.transport, maxRetries: 0 }), { query: "x", limit: 4 });
+  assert.equal(answer.status, "ok");
+  assert.deepEqual(answer.objects.map((o) => o.id), [GOOD]);
+  assert.ok(answer.objects.every((o) => !o.page.endsWith("/undefined")));
+  assert.match(answer.notes.join(" "), /3 of the 4 documents .* no usable id .* left out/);
+  assert.equal(answer.nextOffset, 4, "the next page starts after the documents the API sent, the dropped ones too");
+  const none = makeMockTransport(() => jsonResponse({ response: { numFound: 9, start: 0, docs: [{ label: ["kein id"] }] } }));
+  const empty = await searchObjects(new DdbClient({ transport: none.transport, maxRetries: 0 }), { query: "x", limit: 1 });
+  assert.equal(empty.status, "empty");
+  assert.match(empty.reason ?? "", /no usable id/);
+  assert.equal(empty.nextOffset, 1);
+});
+
 test("searchObjects: a bad page size, year or filter is refused before any request", async () => {
   const mock = ddbApi();
   await assert.rejects(searchObjects(clientOf(mock), { query: "x", limit: 51 }), DdbValidationError);

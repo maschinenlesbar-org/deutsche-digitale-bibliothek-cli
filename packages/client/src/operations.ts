@@ -21,7 +21,7 @@ import { itemComponentPath, searchRequest, type DdbClient } from "./client.js";
 import { DdbApiError, DdbValidationError } from "./errors.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import type { ItemPart, ItemResult, JsonObject, JsonValue, SearchParams, SolrDoc } from "./types.js";
-import { assertValid, langProblem, normalizeItemId, normalizeToken, textProblem } from "./validate.js";
+import { assertValid, itemIdProblem, langProblem, normalizeItemId, normalizeToken, textProblem } from "./validate.js";
 
 // ---- the requests an answer made -------------------------------------------------------------
 
@@ -365,15 +365,24 @@ export async function searchObjects(client: DdbClient, input: SearchObjectsInput
   const searched: ObjectSearched = { query: input.query, filters };
   const answer = await traced(client, trace, { query: input.query, rows: limit, start: offset, fields: HIT_FIELDS, ...(filters.length > 0 ? { filters } : {}) });
   const total = answer.response.numFound;
-  const objects = answer.response.docs.map(hitOf);
+  const docs = answer.response.docs;
+  // A document without a valid id is no hit: its page would be …/item/undefined, and no other
+  // tool could take it. It is left out with a note; paging goes on after what the API sent.
+  const objects = docs.filter((doc) => typeof doc === "object" && doc !== null && itemIdProblem(doc.id) === undefined).map(hitOf);
+  const dropped = docs.length - objects.length;
   const notes = filterNotes(input);
+  if (dropped > 0) {
+    notes.push(`${dropped} of the ${docs.length} documents the API sent have no usable id (32 upper-case letters and digits) and are left out.`);
+  }
   const result: ObjectSearch = { status: objects.length > 0 ? "ok" : "empty", searched, total, offset, objects, notes };
-  if (offset + objects.length < total && objects.length > 0) result.nextOffset = offset + objects.length;
+  if (offset + docs.length < total && docs.length > 0) result.nextOffset = offset + docs.length;
   if (objects.length === 0) {
     result.reason =
-      total > 0
-        ? `${total} objects match; offset ${offset} is past the end.`
-        : "No object matches the query with these filters. Try fewer filters or other words; place, provider and object type need the index's exact spelling (countObjects lists the values).";
+      docs.length > 0
+        ? `The API sent ${docs.length === 1 ? "1 document" : `${docs.length} documents`} for offset ${offset}, with no usable id.${result.nextOffset === undefined ? "" : " The next page may have some (nextOffset)."}`
+        : total > 0
+          ? `${total} objects match; offset ${offset} is past the end.`
+          : "No object matches the query with these filters. Try fewer filters or other words; place, provider and object type need the index's exact spelling (countObjects lists the values).";
   }
   return trace.done(result);
 }
