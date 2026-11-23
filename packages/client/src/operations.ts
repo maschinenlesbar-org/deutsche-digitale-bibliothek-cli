@@ -18,7 +18,7 @@
 // kept (`requestsOf(answer)`), for the answer's source.
 
 import { itemComponentPath, searchRequest, type DdbClient } from "./client.js";
-import { DdbApiError, DdbValidationError } from "./errors.js";
+import { DdbApiError, DdbParseError, DdbValidationError } from "./errors.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import type { ItemPart, ItemResult, JsonObject, JsonValue, SearchParams, SolrDoc } from "./types.js";
 import { assertValid, itemIdProblem, langProblem, normalizeItemId, normalizeToken, textProblem } from "./validate.js";
@@ -497,6 +497,10 @@ async function component(client: DdbClient, trace: Trace, id: string, part: Item
   return result;
 }
 
+/** A component's 2xx answer without its documented shape: an error, never read as "nothing there". */
+const shapeError = (part: string, id: string, expected: string): DdbParseError =>
+  new DdbParseError(`The ${part} of ${id} is not in the documented shape: expected ${expected}.`);
+
 /** True for an HTTP 404 of the API. */
 const notFound = (err: unknown): err is DdbApiError => err instanceof DdbApiError && err.status === 404;
 
@@ -632,6 +636,7 @@ export async function getObject(client: DdbClient, input: GetObjectInput): Promi
       return trace.done({ status: "empty", searched, reason: `No DDB object has the id ${id} (HTTP 404 for its view, with and without lang). Take the id from a fresh searchObjects answer.`, notes });
     }
   }
+  if (object(object(result.json)?.["item"]) === undefined) throw shapeError("view", id, 'an "item" object');
   const view = viewOf(id, result.json);
   notes.push(RIGHTS_NOTE);
   if (view.rights.media === undefined && view.rights.statement === undefined && view.rights.metadata === undefined) {
@@ -783,14 +788,21 @@ export async function listObjectChildren(client: DdbClient, input: { id: string;
     return trace.done({ status: "empty", searched, total: 0, offset, children: [], reason: `No DDB object has the id ${id} (HTTP 404 for its children).`, notes: [] });
   }
   const json = object(result.json);
-  const children = (Array.isArray(json?.["hierarchy"]) ? (json?.["hierarchy"] as JsonValue[]) : []).map(entryOf).filter((e): e is HierarchyEntry => e !== undefined);
-  const count = json?.["numberOfResults"];
-  const total = typeof count === "number" ? count : children.length;
-  const answer: ObjectChildren = { status: children.length > 0 ? "ok" : "empty", searched, total, offset, children, notes: [] };
-  if (children.length > 0 && offset + children.length < total) answer.nextOffset = offset + children.length;
+  const listed = json?.["hierarchy"];
+  if (json === undefined || !(Array.isArray(listed) || listed === undefined || listed === null)) throw shapeError("children", id, 'an object with a "hierarchy" list');
+  const children = (Array.isArray(listed) ? listed : []).map(entryOf).filter((e): e is HierarchyEntry => e !== undefined);
+  const count = json["numberOfResults"];
+  const counted = typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
+  // Without a count, the total is what this page shows it to be at least: never below the offset.
+  const total = counted ? count : children.length > 0 ? offset + children.length : 0;
+  const notes = counted ? [] : ["The API's answer gives no count of the children: total counts only up to this page."];
+  const answer: ObjectChildren = { status: children.length > 0 ? "ok" : "empty", searched, total, offset, children, notes };
+  if (children.length > 0 && (counted ? offset + children.length < total : children.length >= limit)) answer.nextOffset = offset + children.length;
   if (children.length === 0) {
     answer.reason =
-      total > 0
+      !counted && offset > 0
+        ? `The API sent no children for offset ${offset}, and no count: there may be none from there on; offset 0 shows the first.`
+        : total > 0
         ? `It has ${total} children; offset ${offset} is past the end.`
         : "The API lists no children for it: a single object or the lowest level of its hierarchy. getObjectContext says what it is part of.";
   }
@@ -833,9 +845,13 @@ export async function getObjectMedia(client: DdbClient, input: { id: string }): 
     if (!notFound(err)) throw err;
     return trace.done({ status: "empty", searched, files: [], reason: `No DDB object has the id ${id} (HTTP 404 for its media).`, notes: [] });
   }
-  const list = object(result.json)?.["binary"];
+  const json = object(result.json);
+  const list = json?.["binary"];
+  // One file can come as an object instead of a list of one: it is still a file.
+  const entries = Array.isArray(list) ? list : object(list) !== undefined ? [list as JsonValue] : list === undefined || list === null ? [] : undefined;
+  if (json === undefined || entries === undefined) throw shapeError("media list", id, 'an object with a "binary" list');
   const files: MediaFile[] = [];
-  for (const entry of Array.isArray(list) ? list : []) {
+  for (const entry of entries) {
     const b = object(entry);
     if (b === undefined) continue;
     const file: MediaFile = {};

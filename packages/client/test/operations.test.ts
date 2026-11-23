@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DdbClient } from "../src/client.js";
-import { DdbApiError, DdbValidationError } from "../src/errors.js";
+import { DdbApiError, DdbParseError, DdbValidationError } from "../src/errors.js";
 import {
   chunksOf,
   countObjects,
@@ -410,6 +410,29 @@ test("getObjectRecord: a 404 for iiif means no manifest, not a bad id; a part wi
   assert.equal(answer.status, "empty");
   assert.match(answer.reason ?? "", /has no IIIF manifest.*says nothing about the id/);
   await assert.rejects(getObjectRecord(clientOf(ddbApi()), { id: PRINT, part: "view" as never }), /part: expected one of edm/);
+});
+
+/** A client whose every item component answers `body` (200). */
+const answering = (body: unknown) => new DdbClient({ transport: makeMockTransport(() => jsonResponse(body)).transport, maxRetries: 0 });
+
+test("a component answer in the wrong shape is a parse error or read for what it holds, never 'nothing there'", async () => {
+  await assert.rejects(getObject(answering({}), { id: PRINT }), (err: unknown) => err instanceof DdbParseError && /view of .*"item" object/.test(err.message));
+  const file = { name: "Bild", mimetype: "image/jpeg", local_pathname: "https://x/1.jpg", kind: "http://rightsstatements.org/vocab/InC/1.0/" };
+  const one = await getObjectMedia(answering({ binary: file }), { id: PRINT });
+  assert.equal(one.status, "ok", "one file given as an object, not in a list, is still a file");
+  assert.deepEqual(one.files.map((f) => f.url), ["https://x/1.jpg"]);
+  await assert.rejects(getObjectMedia(answering({ binary: "x" }), { id: PRINT }), DdbParseError);
+  await assert.rejects(getObjectMedia(answering([]), { id: PRINT }), DdbParseError);
+  assert.equal((await getObjectMedia(answering({ binary: [] }), { id: PRINT })).status, "empty");
+  const three = [1, 2, 3].map((n) => ({ id: `CHILD${n}`.padEnd(32, "X"), label: `Kind ${n}` }));
+  const uncounted = await listObjectChildren(answering({ hierarchy: three }), { id: SERIES, offset: 40 });
+  assert.equal(uncounted.children.length, 3);
+  assert.ok(uncounted.total >= 43, `a total below the offset asked: ${uncounted.total}`);
+  assert.match(uncounted.notes.join(" "), /no count/);
+  assert.equal(uncounted.nextOffset, undefined, "3 of 20: the last page");
+  const full = await listObjectChildren(answering({ hierarchy: three }), { id: SERIES, limit: 3 });
+  assert.equal(full.nextOffset, 3, "a full page without a count may have a next one");
+  await assert.rejects(listObjectChildren(answering({ numberOfResults: 3, hierarchy: "x" }), { id: SERIES }), DdbParseError);
 });
 
 test("chunksOf cuts at line ends, else after a tag, else hard, never inside a surrogate pair", () => {
