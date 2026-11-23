@@ -1,6 +1,6 @@
 {
   "name": "@maschinenlesbar.org/deutsche-digitale-bibliothek-mcp",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "MCP server for the Deutsche Digitale Bibliothek: search Germany's digitised cultural heritage, count and facet it, and read one object's record, rights, media and hierarchy, for AI agents (stdio and Streamable HTTP)",
   "type": "module",
   "bin": {
