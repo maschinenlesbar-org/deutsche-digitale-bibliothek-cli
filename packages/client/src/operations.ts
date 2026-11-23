@@ -719,6 +719,16 @@ export async function getObjectContext(client: DdbClient, input: { id: string })
   // root first, and records and institutions are told apart by their type, not their position.
   const at = entries.findIndex((e) => e.id === id);
   const others = entries.filter((e) => e.id !== id);
+  if (others.length === 0) {
+    return trace.done({
+      status: "empty",
+      searched,
+      partOf: [],
+      reason:
+        "The API lists only the object itself in its hierarchy, and no institution. That doesn't mean it is part of nothing: take the holding institution from getObject (institution), and the containing work from getObjectRecord with part source-record.",
+      notes: [],
+    });
+  }
   const isInstitution = (e: HierarchyEntry) => e.type === "institution";
   const rootFirst = (at !== -1 && at === entries.length - 1) || (at === -1 && others[0] !== undefined && isInstitution(others[0]) && others.some((e) => !isInstitution(e)));
   const chain = rootFirst ? [...others].reverse() : others;
@@ -730,7 +740,11 @@ export async function getObjectContext(client: DdbClient, input: { id: string })
     notes.push("The API's chain lists a record after the institution, out of its usual order (the records nearest first, then the holder): the order of partOf may not be the real one; listObjectChildren of a record shows what is below it.");
   }
   const [heldBy, ...above] = institutions;
-  if (partOf.length === 0) notes.push("No record above it: it is a single object, held by the institution.");
+  if (heldBy === undefined) {
+    notes.push("The API's chain names no holding institution: take the holder from getObject (institution).");
+  } else if (partOf.length === 0) {
+    notes.push("No record above it: it is a single object, held by the institution.");
+  }
   const answer: ObjectContext = { status: "ok", searched, partOf, notes };
   if (heldBy !== undefined) answer.heldBy = heldBy;
   if (above.length > 0) answer.holderBelongsTo = above;

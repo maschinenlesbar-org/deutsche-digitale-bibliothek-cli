@@ -335,6 +335,18 @@ test("getObjectContext: records and institutions are told apart by type, whateve
   assert.doesNotMatch(mixed.notes.join(" "), /single object/);
 });
 
+test("getObjectContext: a chain without an institution names no holder it doesn't have; one of only the object is empty", async () => {
+  const onlyObject = await contextOf([{ id: PRINT, label: "Objekt", type: null }]);
+  assert.equal(onlyObject.status, "empty");
+  assert.equal(onlyObject.heldBy, undefined);
+  assert.doesNotMatch(onlyObject.reason ?? "", /held by the institution/);
+  assert.match(onlyObject.reason ?? "", /getObject/);
+  const noHolder = await contextOf([{ id: PRINT, label: "Akte", type: "htype_034" }, ENTRY("SERIE", "Serie", "htype_031")]);
+  assert.equal(noHolder.status, "ok");
+  assert.deepEqual(noHolder.partOf.map((e) => e.label), ["Serie"]);
+  assert.match(noHolder.notes.join(" "), /names no holding institution.*getObject/);
+});
+
 test("getObjectContext: an empty chain is not 'part of nothing': it says where the holder and the containing work are", async () => {
   const answer = await getObjectContext(clientOf(ddbApi()), { id: SECTION });
   assert.equal(answer.status, "empty");
