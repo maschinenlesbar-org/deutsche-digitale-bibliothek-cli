@@ -190,6 +190,23 @@ test("countObjects: rows 0, facets as value/count pairs with zero counts dropped
   assert.match(answer.notes.join(" "), /several spellings/);
 });
 
+test("countObjects: a facet missing from the answer is not 'no values, complete'; Solr's map form is read as pairs", async () => {
+  const answerWith = (facetFields: unknown) =>
+    makeMockTransport(() => jsonResponse({ response: { numFound: 1617, start: 0, docs: [] }, facet_counts: { facet_fields: facetFields } }));
+  const missing = await countObjects(new DdbClient({ transport: answerWith({ place_fct: ["München", 10] }).transport, maxRetries: 0 }), { query: "x", facets: ["place", "provider"] });
+  assert.deepEqual(missing.facets[0]?.values, [{ value: "München", count: 10 }]);
+  assert.deepEqual(missing.facets[1]?.values, []);
+  assert.equal(missing.facets[1]?.complete, false, "no values listed is not a complete list of none");
+  assert.match(missing.notes.join(" "), /provider.*not in the API's answer.*unknown, not none/);
+  const mapped = await countObjects(new DdbClient({ transport: answerWith({ place_fct: { München: 10, Berlin: 5, Leer: 0 } }).transport, maxRetries: 0 }), { query: "x", facets: ["place"], limit: 3 });
+  assert.deepEqual(mapped.facets[0]?.values, [{ value: "München", count: 10 }, { value: "Berlin", count: 5 }]);
+  assert.equal(mapped.facets[0]?.complete, true);
+  assert.doesNotMatch(mapped.notes.join(" "), /not in the API's answer/);
+  const odd = await countObjects(new DdbClient({ transport: answerWith({ place_fct: "München" }).transport, maxRetries: 0 }), { query: "x", facets: ["place"] });
+  assert.equal(odd.facets[0]?.complete, false);
+  assert.match(odd.notes.join(" "), /place.*not in the API's answer/);
+});
+
 test("countObjects: the total alone without facets; an unknown facet is refused before any request; none is empty", async () => {
   const mock = ddbApi();
   const total = await countObjects(clientOf(mock), { query: "Oktoberfest" });

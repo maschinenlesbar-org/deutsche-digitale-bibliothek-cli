@@ -396,7 +396,7 @@ export interface FacetCount {
   name: FacetName;
   field: string;
   values: FacetValue[];
-  /** False when the facet may hold more values than listed (the limit was reached). */
+  /** False when the facet may hold more values than listed (the limit was reached), or the answer had no counts for it (a note says so). */
   complete: boolean;
 }
 
@@ -439,9 +439,17 @@ export async function countObjects(client: DdbClient, input: CountObjectsInput):
   });
   const total = answer.response.numFound;
   const fields = ((answer.facet_counts as JsonObject | undefined)?.["facet_fields"] ?? {}) as JsonObject;
+  const unread: FacetName[] = [];
   const facets = names.map((name): FacetCount => {
     const flat = fields[FACETS[name]];
-    const pairs = Array.isArray(flat) ? flat : [];
+    // Solr's flat [value, count, …] list, or its map form ({value: count}, json.nl=map). A facet
+    // missing from the answer, or in any other shape, is unknown: never "no values, complete".
+    const map = object(flat);
+    const pairs = Array.isArray(flat) ? flat : map !== undefined ? Object.entries(map).flat() : undefined;
+    if (pairs === undefined) {
+      unread.push(name);
+      return { name, field: FACETS[name], values: [], complete: false };
+    }
     const listed = Math.floor(pairs.length / 2);
     const values: FacetValue[] = [];
     for (let i = 0; i + 1 < pairs.length; i += 2) {
@@ -457,6 +465,9 @@ export async function countObjects(client: DdbClient, input: CountObjectsInput):
     ...filterNotes(input),
     ...(names.length > 0
       ? ["Facet values are as the index holds them: one place can come in several spellings (München, \"München, Oktoberfest\"), and places mix with regions. One object can carry several values, so the counts don't add up to the total."]
+      : []),
+    ...(unread.length > 0
+      ? [`The counts of ${unread.join(", ")} were not in the API's answer (or not as a list of values and counts): their values are unknown, not none. Ask again.`]
       : []),
   ];
   const result: ObjectCount = { status: total > 0 ? "ok" : "empty", searched: { query: input.query, filters }, total, facets, notes };
