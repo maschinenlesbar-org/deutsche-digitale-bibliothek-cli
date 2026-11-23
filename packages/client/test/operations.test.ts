@@ -90,6 +90,22 @@ test("a hit whose begin_time is the placeholder 0, or no date at all, shows no d
   assert.deepEqual(hitOf({ id: ID, end_time: [661089] }).date, { to: "1810-12-31" }, "no begin_time at all: the end is still a date");
 });
 
+test("an invisible character in place, provider, objectType or keyword is refused naming that argument, not the raw filters", async () => {
+  for (const key of ["place", "provider", "objectType", "keyword"] as const) {
+    for (const bad of ["Bau\u202Ehaus", "Bau\u200Bhaus"]) {
+      assert.throws(() => filterQueries({ query: "x", [key]: bad }), (err: unknown) => {
+        assert.ok(err instanceof DdbValidationError);
+        assert.match(err.message, new RegExp(`^Invalid ${key}: .*invisible character \\(U\\+20(2E|0B)\\)`));
+        assert.doesNotMatch(err.message, /filters|_fct/);
+        return true;
+      });
+    }
+  }
+  const mock = ddbApi();
+  await assert.rejects(countObjects(clientOf(mock), { query: "x", place: "Bau\u202Ehaus" }), /^DdbValidationError: Invalid place:/);
+  assert.equal(mock.calls.length, 0);
+});
+
 // ---- searchObjects ---------------------------------------------------------------------------
 
 test("searchObjects: the total is numFound, each hit with its media type in words, its dates and the portal page; no _version_", async () => {

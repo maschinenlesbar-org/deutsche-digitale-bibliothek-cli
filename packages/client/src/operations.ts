@@ -21,7 +21,7 @@ import { itemComponentPath, searchRequest, type DdbClient } from "./client.js";
 import { DdbApiError, DdbValidationError } from "./errors.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import type { ItemPart, ItemResult, JsonObject, JsonValue, SearchParams, SolrDoc } from "./types.js";
-import { assertValid, langProblem, normalizeItemId, normalizeToken } from "./validate.js";
+import { assertValid, langProblem, normalizeItemId, normalizeToken, textProblem } from "./validate.js";
 
 // ---- the requests an answer made -------------------------------------------------------------
 
@@ -225,6 +225,9 @@ export function filterQueries(input: ObjectFilters): string[] {
     const value = input[key];
     if (value === undefined) continue;
     if (typeof value !== "string" || value.trim() === "") throw new DdbValidationError(`Invalid ${key}: expected a non-empty string.`);
+    // Checked here, by the argument's name: the client would refuse the filter query built from
+    // it as a "filters entry", a field the caller never set.
+    assertValid(key, value, textProblem);
     fq.push(`${field}:${phrase(value)}`);
   }
   const from = yearOf("fromYear", input.fromYear);
