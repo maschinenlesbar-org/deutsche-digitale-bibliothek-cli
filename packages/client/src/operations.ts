@@ -685,7 +685,9 @@ export interface ObjectContext {
  * What an object is part of, and who holds it, from `parents`: the API's chain starts with the
  * object itself (skipped) and ends with the institution (`heldBy`, not a parent record), and
  * sometimes with the organisation it belongs to after it (`holderBelongsTo`: the Staatsbibliothek
- * zu Berlin, then the Stiftung Preußischer Kulturbesitz). An empty
+ * zu Berlin, then the Stiftung Preußischer Kulturbesitz). Records and institutions are told
+ * apart by their type, not their place in the chain, and a chain that ends with the object is
+ * read root first; a record after the institution gets a note. An empty
  * chain is not "no parent": a section of a digitised book answers none although it is part of
  * the volume, so `empty` says where to look instead.
  */
@@ -711,15 +713,25 @@ export async function getObjectContext(client: DdbClient, input: { id: string })
       notes: [],
     });
   }
-  const rest = entries[0]?.id === id ? entries.slice(1) : entries;
-  // The records come first, then the institutions: the nearest holds the object, any after it
-  // are the organisations it belongs to.
-  const first = rest.findIndex((e) => e.type === "institution");
-  const partOf = first === -1 ? rest : rest.slice(0, first);
-  const institutions = first === -1 ? [] : rest.slice(first);
-  const notes = partOf.length === 0 ? ["No record above it: it is a single object, held by the institution."] : [];
-  const answer: ObjectContext = { status: "ok", searched, partOf, notes };
+  // The live chains are nearest first: the object, the records above it, then the institutions
+  // (the holder, then any organisation it belongs to). The order isn't trusted: the object is
+  // taken out wherever it is, a chain that ends with it (or starts with an institution) is read
+  // root first, and records and institutions are told apart by their type, not their position.
+  const at = entries.findIndex((e) => e.id === id);
+  const others = entries.filter((e) => e.id !== id);
+  const isInstitution = (e: HierarchyEntry) => e.type === "institution";
+  const rootFirst = (at !== -1 && at === entries.length - 1) || (at === -1 && others[0] !== undefined && isInstitution(others[0]) && others.some((e) => !isInstitution(e)));
+  const chain = rootFirst ? [...others].reverse() : others;
+  const partOf = chain.filter((e) => !isInstitution(e));
+  const institutions = chain.filter(isInstitution);
+  const firstInstitution = chain.findIndex(isInstitution);
+  const notes: string[] = [];
+  if (firstInstitution !== -1 && chain.slice(firstInstitution).some((e) => !isInstitution(e))) {
+    notes.push("The API's chain lists a record after the institution, out of its usual order (the records nearest first, then the holder): the order of partOf may not be the real one; listObjectChildren of a record shows what is below it.");
+  }
   const [heldBy, ...above] = institutions;
+  if (partOf.length === 0) notes.push("No record above it: it is a single object, held by the institution.");
+  const answer: ObjectContext = { status: "ok", searched, partOf, notes };
   if (heldBy !== undefined) answer.heldBy = heldBy;
   if (above.length > 0) answer.holderBelongsTo = above;
   return trace.done(answer);

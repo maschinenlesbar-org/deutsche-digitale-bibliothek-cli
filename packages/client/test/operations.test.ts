@@ -315,6 +315,26 @@ test("getObjectContext: the chain can end in two institutions (a library and the
   assert.equal(single.holderBelongsTo, undefined, "one institution: nothing above it");
 });
 
+/** getObjectContext on a crafted `parents` chain for PRINT. */
+const contextOf = (hierarchy: object[]) =>
+  getObjectContext(new DdbClient({ transport: makeMockTransport(() => jsonResponse({ numberOfResults: hierarchy.length, hierarchy })).transport, maxRetries: 0 }), { id: PRINT });
+const ENTRY = (id: string, label: string, type: string | null) => ({ id: id.padEnd(32, "X"), label, type });
+
+test("getObjectContext: records and institutions are told apart by type, whatever the order of the chain", async () => {
+  const object = { id: PRINT, label: "Akte", type: "htype_034" };
+  const rootFirst = await contextOf([ENTRY("ARCHIV", "Archiv X", "institution"), ENTRY("BESTAND", "Bestand", "htype_030"), ENTRY("SERIE", "Serie", "htype_031"), object]);
+  assert.deepEqual(rootFirst.partOf.map((e) => e.label), ["Serie", "Bestand"], "nearest first");
+  assert.equal(rootFirst.heldBy?.label, "Archiv X");
+  assert.equal(rootFirst.holderBelongsTo, undefined);
+  assert.doesNotMatch(rootFirst.notes.join(" "), /single object/);
+  const mixed = await contextOf([{ ...object, label: "Objekt" }, ENTRY("MUSEUM", "Museum", "institution"), ENTRY("SAMMLUNG", "Sammlung", "htype_030")]);
+  assert.deepEqual(mixed.partOf.map((e) => e.label), ["Sammlung"], "a record is never an organisation the holder belongs to");
+  assert.equal(mixed.heldBy?.label, "Museum");
+  assert.equal(mixed.holderBelongsTo, undefined);
+  assert.match(mixed.notes.join(" "), /order/);
+  assert.doesNotMatch(mixed.notes.join(" "), /single object/);
+});
+
 test("getObjectContext: an empty chain is not 'part of nothing': it says where the holder and the containing work are", async () => {
   const answer = await getObjectContext(clientOf(ddbApi()), { id: SECTION });
   assert.equal(answer.status, "empty");
