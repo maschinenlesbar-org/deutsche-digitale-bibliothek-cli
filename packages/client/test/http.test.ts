@@ -55,6 +55,32 @@ test("enforces maxResponseBytes", async () => {
   );
 });
 
+test("a signal its caller aborts stops the request as aborted, not as a timeout it didn't have; the engine's deadline keeps its text", async () => {
+  // The MCP server passes a tool call's signal to each request: a cancelled call or its deadline
+  // read "Request exceeded the 30000ms deadline", a timeout that never passed. Each signal aborts
+  // once the server has the request, which never gets an answer.
+  const caller = new AbortController();
+  await withServer(
+    () => caller.abort(),
+    async (baseUrl) => {
+      await assert.rejects(
+        () => nodeHttpTransport({ method: "GET", url: baseUrl, timeoutMs: 30_000, signal: caller.signal }),
+        (err: unknown) => err instanceof DdbNetworkError && err.message === "Request aborted by its caller before it finished",
+      );
+    },
+  );
+  const engine = new AbortController();
+  await withServer(
+    () => engine.abort(new DdbNetworkError("Request exceeded the 80ms deadline")),
+    async (baseUrl) => {
+      await assert.rejects(
+        () => nodeHttpTransport({ method: "GET", url: baseUrl, timeoutMs: 30_000, signal: engine.signal }),
+        (err: unknown) => err instanceof DdbNetworkError && err.message === "Request exceeded the 80ms deadline",
+      );
+    },
+  );
+});
+
 test("a timeoutMs beyond Node's timer range is capped, not fired after 1 ms", async () => {
   const warnings: string[] = [];
   const onWarning = (warning: Error) => void warnings.push(warning.name);

@@ -86,7 +86,11 @@ omitted or given as `undefined`, which means the same (the default), so
 
 `timeoutMs` and `maxResponseBytes` hold for every transport, a custom one included: the
 engine races each transport call against the deadline (and passes an `AbortSignal` as
-`HttpRequest.signal`, which a fetch transport hands on: `fetch(url, { signal })`), and
+`HttpRequest.signal`, aborted with the engine's timeout error as its reason, which a fetch
+transport hands on: `fetch(url, { signal })`; the built-in transport stops with that reason, and
+for a signal some other caller aborted, the MCP server's tool call (its deadline, a
+cancellation), it says "Request aborted by its caller before it finished", never a timeout it
+didn't have), and
 checks the size of the body it gets back. A custom transport may return the body as a
 `Buffer`, any `ArrayBuffer` view (`Uint8Array`) or an `ArrayBuffer`, and the headers as a
 plain object in any case, a `Headers` object or a `Map`. It must not follow redirects
